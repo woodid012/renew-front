@@ -1,5 +1,0 @@
-# requirements-local.txt
-flask
-flask-cors
-pymongo
-python-dotenv
