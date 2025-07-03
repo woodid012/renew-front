@@ -21,38 +21,27 @@ export default function DashboardPage() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true)
-      
-      // Fetch summary data from MongoDB
-      const [summaryResponse, portfolioResponse, assetResponse] = await Promise.all([
-        fetch('/api/dashboard/summary'),
-        fetch('/api/dashboard/portfolio-metrics'),
-        fetch('/api/dashboard/asset-count')
-      ])
-
-      if (!summaryResponse.ok || !portfolioResponse.ok || !assetResponse.ok) {
-        throw new Error('Failed to fetch dashboard data')
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/dashboard');
+        if (!response.ok) {
+          throw new Error('Failed to fetch dashboard data');
+        }
+        const data = await response.json();
+        setSummaryData(data);
+        setPortfolioMetrics(data);
+        setAssetCount({ totalAssets: data.totalAssets });
+      } catch (err) {
+        console.error('Dashboard data fetch error:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      const summaryData = await summaryResponse.json()
-      const portfolioData = await portfolioResponse.json()
-      const assetData = await assetResponse.json()
-
-      setSummaryData(summaryData)
-      setPortfolioMetrics(portfolioData)
-      setAssetCount(assetData)
-    } catch (err) {
-      console.error('Dashboard data fetch error:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+    fetchDashboardData();
+  }, []);
 
   if (loading) {
     return (

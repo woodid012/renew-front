@@ -13,8 +13,13 @@ import {
   BarChart3,
   Save,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Wifi
 } from 'lucide-react'
+import TestConnectionPage from './test-connection/page'
+import DashboardPage from './dashboard/page'
+import AssetsPage from './assets/page'
+import ResultsPage from './results/page'
 
 // Create a context for global save state
 const SaveContext = createContext();
@@ -105,6 +110,12 @@ const navigationItems = [
     href: '/settings',
     icon: Settings,
     section: 'settings'
+  },
+  {
+    name: 'Test Connection',
+    href: '/test-connection',
+    icon: Wifi,
+    section: 'settings'
   }
 ]
 
@@ -169,22 +180,11 @@ export default function HomePage() {
   const renderPageContent = () => {
     switch (currentPage) {
       case '/':
-        return (
-          <div className="text-center py-12">
-            <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to RenewableAssets</h2>
-            <p className="text-gray-600 mb-4">Portfolio Analysis Platform</p>
-            <p className="text-sm text-gray-500">Current Portfolio: {currentPortfolio.portfolioName}</p>
-          </div>
-        );
+        return <DashboardPage />;
       case '/assets':
-        return (
-          <div className="text-center py-12">
-            <Building2 className="w-16 h-16 text-green-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Asset Definition</h2>
-            <p className="text-gray-600">Configure your renewable energy assets</p>
-          </div>
-        );
+        return <AssetsPage />;
+      case '/results':
+        return <ResultsPage />;
       case '/price-curves':
         return (
           <div className="text-center py-12">
@@ -241,6 +241,8 @@ export default function HomePage() {
             <p className="text-gray-600">Configure platform settings</p>
           </div>
         );
+      case '/test-connection':
+        return <TestConnectionPage />;
       default:
         return (
           <div className="text-center py-12">

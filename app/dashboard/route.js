@@ -1,68 +1,84 @@
-// app/api/dashboard/summary/route.js
+// app/api/dashboard/route.js
 import { NextResponse } from 'next/server'
-import clientPromise from '../../../../lib/mongodb'
+import clientPromise from '@/lib/mongodb'
 
 export async function GET() {
   try {
     const client = await clientPromise
     const db = client.db(process.env.MONGODB_DB)
     
-    // Get the main cash flows collection
     const collection = db.collection('ASSET_cash_flows')
     
-    // Aggregate pipeline to calculate portfolio summary
-    const pipeline = [
+    // 1. Portfolio Summary Aggregation
+    const summaryPipeline = [
       {
         $group: {
           _id: null,
           totalRevenue: { $sum: '$revenue' },
           totalOpex: { $sum: '$opex' },
-          totalCapex: { $sum: '$capex' },
           totalEquityCashFlow: { $sum: '$equity_cash_flow' },
-          totalCfads: { $sum: '$cfads' },
-          totalDebt: { $sum: '$debt_capex' },
-          totalEquity: { $sum: '$equity_capex' },
-          recordCount: { $sum: 1 }
         }
       }
     ]
     
-    const result = await collection.aggregate(pipeline).toArray()
-    
-    if (!result || result.length === 0) {
-      return NextResponse.json({
-        totalAnnualRevenue: 0,
-        totalAnnualOpex: 0,
-        totalAnnualCashFlow: 0,
-        totalCapex: 0,
-        totalDebt: 0,
-        totalEquity: 0,
-        recordCount: 0
-      })
-    }
-    
-    const summary = result[0]
-    
-    // Calculate annualized figures (assuming monthly data)
-    // Note: This is a rough calculation - you might want to be more precise
-    const monthsOfData = summary.recordCount || 1
-    const annualizationFactor = monthsOfData > 0 ? 12 : 1
-    
-    return NextResponse.json({
-      totalAnnualRevenue: summary.totalRevenue || 0,
-      totalAnnualOpex: summary.totalOpex || 0,
-      totalAnnualCashFlow: summary.totalEquityCashFlow || 0,
-      totalCapex: summary.totalCapex || 0,
-      totalDebt: summary.totalDebt || 0,
-      totalEquity: summary.totalEquity || 0,
-      recordCount: summary.recordCount || 0,
-      dataMonths: monthsOfData
-    })
+    // 2. Portfolio Metrics Aggregation
+    const metricsPipeline = [
+      {
+        $group: {
+          _id: null,
+          totalCapex: { $sum: '$capex' },
+          totalDebt: { $sum: '$debt_capex' },
+          totalCapacity: { $sum: '$capacity_mw' } // Assuming capacity is in the data
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          totalCapex: 1,
+          totalDebt: 1,
+          totalCapacity: 1,
+          gearing: {
+            $cond: { if: { $gt: ['$totalCapex', 0] }, then: { $divide: ['$totalDebt', '$totalCapex'] }, else: 0 }
+          }
+        }
+      }
+    ]
+
+    // 3. Asset Count Aggregation
+    const assetCountPipeline = [
+      { $group: { _id: '$asset_id' } },
+      { $count: 'totalAssets' }
+    ];
+
+    const [summaryResult, metricsResult, assetCountResult] = await Promise.all([
+      collection.aggregate(summaryPipeline).toArray(),
+      collection.aggregate(metricsPipeline).toArray(),
+      collection.aggregate(assetCountPipeline).toArray()
+    ]);
+
+    const summary = summaryResult[0] || { totalRevenue: 0, totalOpex: 0, totalEquityCashFlow: 0 };
+    const metrics = metricsResult[0] || { totalCapex: 0, totalDebt: 0, totalCapacity: 0, gearing: 0 };
+    const assetCount = assetCountResult[0] || { totalAssets: 0 };
+
+    // Combine all results into a single response
+    const dashboardData = {
+      totalAnnualRevenue: summary.totalRevenue,
+      totalAnnualOpex: summary.totalOpex,
+      totalAnnualCashFlow: summary.totalEquityCashFlow,
+      totalCapex: metrics.totalCapex,
+      totalDebt: metrics.totalDebt,
+      totalCapacity: metrics.totalCapacity,
+      gearing: metrics.gearing,
+      irr: 0, // IRR calculation needs to be handled separately if needed
+      totalAssets: assetCount.totalAssets,
+    };
+
+    return NextResponse.json(dashboardData)
     
   } catch (error) {
-    console.error('Dashboard summary API error:', error)
+    console.error('Dashboard API error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch dashboard summary' },
+      { error: 'Failed to fetch dashboard data' },
       { status: 500 }
     )
   }
