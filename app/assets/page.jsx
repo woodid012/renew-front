@@ -6,7 +6,6 @@ import {
   Building2, 
   Plus,
   Edit3,
-  Save,
   X,
   Search,
   Filter,
@@ -22,10 +21,9 @@ import {
   Clock,
   MapPin
 } from 'lucide-react'
-import { useSaveContext } from '../page'
+
 
 export default function AssetsPage() {
-  const { setHasUnsavedChanges, setSaveFunction } = useSaveContext()
   const [assets, setAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -33,22 +31,12 @@ export default function AssetsPage() {
   const [selectedType, setSelectedType] = useState('all')
   const [selectedRegion, setSelectedRegion] = useState('all')
   const [editingAsset, setEditingAsset] = useState(null)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetchAssets()
   }, [])
 
-  useEffect(() => {
-    // Set up global save function
-    setSaveFunction(() => saveAllChanges)
-    
-    // Cleanup on unmount
-    return () => {
-      setSaveFunction(null)
-      setHasUnsavedChanges(false)
-    }
-  }, [setSaveFunction, setHasUnsavedChanges])
+  
 
   const fetchAssets = async () => {
     try {
@@ -75,7 +63,6 @@ export default function AssetsPage() {
     if (!editingAsset) return
     
     try {
-      setSaving(true)
       
       const response = await fetch('/api/assets', {
         method: 'PUT',
@@ -98,24 +85,21 @@ export default function AssetsPage() {
       ))
       
       setEditingAsset(null)
-      setHasUnsavedChanges(false)
       
     } catch (err) {
       console.error('Save error:', err)
       setError(err.message)
     } finally {
-      setSaving(false)
+      
     }
   }
 
   const startEditing = (asset) => {
     setEditingAsset({ ...asset })
-    setHasUnsavedChanges(true)
   }
 
   const cancelEditing = () => {
     setEditingAsset(null)
-    setHasUnsavedChanges(false)
   }
 
   const updateEditingAsset = (field, value) => {
@@ -123,7 +107,6 @@ export default function AssetsPage() {
       ...prev,
       [field]: value
     }))
-    setHasUnsavedChanges(true)
   }
 
   const getFilteredAssets = () => {
@@ -293,11 +276,10 @@ export default function AssetsPage() {
                     </button>
                     <button
                       onClick={saveAllChanges}
-                      disabled={saving}
-                      className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                      className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
                     >
                       <Save className="w-4 h-4" />
-                      <span>{saving ? 'Saving...' : 'Save'}</span>
+                      <span>Save</span>
                     </button>
                   </div>
                 </div>

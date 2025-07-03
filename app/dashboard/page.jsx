@@ -26,6 +26,8 @@ import {
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null)
   const [assetInputsData, setAssetInputsData] = useState(null)
+  const [totalPortfolioDebt, setTotalPortfolioDebt] = useState(0)
+  const [totalPortfolioEquity, setTotalPortfolioEquity] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
