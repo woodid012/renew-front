@@ -12,11 +12,39 @@ export async function GET() {
     
     try {
       const inputsCollection = db.collection('ASSET_inputs_summary')
-      assets = await inputsCollection.find({}).toArray()
+      const rawAssets = await inputsCollection.find({}).toArray()
       
-      console.log(`Found ${assets.length} assets in inputs summary collection`)
+      console.log(`Found ${rawAssets.length} assets in inputs summary collection`)
       
-      if (assets.length > 0) {
+      if (rawAssets.length > 0) {
+        // Transform the data to match frontend expectations
+        assets = rawAssets.map(asset => ({
+          asset_id: asset.asset_id,
+          asset_name: asset.asset_name || asset.name || `Asset ${asset.asset_id}`,
+          name: asset.asset_name || asset.name || `Asset ${asset.asset_id}`,
+          type: asset.type || 'unknown',
+          region: asset.region || 'unknown',
+          capacity: parseFloat(asset.capacity) || 0,
+          OperatingStartDate: asset.OperatingStartDate,
+          constructionStartDate: asset.constructionStartDate,
+          assetLife: asset.assetLife || 25,
+          cost_capex: parseFloat(asset.cost_capex) || 0,
+          cost_maxGearing: parseFloat(asset.cost_maxGearing) || 0,
+          cost_interestRate: parseFloat(asset.cost_interestRate) || 0,
+          cost_tenorYears: parseFloat(asset.cost_tenorYears) || 18,
+          cost_terminalValue: parseFloat(asset.cost_terminalValue) || 0,
+          cost_operatingCosts: parseFloat(asset.cost_operatingCosts) || 0,
+          cost_operatingCostEscalation: parseFloat(asset.cost_operatingCostEscalation) || 0,
+          volumeLossAdjustment: parseFloat(asset.volumeLossAdjustment) || 95,
+          annualDegradation: parseFloat(asset.annualDegradation) || 0.5,
+          capacityFactor: parseFloat(asset.capacityFactor) || 25,
+          // Include contract information if available
+          contracts: asset.contracts || [],
+          // Additional metadata
+          createdAt: asset.createdAt,
+          updatedAt: asset.updatedAt
+        }))
+        
         return NextResponse.json({
           assets: assets,
           source: 'inputs_summary',
@@ -50,6 +78,7 @@ export async function GET() {
         {
           $addFields: {
             asset_name: { $concat: ['Asset ', { $toString: '$asset_id' }] },
+            name: { $concat: ['Asset ', { $toString: '$asset_id' }] },
             type: 'unknown',
             region: 'unknown',
             capacity: { $multiply: ['$totalCapex', 0.001] }, // Rough estimate: 1MW per $1M CAPEX
@@ -69,7 +98,32 @@ export async function GET() {
         }
       ]
       
-      assets = await cashFlowCollection.aggregate(assetsPipeline).toArray()
+      const rawAssets = await cashFlowCollection.aggregate(assetsPipeline).toArray()
+      
+      assets = rawAssets.map(asset => ({
+        asset_id: asset.asset_id,
+        asset_name: asset.asset_name,
+        name: asset.name,
+        type: asset.type,
+        region: asset.region,
+        capacity: asset.capacity,
+        OperatingStartDate: asset.OperatingStartDate,
+        cost_capex: asset.cost_capex,
+        cost_maxGearing: asset.cost_maxGearing,
+        // Performance metrics from cash flows
+        performance: {
+          totalCapex: asset.totalCapex,
+          totalDebt: asset.totalDebt,
+          totalEquity: asset.totalEquity,
+          totalRevenue: asset.totalRevenue,
+          totalOpex: asset.totalOpex,
+          recordCount: asset.recordCount,
+          dateRange: {
+            start: asset.firstDate,
+            end: asset.lastDate
+          }
+        }
+      }))
       
       console.log(`Created ${assets.length} asset summaries from cash flows collection`)
       
@@ -119,6 +173,14 @@ export async function POST(request) {
     const now = new Date()
     asset.createdAt = now
     asset.updatedAt = now
+    
+    // Ensure asset_id is set
+    if (!asset.asset_id) {
+      // Get the next asset_id
+      const inputsCollection = db.collection('ASSET_inputs_summary')
+      const lastAsset = await inputsCollection.findOne({}, { sort: { asset_id: -1 } })
+      asset.asset_id = (lastAsset?.asset_id || 0) + 1
+    }
     
     // Insert into inputs summary collection
     const inputsCollection = db.collection('ASSET_inputs_summary')
