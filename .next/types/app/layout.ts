@@ -1,4 +1,4 @@
-// File: C:\Projects\renew-pyth\app\layout.jsx
+// File: C:\Projects\renew\renew-pyth\app\layout.jsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

@@ -1,8 +1,5 @@
 {
   "/page": "app/page.js",
   "/api/dashboard/route": "app/api/dashboard/route.js",
-  "/api/dashboard/asset-inputs/route": "app/api/dashboard/asset-inputs/route.js",
-  "/api/revenue-summary/route": "app/api/revenue-summary/route.js",
-  "/api/asset-cashflows/route": "app/api/asset-cashflows/route.js",
-  "/api/cashflows/route": "app/api/cashflows/route.js"
+  "/api/dashboard/asset-inputs/route": "app/api/dashboard/asset-inputs/route.js"
 }

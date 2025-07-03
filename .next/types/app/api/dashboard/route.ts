@@ -1,4 +1,4 @@
-// File: C:\Projects\renew-pyth\app\api\dashboard\route.js
+// File: C:\Projects\renew\renew-pyth\app\api\dashboard\route.js
 import * as entry from '../../../../../app/api/dashboard/route.js'
 import type { NextRequest } from 'next/server.js'
 
