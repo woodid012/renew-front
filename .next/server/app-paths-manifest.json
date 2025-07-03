@@ -1,9 +1,7 @@
 {
-  "/page": "app/page.js",
-  "/api/dashboard/route": "app/api/dashboard/route.js",
   "/assets/page": "app/assets/page.js",
-  "/api/scenarios/route": "app/api/scenarios/route.js",
-  "/api/assets/route": "app/api/assets/route.js",
-  "/api/results/cashflows/route": "app/api/results/cashflows/route.js",
-  "/api/test-connection/route": "app/api/test-connection/route.js"
+  "/page": "app/page.js",
+  "/api/dashboard/asset-inputs/route": "app/api/dashboard/asset-inputs/route.js",
+  "/test-connection/page": "app/test-connection/page.js",
+  "/api/dashboard/route": "app/api/dashboard/route.js"
 }

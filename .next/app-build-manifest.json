@@ -15,6 +15,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/assets/page.js"
+    ],
+    "/test-connection/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/test-connection/page.js"
     ]
   }
 }
