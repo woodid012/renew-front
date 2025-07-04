@@ -65,3 +65,11 @@ pids
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Git attributes for consistent line endings
+* text=auto
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.md text eol=lf

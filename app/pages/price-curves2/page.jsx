@@ -1,3 +1,4 @@
+// app/pages/price-curves2/page.jsx
 import { useState, useEffect } from 'react'
 import { 
   LineChart, 
@@ -34,20 +35,17 @@ export default function PriceCurves2Page() {
   const [availableProfiles, setAvailableProfiles] = useState([])
   const [availableTypes, setAvailableTypes] = useState([])
   const [dateRange, setDateRange] = useState({ start: null, end: null })
-  const [selectedPeriod, setSelectedPeriod] = useState('yearly') // New state for aggregation period, default to yearly
-
-  // Define all possible spread durations as constants
-  const allSpreadDurations = ['0.5', '1', '2', '4'];
+  const [selectedPeriod, setSelectedPeriod] = useState('yearly')
 
   useEffect(() => {
     fetchPriceCurves()
-  }, [selectedPeriod]) // Re-fetch when aggregation period changes
+  }, [selectedPeriod])
 
   useEffect(() => {
     if (priceCurves.length > 0) {
       processChartData()
     }
-  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes]) // Removed showSpreads, selectedSpreadDurations
+  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes])
 
   const fetchPriceCurves = async () => {
     try {
@@ -64,24 +62,15 @@ export default function PriceCurves2Page() {
       setPriceCurves(data)
       
       // Extract unique values for filters
-      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].filter(region => region !== 'TAS').sort()
+      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
       const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
-      let types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
-
-      // If 'storage' profile is available, ensure SPREAD types are in availableTypes
-      if (profiles.includes('storage')) {
-        allSpreadDurations.forEach(d => {
-          const spreadType = `SPREAD_${d}_0HR`;
-          if (!types.includes(spreadType)) {
-            types.push(spreadType);
-          }
-        });
-        types.sort(); // Re-sort after adding
-      }
-
+      const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
+      
       setAvailableRegions(['ALL', ...regions])
-      // Add 'storage' to available profiles if not already present
-      if (!profiles.includes('storage')) {
+      
+      // Add 'storage' to available profiles and check for SPREAD types
+      const hasSpreadTypes = types.some(type => type.startsWith('SPREAD_'))
+      if (hasSpreadTypes && !profiles.includes('storage')) {
         setAvailableProfiles([...profiles, 'storage'])
       } else {
         setAvailableProfiles(profiles)
@@ -98,7 +87,6 @@ export default function PriceCurves2Page() {
           } else if (selectedPeriod === 'yearly') {
             return new Date(item._id.year, 0, 1);
           } else if (selectedPeriod === 'fiscal_yearly') {
-            // Assuming fiscal year starts in July (month 7)
             return new Date(item._id.fiscalYear, 6, 1); 
           } else {
             return new Date(item.TIME);
@@ -113,15 +101,12 @@ export default function PriceCurves2Page() {
         }
       }
       
-      // Default to showing Green as well if it exists
-      if (types.includes('GREEN') && !selectedTypes.includes('GREEN')) {
-        setSelectedTypes(['ENERGY', 'GREEN'])
+      // Default to showing Energy and Green if they exist
+      const defaultTypes = ['ENERGY']
+      if (types.includes('GREEN')) {
+        defaultTypes.push('GREEN')
       }
-
-      // If storage profile is selected, ensure SPREAD types are selected by default
-      if (selectedProfile === 'storage') {
-        setSelectedTypes(allSpreadDurations.map(d => `SPREAD_${d}_0HR`));
-      }
+      setSelectedTypes(defaultTypes)
       
     } catch (err) {
       console.error('Error fetching price curves:', err)
@@ -151,9 +136,9 @@ export default function PriceCurves2Page() {
         displayDate = new Date(item._id.year, 0, 1);
       } else if (selectedPeriod === 'fiscal_yearly') {
         timeKey = `FY${item._id.fiscalYear}`;
-        displayDate = new Date(item._id.fiscalYear, 6, 1); // Assuming July start
+        displayDate = new Date(item._id.fiscalYear, 6, 1);
       } else {
-        timeKey = item.TIME; // Use the original TIME format (YYYY-MM-DD)
+        timeKey = item.TIME;
         displayDate = new Date(item.TIME);
       }
 
@@ -166,15 +151,19 @@ export default function PriceCurves2Page() {
       if (!regionMatch) return
 
       if (selectedProfile === 'storage') {
-        // For storage profile, we specifically look for records with TYPE starting with 'SPREAD_'
-        if (item._id.PROFILE === 'storage' && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = `${item._id.REGION || 'AllRegions'}_${item._id.TYPE}`
+        // For storage profile, we look for records with TYPE starting with 'SPREAD_'
+        if (item._id.TYPE && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
+          const seriesKey = selectedRegions.includes('ALL') ? 
+            `${item._id.REGION}_${item._id.TYPE}` : 
+            item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       } else {
         // For other profiles, filter by selectedProfile and selectedTypes, and plot PRICE
         if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = `${item._id.REGION || 'AllRegions'}_${item._id.TYPE}`
+          const seriesKey = selectedRegions.includes('ALL') ? 
+            `${item._id.REGION}_${item._id.TYPE}` : 
+            item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       }
@@ -185,7 +174,7 @@ export default function PriceCurves2Page() {
       .sort((a, b) => a.date - b.date)
       .map(item => ({
         ...item,
-        TIME: formatPeriodLabel(item.TIME, selectedPeriod) // Use a helper for formatting
+        TIME: formatPeriodLabel(item.TIME, selectedPeriod)
       }))
     
     setChartData(processedData)
@@ -228,19 +217,21 @@ export default function PriceCurves2Page() {
   }
 
   const handleProfileChange = (profile) => {
-    setSelectedProfile(profile);
+    setSelectedProfile(profile)
+    // Reset selected types when switching profiles
     if (profile === 'storage') {
-      // Automatically select all SPREAD types when storage is chosen
-      setSelectedTypes(allSpreadDurations.map(d => `SPREAD_${d}`));
+      // For storage, start with the first available SPREAD type
+      const spreadTypes = availableTypes.filter(type => type.startsWith('SPREAD_'))
+      setSelectedTypes(spreadTypes.length > 0 ? [spreadTypes[0]] : [])
     } else {
       // For other profiles, default to ENERGY and GREEN if available
-      const defaultTypes = ['ENERGY'];
+      const defaultTypes = ['ENERGY']
       if (availableTypes.includes('GREEN')) {
-        defaultTypes.push('GREEN');
+        defaultTypes.push('GREEN')
       }
-      setSelectedTypes(defaultTypes);
+      setSelectedTypes(defaultTypes)
     }
-  };
+  }
 
   const handleTypeChange = (type) => {
     setSelectedTypes(prev => 
@@ -262,15 +253,7 @@ export default function PriceCurves2Page() {
       key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number'
     )
 
-    // If storage profile is selected, ensure spread keys are included
-    if (selectedProfile === 'storage') {
-      // For storage, keys will either be 'SPREAD_X.X' (single region) or 'REGION_SPREAD_X.X' (ALL regions)
-      return keys.filter(key => key.includes('SPREAD_'));
-    } else {
-      // For other profiles, keys will either be 'TYPE' (single region) or 'REGION_TYPE' (ALL regions)
-      // And should not contain 'SPREAD_'
-      return keys.filter(key => !key.includes('SPREAD_'));
-    }
+    return keys
   }
 
   const getLineColor = (index) => {
@@ -288,6 +271,14 @@ export default function PriceCurves2Page() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value)
+  }
+
+  // Get the relevant types for the current profile
+  const getRelevantTypes = () => {
+    if (selectedProfile === 'storage') {
+      return availableTypes.filter(type => type.startsWith('SPREAD_'))
+    }
+    return availableTypes.filter(type => !type.startsWith('SPREAD_'))
   }
 
   if (loading) {
@@ -319,6 +310,8 @@ export default function PriceCurves2Page() {
       </div>
     )
   }
+
+  const relevantTypes = getRelevantTypes()
 
   return (
     <div className="p-6">
@@ -412,10 +405,10 @@ export default function PriceCurves2Page() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <TrendingUp className="w-4 h-4 inline mr-1" />
-              Price Types
+              {selectedProfile === 'storage' ? 'Spread Types' : 'Price Types'}
             </label>
-            <div className="space-y-2">
-              {availableTypes.map(type => (
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {relevantTypes.map(type => (
                 <label key={type} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -427,6 +420,11 @@ export default function PriceCurves2Page() {
                 </label>
               ))}
             </div>
+            {relevantTypes.length === 0 && (
+              <div className="text-xs text-gray-500 mt-2">
+                No {selectedProfile === 'storage' ? 'spread' : 'price'} types available
+              </div>
+            )}
           </div>
 
           {/* Aggregation Period Filter */}
@@ -453,7 +451,8 @@ export default function PriceCurves2Page() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">
-            {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)} Price Trends
+            {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)} 
+            {selectedProfile === 'storage' ? ' Spread' : ' Price'} Trends
             {selectedRegions.includes('ALL') ? ' - All Regions' : ` - ${selectedRegions.join(', ')}`}
           </h3>
           <div className="flex items-center space-x-2 text-sm text-gray-500">
