@@ -1,5 +1,8 @@
 {
+  "/not-found": "app/not-found.js",
   "/page": "app/page.js",
+  "/pages/test-connection/page": "app/pages/test-connection/page.js",
+  "/pages/price-curves/page": "app/pages/price-curves/page.js",
   "/api/dashboard/route": "app/api/dashboard/route.js",
   "/api/dashboard/asset-inputs/route": "app/api/dashboard/asset-inputs/route.js"
 }

@@ -16,15 +16,11 @@ import {
   Briefcase
 } from 'lucide-react'
 
-import DashboardPage from './dashboard/page'
-import AssetsPage from './assets/page'
-import ResultsPage from './results/page'
-import RevenuePage from './revenue/page'
-import DebtPage from './debt/page'
-import PnLPage from './pnl/page'
-import BalanceSheetPage from './balance-sheet/page'
-import CashflowPage from './cashflow/page'
-import IRRPage from './irr/page'
+import DashboardPage from './pages/dashboard/page'
+import AssetsPage from './pages/assets/page'
+import PriceCurvesPage from './pages/price-curves/page'
+import RevenuePage from './pages/revenue/page'
+import TestConnection from './pages/test-connection/page'
 
 
 
@@ -41,14 +37,14 @@ const navigationItems = [
     isSection: true
   },
   {
-    name: 'Asset Definition',
-    href: '/assets',
+    name: 'assets',
+    href: '/pages/assets',
     icon: Building2,
     section: 'inputs'
   },
   {
     name: 'Price Curves',
-    href: '/price-curves',
+    href: '/pages/price-curves',
     icon: BarChart3,
     section: 'inputs'
   },
@@ -58,79 +54,28 @@ const navigationItems = [
   },
   {
     name: 'Revenue Analysis',
-    href: '/revenue',
+    href: '/pages/revenue',
     icon: TrendingUp,
     section: 'analysis'
   },
-  {
-    name: 'Debt',
-    href: '/debt',
-    icon: Calculator,
-    section: 'analysis'
-  },
-  {
-    name: 'P&L',
-    href: '/pnl',
-    icon: Calculator,
-    section: 'analysis'
-  },
-  {
-    name: 'Balance Sheet',
-    href: '/balance-sheet',
-    icon: Calculator,
-    section: 'analysis'
-  },
-  {
-    name: 'Cashflow',
-    href: '/cashflow',
-    icon: Calculator,
-    section: 'analysis'
-  },
-  {
-    name: 'IRR',
-    href: '/irr',
-    icon: Calculator,
-    section: 'analysis'
-  },
-  {
-    name: 'Project Finance',
-    href: '/finance',
-    icon: Calculator,
-    section: 'analysis'
-  },
-  {
-    name: 'Scenario Manager',
-    href: '/scenarios',
-    icon: BarChart3,
-    section: 'analysis'
-  },
-  {
-    section: 'Outputs',
-    isSection: true
-  },
-  {
-    name: 'Reporting',
-    href: '/reporting',
-    icon: TrendingUp,
-    section: 'outputs'
-  },
-  {
-    name: 'Exports',
-    href: '/exports',
-    icon: Calculator,
-    section: 'outputs'
-  },
+  
   {
     section: 'Settings',
     isSection: true
   },
   {
     name: 'Settings',
-    href: '/settings',
+    href: '/pages/settings',
     icon: Settings,
     section: 'settings'
   },
   
+    {
+    name: 'TestConnection',
+    href: '/pages/test-connection',
+    icon: Wifi,
+    section: 'settings'
+  },
 ]
 
 export default function HomePage() {
@@ -158,21 +103,14 @@ export default function HomePage() {
     switch (currentPage) {
       case '/':
         return <DashboardPage />;
-      case '/assets':
+      case '/pages/assets':
         return <AssetsPage />;
-      case '/results':
-        return <ResultsPage />;
-      case '/price-curves':
-        return (
-          <div className="text-center py-12">
-            <BarChart3 className="w-16 h-16 text-blue-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Price Curves</h2>
-            <p className="text-gray-600">Manage electricity price curves and forecasts</p>
-          </div>
-        );
-      case '/revenue':
+
+      case '/pages/price-curves':
+                return <PriceCurvesPage />;
+      case '/pages/revenue':
         return <RevenuePage />;
-      case '/finance':
+      case '/pages/finance':
         return (
           <div className="text-center py-12">
             <Calculator className="w-16 h-16 text-orange-400 mx-auto mb-4" />
@@ -180,17 +118,8 @@ export default function HomePage() {
             <p className="text-gray-600">Financial modeling and project finance analysis</p>
           </div>
         );
-      case '/debt':
-        return <DebtPage />;
-      case '/pnl':
-        return <PnLPage />;
-      case '/balance-sheet':
-        return <BalanceSheetPage />;
-      case '/cashflow':
-        return <CashflowPage />;
-      case '/irr':
-        return <IRRPage />;
-      case '/scenarios':
+
+      case '/pages/scenarios':
         return (
           <div className="text-center py-12">
             <BarChart3 className="w-16 h-16 text-indigo-400 mx-auto mb-4" />
@@ -198,7 +127,7 @@ export default function HomePage() {
             <p className="text-gray-600">Create and compare different scenarios</p>
           </div>
         );
-      case '/reporting':
+      case '/pages/reporting':
         return (
           <div className="text-center py-12">
             <TrendingUp className="w-16 h-16 text-pink-400 mx-auto mb-4" />
@@ -206,14 +135,14 @@ export default function HomePage() {
             <p className="text-gray-600">Generate comprehensive reports</p>
           </div>
         );
-      case '/exports':
+      case '/pages/exports':
         return (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Exports</h2>
             <p className="text-gray-600">Export data and reports</p>
           </div>
         );
-      case '/settings':
+      case '/pages/settings':
         return (
           <div className="text-center py-12">
             <Settings className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -221,6 +150,8 @@ export default function HomePage() {
             <p className="text-gray-600">Configure platform settings</p>
           </div>
         );
+      case '/pages/test-connection':
+        return <TestConnectionPage />;
       
         return (
           <div className="text-center py-12">
