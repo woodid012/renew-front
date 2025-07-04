@@ -1,4 +1,4 @@
-// app/assets/page.jsx
+// app/pages/assets/page.jsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -20,9 +20,21 @@ import {
   Percent,
   Clock,
   MapPin,
-  Save
+  Save,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  FileText,
+  Battery,
+  Sun,
+  Wind,
+  Database,
+  Check,
+  Undo2
 } from 'lucide-react'
 
+// Import the context from the main page
+import { useUnsavedChanges } from '../../page'
 
 export default function AssetsPage() {
   const [assets, setAssets] = useState([])
@@ -31,7 +43,12 @@ export default function AssetsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedType, setSelectedType] = useState('all')
   const [selectedRegion, setSelectedRegion] = useState('all')
+  const [expandedAsset, setExpandedAsset] = useState(null)
   const [editingAsset, setEditingAsset] = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)
+
+  // Get unsaved changes context
+  const { addUnsavedAsset, removeUnsavedAsset, unsavedAssets } = useUnsavedChanges()
 
   useEffect(() => {
     fetchAssets()
@@ -40,15 +57,16 @@ export default function AssetsPage() {
   const fetchAssets = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/asset-inputs-summary')
+      setError(null)
       
+      const response = await fetch('/api/asset-input-summary')
       if (!response.ok) {
         throw new Error('Failed to fetch assets')
       }
       
       const data = await response.json()
       setAssets(data.assets || [])
-      setError(null)
+      setLastUpdated(new Date())
       
     } catch (err) {
       console.error('Assets fetch error:', err)
@@ -58,39 +76,27 @@ export default function AssetsPage() {
     }
   }
 
-  const saveAllChanges = async () => {
-    if (!editingAsset) return
-    
-    try {
+  const getDisplayAssets = () => {
+    // Merge original assets with unsaved changes
+    return assets.map(asset => {
+      const unsavedAsset = unsavedAssets.find(ua => ua.asset_id === asset.asset_id)
+      return unsavedAsset || asset
+    })
+  }
+
+  const getFilteredAssets = () => {
+    return getDisplayAssets().filter(asset => {
+      const matchesSearch = asset.asset_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           asset.asset_id.toString().includes(searchTerm)
+      const matchesType = selectedType === 'all' || asset.type === selectedType
+      const matchesRegion = selectedRegion === 'all' || asset.region === selectedRegion
       
-      const response = await fetch('/api/assets', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          assetId: editingAsset.asset_id,
-          asset: editingAsset
-        })
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to save asset')
-      }
-      
-      // Update local state
-      setAssets(prev => prev.map(asset => 
-        asset.asset_id === editingAsset.asset_id ? editingAsset : asset
-      ))
-      
-      setEditingAsset(null)
-      
-    } catch (err) {
-      console.error('Save error:', err)
-      setError(err.message)
-    } finally {
-      
-    }
+      return matchesSearch && matchesType && matchesRegion
+    })
+  }
+
+  const isAssetUnsaved = (assetId) => {
+    return unsavedAssets.some(ua => ua.asset_id === assetId)
   }
 
   const startEditing = (asset) => {
@@ -101,6 +107,27 @@ export default function AssetsPage() {
     setEditingAsset(null)
   }
 
+  const saveLocalChanges = () => {
+    if (!editingAsset) return
+    
+    // Add to unsaved changes
+    addUnsavedAsset(editingAsset)
+    
+    // Update local state
+    setAssets(prev => prev.map(asset => 
+      asset.asset_id === editingAsset.asset_id ? editingAsset : asset
+    ))
+    
+    setEditingAsset(null)
+  }
+
+  const discardLocalChanges = (assetId) => {
+    removeUnsavedAsset(assetId)
+    
+    // Reload original asset data
+    fetchAssets()
+  }
+
   const updateEditingAsset = (field, value) => {
     setEditingAsset(prev => ({
       ...prev,
@@ -108,30 +135,73 @@ export default function AssetsPage() {
     }))
   }
 
-  const getFilteredAssets = () => {
-    return assets.filter(asset => {
-      const matchesSearch = asset.asset_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           asset.asset_id.toString().includes(searchTerm)
-      const matchesType = selectedType === 'all' || asset.type === selectedType
-      const matchesRegion = selectedRegion === 'all' || asset.region === selectedRegion
-      
-      return matchesSearch && matchesType && matchesRegion
-    })
+  const formatCurrency = (value) => {
+    if (value === null || value === undefined || value === '') return 'N/A'
+    return new Intl.NumberFormat('en-AU', {
+      style: 'currency',
+      currency: 'AUD',
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    }).format(value * 1000000)
   }
 
-  const formatCurrency = (value) => {
-    if (!value && value !== 0) return ''
-    return value.toFixed(2)
+  const formatCurrencyShort = (value) => {
+    if (value === null || value === undefined || value === '') return 'N/A'
+    return `${Number(value).toFixed(1)}M`
   }
 
   const formatPercentage = (value) => {
-    if (!value && value !== 0) return ''
-    return (value * 100).toFixed(2)
+    if (value === null || value === undefined || value === '') return 'N/A'
+    return `${(Number(value) * 100).toFixed(1)}%`
   }
 
   const formatDate = (dateString) => {
-    if (!dateString) return ''
-    return dateString.split('T')[0] // Remove time part
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('en-AU')
+  }
+
+  const parseContracts = (contractsString) => {
+    if (!contractsString) return []
+    
+    try {
+      // Handle Python-style string format
+      const cleanedString = contractsString
+        .replace(/'/g, '"')
+        .replace(/None/g, 'null')
+        .replace(/True/g, 'true')
+        .replace(/False/g, 'false')
+      
+      return JSON.parse(cleanedString)
+    } catch (e) {
+      console.warn('Failed to parse contracts:', e)
+      return []
+    }
+  }
+
+  const getTypeIcon = (type) => {
+    switch (type) {
+      case 'storage':
+        return <Battery className="w-5 h-5" />
+      case 'solar':
+        return <Sun className="w-5 h-5" />
+      case 'wind':
+        return <Wind className="w-5 h-5" />
+      default:
+        return <Building2 className="w-5 h-5" />
+    }
+  }
+
+  const getTypeColor = (type) => {
+    switch (type) {
+      case 'storage':
+        return 'bg-green-500'
+      case 'solar':
+        return 'bg-yellow-500'
+      case 'wind':
+        return 'bg-blue-500'
+      default:
+        return 'bg-gray-500'
+    }
   }
 
   // Get unique values for filters
@@ -160,6 +230,7 @@ export default function AssetsPage() {
             onClick={fetchAssets}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
           >
+            <RefreshCw className="w-4 h-4 inline mr-2" />
             Retry
           </button>
         </div>
@@ -176,20 +247,30 @@ export default function AssetsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Asset Management</h1>
-            <p className="text-gray-600 mt-2">Configure and manage your renewable energy assets</p>
+            <p className="text-gray-600 mt-2">
+              View and manage your renewable energy asset portfolio
+            </p>
+            {lastUpdated && (
+              <p className="text-sm text-gray-500 mt-1">
+                Last updated: {lastUpdated.toLocaleTimeString('en-AU')}
+              </p>
+            )}
           </div>
           <div className="flex items-center space-x-4">
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-              <Upload className="w-4 h-4" />
-              <span>Import</span>
-            </button>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
-              <Download className="w-4 h-4" />
-              <span>Export</span>
-            </button>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-              <Plus className="w-4 h-4" />
-              <span>Add Asset</span>
+            <div className="bg-white rounded-lg border border-gray-200 px-4 py-2">
+              <div className="flex items-center space-x-2">
+                <Database className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  {assets.length} assets
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={fetchAssets}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Refresh</span>
             </button>
           </div>
         </div>
@@ -259,418 +340,474 @@ export default function AssetsPage() {
       {/* Asset List */}
       <div className="space-y-4">
         {filteredAssets.map((asset) => (
-          <div key={asset.asset_id} className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {editingAsset && editingAsset.asset_id === asset.asset_id ? (
-              /* Editing Mode */
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">Editing: {asset.asset_name}</h3>
+          <div key={asset.asset_id} className={`bg-white rounded-lg shadow-sm border ${
+            isAssetUnsaved(asset.asset_id) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'
+          }`}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-4 h-4 rounded-full ${getTypeColor(asset.type)}`} />
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-lg font-semibold text-gray-900">{asset.asset_name}</h3>
+                      {isAssetUnsaved(asset.asset_id) && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          Unsaved
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      ID: {asset.asset_id} • {asset.type} • {asset.region} • {asset.capacity} MW
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-gray-900">{formatCurrencyShort(asset.cost_capex)}</div>
+                    <div className="text-xs text-gray-500">{formatPercentage(asset.debt_gearing)} gearing</div>
+                  </div>
+                  
+                  {/* Action buttons */}
                   <div className="flex items-center space-x-2">
+                    {isAssetUnsaved(asset.asset_id) && (
+                      <button
+                        onClick={() => discardLocalChanges(asset.asset_id)}
+                        className="flex items-center space-x-1 px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                        title="Discard changes"
+                      >
+                        <Undo2 className="w-4 h-4" />
+                        <span className="text-xs">Discard</span>
+                      </button>
+                    )}
+                    
+                    {editingAsset && editingAsset.asset_id === asset.asset_id ? (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={cancelEditing}
+                          className="flex items-center space-x-1 px-3 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          onClick={saveLocalChanges}
+                          className="flex items-center space-x-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Save</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditing(asset)}
+                        className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span>Edit</span>
+                      </button>
+                    )}
+                    
                     <button
-                      onClick={cancelEditing}
-                      className="flex items-center space-x-1 px-3 py-1 text-gray-600 hover:text-gray-800"
+                      onClick={() => setExpandedAsset(expandedAsset === asset.asset_id ? null : asset.asset_id)}
+                      className="flex items-center space-x-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
                     >
-                      <X className="w-4 h-4" />
-                      <span>Cancel</span>
-                    </button>
-                    <button
-                      onClick={saveAllChanges}
-                      className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>Save</span>
+                      {expandedAsset === asset.asset_id ? (
+                        <>
+                          <ChevronUp className="w-4 h-4" />
+                          <span>Collapse</span>
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-4 h-4" />
+                          <span>Expand</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Basic Information */}
-                  <div className="space-y-4">
-                    <h4 className="font-medium text-gray-900 flex items-center">
-                      <Building2 className="w-4 h-4 mr-2" />
-                      Basic Information
-                    </h4>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Asset Name</label>
-                      <input
-                        type="text"
-                        value={editingAsset.asset_name}
-                        onChange={(e) => updateEditingAsset('asset_name', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-gray-600">Capacity</div>
+                  <div className="text-lg font-semibold">{asset.capacity} MW</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-gray-600">CAPEX</div>
+                  <div className="text-lg font-semibold">{formatCurrencyShort(asset.cost_capex)}</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-gray-600">Gearing</div>
+                  <div className="text-lg font-semibold">{formatPercentage(asset.debt_gearing)}</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-gray-600">Operations</div>
+                  <div className="text-lg font-semibold">{formatDate(asset.OperatingStartDate)}</div>
+                </div>
+              </div>
+
+              {/* Expanded Details */}
+              {expandedAsset === asset.asset_id && (
+                <div className="border-t border-gray-200 pt-6">
+                  {editingAsset && editingAsset.asset_id === asset.asset_id ? (
+                    /* Editing Form */
+                    <div className="space-y-8">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-900 mb-2">Editing Mode</h4>
+                        <p className="text-sm text-blue-700">Make changes below and click "Save" to store them locally, or "Save All" in the top right to commit to database.</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {/* Asset Details */}
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                            <Building2 className="w-4 h-4 mr-2" />
+                            Asset Details
+                          </h4>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Asset Name</label>
+                              <input
+                                type="text"
+                                value={editingAsset.asset_name || ''}
+                                onChange={(e) => updateEditingAsset('asset_name', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (MW)</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editingAsset.capacity || ''}
+                                onChange={(e) => updateEditingAsset('capacity', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Volume (MWh)</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editingAsset.volume || ''}
+                                onChange={(e) => updateEditingAsset('volume', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Asset Life (Years)</label>
+                              <input
+                                type="number"
+                                value={editingAsset.assetLife || ''}
+                                onChange={(e) => updateEditingAsset('assetLife', parseInt(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Financial Details */}
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                            <DollarSign className="w-4 h-4 mr-2" />
+                            Financial Details
+                          </h4>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">CAPEX ($M)</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editingAsset.cost_capex || ''}
+                                onChange={(e) => updateEditingAsset('cost_capex', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Max Gearing</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={editingAsset.cost_maxGearing || ''}
+                                onChange={(e) => updateEditingAsset('cost_maxGearing', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={editingAsset.cost_interestRate || ''}
+                                onChange={(e) => updateEditingAsset('cost_interestRate', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Tenor (Years)</label>
+                              <input
+                                type="number"
+                                value={editingAsset.cost_tenorYears || ''}
+                                onChange={(e) => updateEditingAsset('cost_tenorYears', parseInt(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Operating Costs ($M/year)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editingAsset.cost_operatingCosts || ''}
+                                onChange={(e) => updateEditingAsset('cost_operatingCosts', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Operational Parameters */}
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                            <Zap className="w-4 h-4 mr-2" />
+                            Operational Parameters
+                          </h4>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Volume Loss Adjustment (%)</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editingAsset.volumeLossAdjustment || ''}
+                                onChange={(e) => updateEditingAsset('volumeLossAdjustment', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Annual Degradation (%)</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editingAsset.annualDegradation || ''}
+                                onChange={(e) => updateEditingAsset('annualDegradation', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Construction Start Date</label>
+                              <input
+                                type="date"
+                                value={editingAsset.constructionStartDate || ''}
+                                onChange={(e) => updateEditingAsset('constructionStartDate', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Operations Start Date</label>
+                              <input
+                                type="date"
+                                value={editingAsset.OperatingStartDate || ''}
+                                onChange={(e) => updateEditingAsset('OperatingStartDate', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    /* Display Mode */
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {/* Asset Details */}
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                          <Building2 className="w-4 h-4 mr-2" />
+                          Asset Details
+                        </h4>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Type:</span>
+                            <span className="font-medium capitalize">{asset.type}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Region:</span>
+                            <span className="font-medium">{asset.region}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Capacity:</span>
+                            <span className="font-medium">{asset.capacity} MW</span>
+                          </div>
+                          {asset.volume && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Volume:</span>
+                              <span className="font-medium">{asset.volume} MWh</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Asset Life:</span>
+                            <span className="font-medium">{asset.assetLife} years</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Construction Duration:</span>
+                            <span className="font-medium">{asset.constructionDuration} months</span>
+                          </div>
+                        </div>
+                      </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                      <select
-                        value={editingAsset.type}
-                        onChange={(e) => updateEditingAsset('type', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      >
-                        <option value="solar">Solar</option>
-                        <option value="wind">Wind</option>
-                        <option value="storage">Storage</option>
-                      </select>
+                      {/* Financial Details */}
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                          <DollarSign className="w-4 h-4 mr-2" />
+                          Financial Details
+                        </h4>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Total CAPEX:</span>
+                            <span className="font-medium">{formatCurrencyShort(asset.cost_capex)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Max Gearing:</span>
+                            <span className="font-medium">{formatPercentage(asset.cost_maxGearing)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Interest Rate:</span>
+                            <span className="font-medium">{formatPercentage(asset.cost_interestRate)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Tenor:</span>
+                            <span className="font-medium">{asset.cost_tenorYears} years</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Terminal Value:</span>
+                            <span className="font-medium">{formatCurrencyShort(asset.cost_terminalValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">OPEX:</span>
+                            <span className="font-medium">{formatCurrencyShort(asset.cost_operatingCosts)}/year</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">OPEX Escalation:</span>
+                            <span className="font-medium">{asset.cost_operatingCostEscalation}%</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Debt Structure */}
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                          <Percent className="w-4 h-4 mr-2" />
+                          Debt Structure
+                        </h4>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Debt Amount:</span>
+                            <span className="font-medium">{formatCurrencyShort(asset.debt_debt_amount)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Equity Amount:</span>
+                            <span className="font-medium">{formatCurrencyShort(asset.debt_equity_amount)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Actual Gearing:</span>
+                            <span className="font-medium">{formatPercentage(asset.debt_gearing)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Calculated Gearing:</span>
+                            <span className="font-medium">{formatPercentage(asset.cost_calculatedGearing)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Debt Structure:</span>
+                            <span className="font-medium capitalize">{asset.cost_debtStructure}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Target DSCR (Contract):</span>
+                            <span className="font-medium">{asset.cost_targetDSCRContract}x</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Target DSCR (Merchant):</span>
+                            <span className="font-medium">{asset.cost_targetDSCRMerchant}x</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
-                      <select
-                        value={editingAsset.region}
-                        onChange={(e) => updateEditingAsset('region', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      >
-                        <option value="NSW">NSW</option>
-                        <option value="VIC">VIC</option>
-                        <option value="QLD">QLD</option>
-                        <option value="SA">SA</option>
-                        <option value="WA">WA</option>
-                        <option value="TAS">TAS</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (MW)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editingAsset.capacity}
-                        onChange={(e) => updateEditingAsset('capacity', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Financial Parameters */}
-                  <div className="space-y-4">
-                    <h4 className="font-medium text-gray-900 flex items-center">
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Financial Parameters
-                    </h4>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">CAPEX ($M)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editingAsset.cost_capex}
-                        onChange={(e) => updateEditingAsset('cost_capex', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Max Gearing (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="100"
-                        value={formatPercentage(editingAsset.cost_max_gearing)}
-                        onChange={(e) => updateEditingAsset('cost_max_gearing', parseFloat(e.target.value) / 100)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={formatPercentage(editingAsset.cost_interest_rate)}
-                        onChange={(e) => updateEditingAsset('cost_interest_rate', parseFloat(e.target.value) / 100)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Tenor (Years)</label>
-                      <input
-                        type="number"
-                        value={editingAsset.cost_tenor_years}
-                        onChange={(e) => updateEditingAsset('cost_tenor_years', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Terminal Value ($M)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editingAsset.cost_terminal_value}
-                        onChange={(e) => updateEditingAsset('cost_terminal_value', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-                  </div>
+                  )}
 
                   {/* Operational Parameters */}
-                  <div className="space-y-4">
-                    <h4 className="font-medium text-gray-900 flex items-center">
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h4 className="font-medium text-gray-900 mb-4 flex items-center">
                       <Zap className="w-4 h-4 mr-2" />
                       Operational Parameters
                     </h4>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Capacity Factor (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="100"
-                        value={editingAsset.capacity_factor}
-                        onChange={(e) => updateEditingAsset('capacity_factor', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Annual Degradation (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editingAsset.annual_degradation}
-                        onChange={(e) => updateEditingAsset('annual_degradation', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Volume Loss Adjustment (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editingAsset.volume_loss_adjustment}
-                        onChange={(e) => updateEditingAsset('volume_loss_adjustment', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Asset Life (Years)</label>
-                      <input
-                        type="number"
-                        value={editingAsset.asset_life}
-                        onChange={(e) => updateEditingAsset('asset_life', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Operating Costs ($M/year)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editingAsset.cost_operating_costs}
-                        onChange={(e) => updateEditingAsset('cost_operating_costs', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">OPEX Escalation (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editingAsset.cost_operating_cost_escalation}
-                        onChange={(e) => updateEditingAsset('cost_operating_cost_escalation', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="text-sm text-gray-600">Volume Loss Adjustment</div>
+                        <div className="text-lg font-semibold">{asset.volumeLossAdjustment}%</div>
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="text-sm text-gray-600">Annual Degradation</div>
+                        <div className="text-lg font-semibold">{asset.annualDegradation}%</div>
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="text-sm text-gray-600">Construction Start</div>
+                        <div className="text-lg font-semibold">{formatDate(asset.constructionStartDate)}</div>
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="text-sm text-gray-600">Operations Start</div>
+                        <div className="text-lg font-semibold">{formatDate(asset.OperatingStartDate)}</div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Contracts */}
+                  {asset.contracts && (
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                      <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Revenue Contracts
+                      </h4>
+                      <div className="space-y-4">
+                        {parseContracts(asset.contracts).map((contract, index) => (
+                          <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              <div>
+                                <div className="text-sm text-gray-600">Counterparty</div>
+                                <div className="font-medium">{contract.counterparty}</div>
+                              </div>
+                              <div>
+                                <div className="text-sm text-gray-600">Type</div>
+                                <div className="font-medium capitalize">{contract.type}</div>
+                              </div>
+                              <div>
+                                <div className="text-sm text-gray-600">Buyer's Percentage</div>
+                                <div className="font-medium">{contract.buyersPercentage}%</div>
+                              </div>
+                              <div>
+                                <div className="text-sm text-gray-600">Strike Price</div>
+                                <div className="font-medium">${contract.strikePrice}</div>
+                              </div>
+                              <div>
+                                <div className="text-sm text-gray-600">Indexation</div>
+                                <div className="font-medium">{contract.indexation}%</div>
+                              </div>
+                              <div>
+                                <div className="text-sm text-gray-600">Term</div>
+                                <div className="font-medium">
+                                  {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Dates Section */}
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h4 className="font-medium text-gray-900 flex items-center mb-4">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Project Timeline
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Construction Start Date</label>
-                      <input
-                        type="date"
-                        value={formatDate(editingAsset.construction_start_date)}
-                        onChange={(e) => updateEditingAsset('construction_start_date', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Operations Start Date</label>
-                      <input
-                        type="date"
-                        value={formatDate(editingAsset.operating_start_date)}
-                        onChange={(e) => updateEditingAsset('operating_start_date', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Display Mode */
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-4 h-4 rounded-full ${
-                      asset.type === 'solar' ? 'bg-yellow-500' :
-                      asset.type === 'wind' ? 'bg-blue-500' :
-                      asset.type === 'storage' ? 'bg-green-500' : 'bg-gray-500'
-                    }`} />
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{asset.asset_name}</h3>
-                      <p className="text-sm text-gray-600">
-                        ID: {asset.asset_id} • {asset.type} • {asset.region}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => startEditing(asset)}
-                    className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Edit</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {/* Technical Specs */}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                      <Zap className="w-4 h-4 mr-2" />
-                      Technical
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Capacity:</span>
-                        <span>{asset.capacity} MW</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Capacity Factor:</span>
-                        <span>{asset.capacity_factor}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Degradation:</span>
-                        <span>{asset.annual_degradation}%/year</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Asset Life:</span>
-                        <span>{asset.asset_life} years</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Financial */}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Financial
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">CAPEX:</span>
-                        <span>${formatCurrency(asset.cost_capex)}M</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Max Gearing:</span>
-                        <span>{formatPercentage(asset.cost_max_gearing)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Interest Rate:</span>
-                        <span>{formatPercentage(asset.cost_interest_rate)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Tenor:</span>
-                        <span>{asset.cost_tenor_years} years</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Operational */}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                      <Clock className="w-4 h-4 mr-2" />
-                      Operational
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">OPEX:</span>
-                        <span>${formatCurrency(asset.cost_operating_costs)}M/year</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">OPEX Escalation:</span>
-                        <span>{asset.cost_operating_cost_escalation}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Volume Loss:</span>
-                        <span>{asset.volume_loss_adjustment}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Terminal Value:</span>
-                        <span>${formatCurrency(asset.cost_terminal_value)}M</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Debt Results */}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                      <Percent className="w-4 h-4 mr-2" />
-                      Debt Results
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Debt Amount:</span>
-                        <span>${formatCurrency(asset.debt_amount)}M</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Equity:</span>
-                        <span>${formatCurrency(asset.debt_equity_amount)}M</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Gearing:</span>
-                        <span>{formatPercentage(asset.debt_gearing)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Equity IRR:</span>
-                        <span>{asset.equity_irr ? formatPercentage(asset.equity_irr) + '%' : 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline */}
-                <div className="mt-6 pt-4 border-t border-gray-200">
-                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Project Timeline
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Construction Start:</span>
-                      <span>{formatDate(asset.construction_start_date) || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Operations Start:</span>
-                      <span>{formatDate(asset.operating_start_date) || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Contracts Summary */}
-                {asset.contracts && asset.contracts.length > 0 && (
-                  <div className="mt-6 pt-4 border-t border-gray-200">
-                    <h4 className="font-medium text-gray-900 mb-3">Revenue Contracts</h4>
-                    <div className="text-sm text-gray-600">
-                      {asset.contracts.length} contract{asset.contracts.length !== 1 ? 's' : ''} configured
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -683,22 +820,16 @@ export default function AssetsPage() {
           <p className="text-gray-600 mb-4">
             {searchTerm || selectedType !== 'all' || selectedRegion !== 'all' 
               ? 'Try adjusting your filters' 
-              : 'Get started by adding your first asset'
+              : 'No assets available in the system'
             }
           </p>
-          {!searchTerm && selectedType === 'all' && selectedRegion === 'all' && (
-            <button className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 mx-auto">
-              <Plus className="w-4 h-4" />
-              <span>Add First Asset</span>
-            </button>
-          )}
         </div>
       )}
 
       {/* Summary Footer */}
       {filteredAssets.length > 0 && (
         <div className="mt-8 bg-gray-50 rounded-lg p-6">
-          <h4 className="font-medium text-gray-900 mb-4">Selection Summary</h4>
+          <h4 className="font-medium text-gray-900 mb-4">Portfolio Summary</h4>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="text-gray-600">Total Assets:</span>
@@ -713,13 +844,16 @@ export default function AssetsPage() {
             <div>
               <span className="text-gray-600">Total CAPEX:</span>
               <span className="ml-2 font-medium">
-                ${filteredAssets.reduce((sum, asset) => sum + asset.cost_capex, 0).toFixed(1)}M
+                {formatCurrencyShort(filteredAssets.reduce((sum, asset) => sum + asset.cost_capex, 0))}
               </span>
             </div>
             <div>
               <span className="text-gray-600">Avg Gearing:</span>
               <span className="ml-2 font-medium">
-                {(filteredAssets.reduce((sum, asset) => sum + asset.debt_gearing, 0) / filteredAssets.length * 100).toFixed(1)}%
+                {filteredAssets.length > 0 ? 
+                  formatPercentage(filteredAssets.reduce((sum, asset) => sum + asset.debt_gearing, 0) / filteredAssets.length) : 
+                  'N/A'
+                }
               </span>
             </div>
           </div>

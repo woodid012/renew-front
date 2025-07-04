@@ -1,4 +1,4 @@
-// app/api/asset-inputs-summary/route.js
+// app/api/asset-input-summary/route.js
 import { NextResponse } from 'next/server'
 import clientPromise from '../../../lib/mongodb'
 
@@ -18,44 +18,55 @@ export async function GET() {
       })
     }
     
-    // Transform the data to match frontend expectations
+    // Transform the data to match frontend expectations - using your actual field names
     const transformedAssets = assetInputs.map(asset => ({
+      // Basic asset info
       asset_id: asset.asset_id,
       asset_name: asset.asset_name || asset.name || `Asset ${asset.asset_id}`,
       type: asset.type || 'unknown',
       region: asset.region || 'unknown',
       capacity: parseFloat(asset.capacity) || 0,
+      volume: parseFloat(asset.volume) || 0,
       
-      // Financial parameters
+      // Financial parameters - using your exact field names
       cost_capex: parseFloat(asset.cost_capex) || 0,
-      cost_max_gearing: parseFloat(asset.cost_maxGearing) || 0,
-      cost_interest_rate: parseFloat(asset.cost_interestRate) || 0,
-      cost_tenor_years: parseFloat(asset.cost_tenorYears) || 0,
-      cost_terminal_value: parseFloat(asset.cost_terminalValue) || 0,
-      cost_operating_costs: parseFloat(asset.cost_operatingCosts) || 0,
-      cost_operating_cost_escalation: parseFloat(asset.cost_operatingCostEscalation) || 0,
+      cost_maxGearing: parseFloat(asset.cost_maxGearing) || 0,
+      cost_interestRate: parseFloat(asset.cost_interestRate) || 0,
+      cost_tenorYears: parseFloat(asset.cost_tenorYears) || 0,
+      cost_terminalValue: parseFloat(asset.cost_terminalValue) || 0,
+      cost_operatingCosts: parseFloat(asset.cost_operatingCosts) || 0,
+      cost_operatingCostEscalation: parseFloat(asset.cost_operatingCostEscalation) || 0,
+      cost_targetDSCRContract: parseFloat(asset.cost_targetDSCRContract) || 0,
+      cost_targetDSCRMerchant: parseFloat(asset.cost_targetDSCRMerchant) || 0,
+      cost_calculatedGearing: parseFloat(asset.cost_calculatedGearing) || 0,
+      cost_debtStructure: asset.cost_debtStructure || '',
       
-      // Operational parameters
-      capacity_factor: parseFloat(asset.capacityFactor) || 0,
-      annual_degradation: parseFloat(asset.annualDegradation) || 0,
-      volume_loss_adjustment: parseFloat(asset.volumeLossAdjustment) || 95,
-      asset_life: parseInt(asset.assetLife) || 25,
+      // Operational parameters - using your exact field names
+      capacityFactor: asset.capacityFactor || '',
+      qtrCapacityFactor_q1: asset.qtrCapacityFactor_q1 || '',
+      qtrCapacityFactor_q2: asset.qtrCapacityFactor_q2 || '',
+      qtrCapacityFactor_q3: asset.qtrCapacityFactor_q3 || '',
+      qtrCapacityFactor_q4: asset.qtrCapacityFactor_q4 || '',
+      annualDegradation: parseFloat(asset.annualDegradation) || 0,
+      volumeLossAdjustment: parseFloat(asset.volumeLossAdjustment) || 95,
+      assetLife: parseInt(asset.assetLife) || 25,
+      constructionDuration: parseInt(asset.constructionDuration) || 0,
       
       // Dates
-      construction_start_date: asset.constructionStartDate,
-      operating_start_date: asset.OperatingStartDate,
+      constructionStartDate: asset.constructionStartDate,
+      OperatingStartDate: asset.OperatingStartDate,
       
-      // Debt sizing results
+      // Debt sizing results - using your exact field names
       debt_total_capex: parseFloat(asset.debt_total_capex) || 0,
-      debt_amount: parseFloat(asset.debt_amount) || 0,
+      debt_debt_amount: parseFloat(asset.debt_debt_amount) || 0,
       debt_equity_amount: parseFloat(asset.debt_equity_amount) || 0,
       debt_gearing: parseFloat(asset.debt_gearing) || 0,
       
       // Performance metrics
       equity_irr: parseFloat(asset['Equity IRR']) || null,
       
-      // Contracts
-      contracts: asset.contracts || [],
+      // Contracts - keep as string for parsing in frontend
+      contracts: asset.contracts || '',
       
       // Timestamps
       created_at: asset.createdAt,
@@ -72,6 +83,62 @@ export async function GET() {
     console.error('Asset inputs summary API error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch asset inputs summary', details: error.message },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(request) {
+  try {
+    const client = await clientPromise
+    const db = client.db(process.env.MONGODB_DB)
+    
+    const body = await request.json()
+    const { assets } = body
+    
+    if (!assets || !Array.isArray(assets)) {
+      return NextResponse.json(
+        { error: 'Assets array is required' },
+        { status: 400 }
+      )
+    }
+    
+    const inputsCollection = db.collection('ASSET_inputs_summary')
+    const results = []
+    
+    // Update each asset
+    for (const asset of assets) {
+      if (!asset.asset_id) {
+        continue
+      }
+      
+      // Add update timestamp
+      asset.updatedAt = new Date()
+      
+      const result = await inputsCollection.replaceOne(
+        { asset_id: asset.asset_id },
+        asset,
+        { upsert: true }
+      )
+      
+      results.push({
+        asset_id: asset.asset_id,
+        matched: result.matchedCount,
+        modified: result.modifiedCount,
+        upserted: result.upsertedCount
+      })
+    }
+    
+    return NextResponse.json({
+      message: 'Assets updated successfully',
+      results: results,
+      totalUpdated: results.length
+    })
+    
+  } catch (error) {
+    console.error('Asset update error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update assets', details: error.message },
       { status: 500 }
     )
   }

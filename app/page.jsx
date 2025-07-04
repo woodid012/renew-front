@@ -13,16 +13,29 @@ import {
   BarChart3,
   Wifi,
   User,
-  Briefcase
+  Briefcase,
+  Save,
+  AlertCircle,
+  CheckCircle,
+  Loader2
 } from 'lucide-react'
 
 import DashboardPage from './pages/dashboard/page'
 import AssetsPage from './pages/assets/page'
 import PriceCurvesPage from './pages/price-curves/page'
 import RevenuePage from './pages/revenue/page'
-import TestConnection from './pages/test-connection/page'
+import TestConnectionPage from './pages/test-connection/page'
 
+// Create context for unsaved changes
+const UnsavedChangesContext = createContext()
 
+export const useUnsavedChanges = () => {
+  const context = useContext(UnsavedChangesContext)
+  if (!context) {
+    throw new Error('useUnsavedChanges must be used within UnsavedChangesProvider')
+  }
+  return context
+}
 
 // Navigation items with sections
 const navigationItems = [
@@ -81,6 +94,71 @@ const navigationItems = [
 export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState('/')
+  const [unsavedAssets, setUnsavedAssets] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState(null) // null, 'success', 'error'
+
+  const hasUnsavedChanges = unsavedAssets.length > 0
+
+  const addUnsavedAsset = (asset) => {
+    setUnsavedAssets(prev => {
+      const existing = prev.find(a => a.asset_id === asset.asset_id)
+      if (existing) {
+        return prev.map(a => a.asset_id === asset.asset_id ? asset : a)
+      }
+      return [...prev, asset]
+    })
+  }
+
+  const removeUnsavedAsset = (assetId) => {
+    setUnsavedAssets(prev => prev.filter(a => a.asset_id !== assetId))
+  }
+
+  const clearUnsavedChanges = () => {
+    setUnsavedAssets([])
+  }
+
+  const saveAllChanges = async () => {
+    if (unsavedAssets.length === 0) return
+
+    try {
+      setSaving(true)
+      setSaveStatus(null)
+
+      const response = await fetch('/api/asset-input-summary', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          assets: unsavedAssets
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save changes')
+      }
+
+      const result = await response.json()
+      console.log('Save result:', result)
+
+      // Clear unsaved changes and show success
+      clearUnsavedChanges()
+      setSaveStatus('success')
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSaveStatus(null), 3000)
+
+    } catch (error) {
+      console.error('Save error:', error)
+      setSaveStatus('error')
+      
+      // Clear error message after 5 seconds
+      setTimeout(() => setSaveStatus(null), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
   
 
   
@@ -100,68 +178,106 @@ export default function HomePage() {
   };
 
   const renderPageContent = () => {
+    const unsavedChangesValue = {
+      unsavedAssets,
+      addUnsavedAsset,
+      removeUnsavedAsset,
+      clearUnsavedChanges,
+      hasUnsavedChanges
+    }
+
     switch (currentPage) {
       case '/':
-        return <DashboardPage />;
+        return (
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <DashboardPage />
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/assets':
-        return <AssetsPage />;
-
+        return (
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <AssetsPage />
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/price-curves':
-                return <PriceCurvesPage />;
+        return (
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <PriceCurvesPage />
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/revenue':
-        return <RevenuePage />;
+        return (
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <RevenuePage />
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/finance':
         return (
-          <div className="text-center py-12">
-            <Calculator className="w-16 h-16 text-orange-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Project Finance</h2>
-            <p className="text-gray-600">Financial modeling and project finance analysis</p>
-          </div>
-        );
-
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <div className="text-center py-12">
+              <Calculator className="w-16 h-16 text-orange-400 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Project Finance</h2>
+              <p className="text-gray-600">Financial modeling and project finance analysis</p>
+            </div>
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/scenarios':
         return (
-          <div className="text-center py-12">
-            <BarChart3 className="w-16 h-16 text-indigo-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Scenario Manager</h2>
-            <p className="text-gray-600">Create and compare different scenarios</p>
-          </div>
-        );
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <div className="text-center py-12">
+              <BarChart3 className="w-16 h-16 text-indigo-400 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Scenario Manager</h2>
+              <p className="text-gray-600">Create and compare different scenarios</p>
+            </div>
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/reporting':
         return (
-          <div className="text-center py-12">
-            <TrendingUp className="w-16 h-16 text-pink-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Reporting</h2>
-            <p className="text-gray-600">Generate comprehensive reports</p>
-          </div>
-        );
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <div className="text-center py-12">
+              <TrendingUp className="w-16 h-16 text-pink-400 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Reporting</h2>
+              <p className="text-gray-600">Generate comprehensive reports</p>
+            </div>
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/exports':
         return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exports</h2>
-            <p className="text-gray-600">Export data and reports</p>
-          </div>
-        );
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <div className="text-center py-12">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Exports</h2>
+              <p className="text-gray-600">Export data and reports</p>
+            </div>
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/settings':
         return (
-          <div className="text-center py-12">
-            <Settings className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Settings</h2>
-            <p className="text-gray-600">Configure platform settings</p>
-          </div>
-        );
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <div className="text-center py-12">
+              <Settings className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Settings</h2>
+              <p className="text-gray-600">Configure platform settings</p>
+            </div>
+          </UnsavedChangesContext.Provider>
+        )
       case '/pages/test-connection':
-        return <TestConnectionPage />;
-      
         return (
-          <div className="text-center py-12">
-            <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Page Not Found</h2>
-            <p className="text-gray-600">The requested page could not be found</p>
-          </div>
-        );
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <TestConnectionPage />
+          </UnsavedChangesContext.Provider>
+        )
+      
+      default:
+        return (
+          <UnsavedChangesContext.Provider value={unsavedChangesValue}>
+            <div className="text-center py-12">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Page Not Found</h2>
+              <p className="text-gray-600">The requested page could not be found</p>
+            </div>
+          </UnsavedChangesContext.Provider>
+        )
     }
-  };
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -269,6 +385,50 @@ export default function HomePage() {
 
               {/* Right side actions */}
               <div className="flex items-center space-x-4">
+                {/* Save Status */}
+                {saveStatus === 'success' && (
+                  <div className="flex items-center space-x-2 px-3 py-2 bg-green-100 text-green-700 rounded-md">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Saved successfully</span>
+                  </div>
+                )}
+                
+                {saveStatus === 'error' && (
+                  <div className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-md">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">Save failed</span>
+                  </div>
+                )}
+
+                {/* Unsaved Changes Indicator & Save Button */}
+                {hasUnsavedChanges && (
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-md">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-sm">
+                        {unsavedAssets.length} unsaved change{unsavedAssets.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <button
+                      onClick={saveAllChanges}
+                      disabled={saving}
+                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Save All</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-center space-x-3 px-3 py-2 bg-gray-50 rounded-md">
                   <User className="w-4 h-4 text-gray-500" />
                   <span className="text-sm text-gray-700">Placeholder User</span>
