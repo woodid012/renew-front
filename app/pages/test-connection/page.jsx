@@ -1,37 +1,38 @@
-"use client";
+// app/pages/test-connection/page.jsx
+"use client"
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react'
 import {
   Database, CheckCircle, AlertCircle, Loader2, RefreshCw
-} from 'lucide-react';
+} from 'lucide-react'
 
-const TestConnectionPage = () => {
-  const [connectionData, setConnectionData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export default function TestConnectionPage() {
+  const [connectionData, setConnectionData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetchConnectionData();
-  }, []);
+    fetchConnectionData()
+  }, [])
 
   const fetchConnectionData = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     try {
-      const response = await fetch('/api/test-connection');
+      const response = await fetch('/api/test-connection')
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
-      const result = await response.json();
-      setConnectionData(result);
-      console.log("MongoDB Connection Data:", result);
+      const result = await response.json()
+      setConnectionData(result)
+      console.log("MongoDB Connection Data:", result)
     } catch (e) {
-      console.error("Error fetching connection data:", e);
-      setError(e.message);
+      console.error("Error fetching connection data:", e)
+      setError(e.message)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   if (loading) {
     return (
@@ -39,7 +40,7 @@ const TestConnectionPage = () => {
         <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
         <p>Testing MongoDB connection...</p>
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -54,7 +55,7 @@ const TestConnectionPage = () => {
           <RefreshCw className="inline-block w-4 h-4 mr-2" /> Retry
         </button>
       </div>
-    );
+    )
   }
 
   return (
@@ -96,7 +97,5 @@ const TestConnectionPage = () => {
         </div>
       )}
     </div>
-  );
-};
-
-export default TestConnectionPage;
+  )
+}

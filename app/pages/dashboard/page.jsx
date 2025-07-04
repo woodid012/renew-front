@@ -1,4 +1,4 @@
-// app/dashboard/page.jsx
+// app/pages/dashboard/page.jsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -405,7 +405,7 @@ export default function DashboardPage() {
             
             <div className="p-6">
               <div className="space-y-4">
-              {assetInputsData?.assets?.map((asset) => (
+                {assetInputsData?.assets?.map((asset) => (
                   <div key={asset.asset_id} className="border border-gray-200 rounded-lg">
                     <div 
                       className="p-4 cursor-pointer hover:bg-gray-50"
@@ -671,10 +671,7 @@ export default function DashboardPage() {
 
       {/* Quick Actions - Always visible */}
       <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <a 
-          href="/assets" 
-          className="bg-green-50 border border-green-200 rounded-lg p-4 hover:bg-green-100 transition-colors group"
-        >
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 hover:bg-green-100 transition-colors group">
           <div className="flex items-center space-x-3">
             <Building2 className="w-6 h-6 text-green-600" />
             <div className="flex-1">
@@ -683,12 +680,9 @@ export default function DashboardPage() {
             </div>
             <Eye className="w-4 h-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-        </a>
+        </div>
 
-        <a 
-          href="/pages/results" 
-          className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition-colors group"
-        >
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition-colors group">
           <div className="flex items-center space-x-3">
             <BarChart3 className="w-6 h-6 text-blue-600" />
             <div className="flex-1">
@@ -697,7 +691,7 @@ export default function DashboardPage() {
             </div>
             <Eye className="w-4 h-4 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-        </a>
+        </div>
 
         <button 
           onClick={fetchAllDashboardData}

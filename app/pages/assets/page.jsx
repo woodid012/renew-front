@@ -33,10 +33,20 @@ import {
   Undo2
 } from 'lucide-react'
 
-// Import the context from the main page
-import { useUnsavedChanges } from '../../page'
+// Create a simple local context for this page since it's isolated
+import { createContext, useContext } from 'react'
 
-export default function AssetsPage() {
+const LocalUnsavedChangesContext = createContext()
+
+const useLocalUnsavedChanges = () => {
+  const context = useContext(LocalUnsavedChangesContext)
+  if (!context) {
+    throw new Error('useLocalUnsavedChanges must be used within LocalUnsavedChangesProvider')
+  }
+  return context
+}
+
+function AssetsPageContent() {
   const [assets, setAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -48,7 +58,7 @@ export default function AssetsPage() {
   const [lastUpdated, setLastUpdated] = useState(null)
 
   // Get unsaved changes context
-  const { addUnsavedAsset, removeUnsavedAsset, unsavedAssets } = useUnsavedChanges()
+  const { addUnsavedAsset, removeUnsavedAsset, unsavedAssets } = useLocalUnsavedChanges()
 
   useEffect(() => {
     fetchAssets()
@@ -455,7 +465,7 @@ export default function AssetsPage() {
                     <div className="space-y-8">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <h4 className="font-medium text-blue-900 mb-2">Editing Mode</h4>
-                        <p className="text-sm text-blue-700">Make changes below and click "Save" to store them locally, or "Save All" in the top right to commit to database.</p>
+                        <p className="text-sm text-blue-700">Make changes below and click "Save" to store them locally.</p>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -482,16 +492,6 @@ export default function AssetsPage() {
                                 step="0.1"
                                 value={editingAsset.capacity || ''}
                                 onChange={(e) => updateEditingAsset('capacity', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Volume (MWh)</label>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editingAsset.volume || ''}
-                                onChange={(e) => updateEditingAsset('volume', parseFloat(e.target.value) || 0)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             </div>
@@ -537,27 +537,6 @@ export default function AssetsPage() {
                               />
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="1"
-                                value={editingAsset.cost_interestRate || ''}
-                                onChange={(e) => updateEditingAsset('cost_interestRate', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Tenor (Years)</label>
-                              <input
-                                type="number"
-                                value={editingAsset.cost_tenorYears || ''}
-                                onChange={(e) => updateEditingAsset('cost_tenorYears', parseInt(e.target.value) || 0)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
-                            <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Operating Costs ($M/year)</label>
                               <input
                                 type="number"
@@ -598,15 +577,6 @@ export default function AssetsPage() {
                               />
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Construction Start Date</label>
-                              <input
-                                type="date"
-                                value={editingAsset.constructionStartDate || ''}
-                                onChange={(e) => updateEditingAsset('constructionStartDate', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
-                            <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Operations Start Date</label>
                               <input
                                 type="date"
@@ -641,19 +611,9 @@ export default function AssetsPage() {
                             <span className="text-gray-600">Capacity:</span>
                             <span className="font-medium">{asset.capacity} MW</span>
                           </div>
-                          {asset.volume && (
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Volume:</span>
-                              <span className="font-medium">{asset.volume} MWh</span>
-                            </div>
-                          )}
                           <div className="flex justify-between">
                             <span className="text-gray-600">Asset Life:</span>
                             <span className="font-medium">{asset.assetLife} years</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Construction Duration:</span>
-                            <span className="font-medium">{asset.constructionDuration} months</span>
                           </div>
                         </div>
                       </div>
@@ -674,134 +634,36 @@ export default function AssetsPage() {
                             <span className="font-medium">{formatPercentage(asset.cost_maxGearing)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Interest Rate:</span>
-                            <span className="font-medium">{formatPercentage(asset.cost_interestRate)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Tenor:</span>
-                            <span className="font-medium">{asset.cost_tenorYears} years</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Terminal Value:</span>
-                            <span className="font-medium">{formatCurrencyShort(asset.cost_terminalValue)}</span>
-                          </div>
-                          <div className="flex justify-between">
                             <span className="text-gray-600">OPEX:</span>
                             <span className="font-medium">{formatCurrencyShort(asset.cost_operatingCosts)}/year</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">OPEX Escalation:</span>
-                            <span className="font-medium">{asset.cost_operatingCostEscalation}%</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Debt Structure */}
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-4 flex items-center">
-                          <Percent className="w-4 h-4 mr-2" />
-                          Debt Structure
-                        </h4>
-                        <div className="space-y-3 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Debt Amount:</span>
-                            <span className="font-medium">{formatCurrencyShort(asset.debt_debt_amount)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Equity Amount:</span>
-                            <span className="font-medium">{formatCurrencyShort(asset.debt_equity_amount)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Actual Gearing:</span>
                             <span className="font-medium">{formatPercentage(asset.debt_gearing)}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Calculated Gearing:</span>
-                            <span className="font-medium">{formatPercentage(asset.cost_calculatedGearing)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Debt Structure:</span>
-                            <span className="font-medium capitalize">{asset.cost_debtStructure}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Target DSCR (Contract):</span>
-                            <span className="font-medium">{asset.cost_targetDSCRContract}x</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Target DSCR (Merchant):</span>
-                            <span className="font-medium">{asset.cost_targetDSCRMerchant}x</span>
-                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
 
-                  {/* Operational Parameters */}
-                  <div className="mt-8 pt-6 border-t border-gray-200">
-                    <h4 className="font-medium text-gray-900 mb-4 flex items-center">
-                      <Zap className="w-4 h-4 mr-2" />
-                      Operational Parameters
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600">Volume Loss Adjustment</div>
-                        <div className="text-lg font-semibold">{asset.volumeLossAdjustment}%</div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600">Annual Degradation</div>
-                        <div className="text-lg font-semibold">{asset.annualDegradation}%</div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600">Construction Start</div>
-                        <div className="text-lg font-semibold">{formatDate(asset.constructionStartDate)}</div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600">Operations Start</div>
-                        <div className="text-lg font-semibold">{formatDate(asset.OperatingStartDate)}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Contracts */}
-                  {asset.contracts && (
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <h4 className="font-medium text-gray-900 mb-4 flex items-center">
-                        <FileText className="w-4 h-4 mr-2" />
-                        Revenue Contracts
-                      </h4>
-                      <div className="space-y-4">
-                        {parseContracts(asset.contracts).map((contract, index) => (
-                          <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              <div>
-                                <div className="text-sm text-gray-600">Counterparty</div>
-                                <div className="font-medium">{contract.counterparty}</div>
-                              </div>
-                              <div>
-                                <div className="text-sm text-gray-600">Type</div>
-                                <div className="font-medium capitalize">{contract.type}</div>
-                              </div>
-                              <div>
-                                <div className="text-sm text-gray-600">Buyer's Percentage</div>
-                                <div className="font-medium">{contract.buyersPercentage}%</div>
-                              </div>
-                              <div>
-                                <div className="text-sm text-gray-600">Strike Price</div>
-                                <div className="font-medium">${contract.strikePrice}</div>
-                              </div>
-                              <div>
-                                <div className="text-sm text-gray-600">Indexation</div>
-                                <div className="font-medium">{contract.indexation}%</div>
-                              </div>
-                              <div>
-                                <div className="text-sm text-gray-600">Term</div>
-                                <div className="font-medium">
-                                  {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
-                                </div>
-                              </div>
-                            </div>
+                      {/* Operational Parameters */}
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+                          <Zap className="w-4 h-4 mr-2" />
+                          Operations
+                        </h4>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Volume Loss Adj:</span>
+                            <span className="font-medium">{asset.volumeLossAdjustment}%</span>
                           </div>
-                        ))}
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Annual Degradation:</span>
+                            <span className="font-medium">{asset.annualDegradation}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Operations Start:</span>
+                            <span className="font-medium">{formatDate(asset.OperatingStartDate)}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -860,5 +722,44 @@ export default function AssetsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function AssetsPage() {
+  // Local state for unsaved changes
+  const [unsavedAssets, setUnsavedAssets] = useState([])
+
+  const addUnsavedAsset = (asset) => {
+    setUnsavedAssets(prev => {
+      const existing = prev.find(a => a.asset_id === asset.asset_id)
+      if (existing) {
+        return prev.map(a => a.asset_id === asset.asset_id ? asset : a)
+      }
+      return [...prev, asset]
+    })
+  }
+
+  const removeUnsavedAsset = (assetId) => {
+    setUnsavedAssets(prev => prev.filter(a => a.asset_id !== assetId))
+  }
+
+  const clearUnsavedChanges = () => {
+    setUnsavedAssets([])
+  }
+
+  const hasUnsavedChanges = unsavedAssets.length > 0
+
+  const contextValue = {
+    unsavedAssets,
+    addUnsavedAsset,
+    removeUnsavedAsset,
+    clearUnsavedChanges,
+    hasUnsavedChanges
+  }
+
+  return (
+    <LocalUnsavedChangesContext.Provider value={contextValue}>
+      <AssetsPageContent />
+    </LocalUnsavedChangesContext.Provider>
   )
 }
