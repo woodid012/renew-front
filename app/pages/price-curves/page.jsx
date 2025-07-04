@@ -1,6 +1,3 @@
-// app/pages/price-curves/page.jsx
-'use client'
-
 import { useState, useEffect } from 'react'
 import { 
   LineChart, 
@@ -37,25 +34,28 @@ export default function PriceCurvesPage() {
   const [availableProfiles, setAvailableProfiles] = useState([])
   const [availableTypes, setAvailableTypes] = useState([])
   const [dateRange, setDateRange] = useState({ start: null, end: null })
-  const [showSpreads, setShowSpreads] = useState(false)
-  const [selectedSpreadDurations, setSelectedSpreadDurations] = useState(['1', '2'])
+  const [selectedPeriod, setSelectedPeriod] = useState('yearly') // New state for aggregation period, default to yearly
+
+  // Define all possible spread durations as constants
+  const allSpreadDurations = ['0.5', '1', '2', '4'];
 
   useEffect(() => {
     fetchPriceCurves()
-  }, [])
+  }, [selectedPeriod]) // Re-fetch when aggregation period changes
 
   useEffect(() => {
     if (priceCurves.length > 0) {
       processChartData()
     }
-  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes, showSpreads, selectedSpreadDurations])
+  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes]) // Removed showSpreads, selectedSpreadDurations
 
   const fetchPriceCurves = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const response = await fetch('/api/price-curves')
+      const url = `/api/price-curves${selectedPeriod ? `?period=${selectedPeriod}` : ''}`;
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -64,21 +64,42 @@ export default function PriceCurvesPage() {
       setPriceCurves(data)
       
       // Extract unique values for filters
-      const regions = [...new Set(data.map(item => item.REGION).filter(Boolean))].sort()
-      const profiles = [...new Set(data.map(item => item.PROFILE).filter(Boolean))].sort()
-      const types = [...new Set(data.map(item => item.TYPE).filter(Boolean))].sort()
+      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
+      const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
+      const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
       
       setAvailableRegions(['ALL', ...regions])
-      setAvailableProfiles(profiles)
+      // Add 'storage' to available profiles if not already present
+      if (!profiles.includes('storage')) {
+        setAvailableProfiles([...profiles, 'storage'])
+      } else {
+        setAvailableProfiles(profiles)
+      }
       setAvailableTypes(types)
       
-      // Set date range
-      const dates = data.map(item => new Date(item.TIME)).filter(d => !isNaN(d))
-      if (dates.length > 0) {
-        setDateRange({
-          start: new Date(Math.min(...dates)),
-          end: new Date(Math.max(...dates))
-        })
+      // Set date range (adjust for aggregated data)
+      if (data.length > 0) {
+        const dates = data.map(item => {
+          if (selectedPeriod === 'monthly') {
+            return new Date(item._id.year, item._id.month - 1, 1);
+          } else if (selectedPeriod === 'quarterly') {
+            return new Date(item._id.year, (item._id.quarter - 1) * 3, 1);
+          } else if (selectedPeriod === 'yearly') {
+            return new Date(item._id.year, 0, 1);
+          } else if (selectedPeriod === 'fiscal_yearly') {
+            // Assuming fiscal year starts in July (month 7)
+            return new Date(item._id.fiscalYear, 6, 1); 
+          } else {
+            return new Date(item.TIME);
+          }
+        }).filter(d => !isNaN(d));
+
+        if (dates.length > 0) {
+          setDateRange({
+            start: new Date(Math.min(...dates)),
+            end: new Date(Math.max(...dates))
+          });
+        }
       }
       
       // Default to showing Green as well if it exists
@@ -97,44 +118,58 @@ export default function PriceCurvesPage() {
   const processChartData = () => {
     if (!priceCurves.length) return
 
-    // Group data by time period
     const timeGroups = {}
     
     priceCurves.forEach(item => {
-      const date = new Date(item.TIME)
-      const timeKey = item.TIME // Use the original TIME format (YYYY-MM-DD)
-      
-      if (!timeGroups[timeKey]) {
-        timeGroups[timeKey] = { TIME: timeKey, date: date }
+      let timeKey;
+      let displayDate;
+
+      if (selectedPeriod === 'monthly') {
+        timeKey = `${item._id.year}-${String(item._id.month).padStart(2, '0')}`;
+        displayDate = new Date(item._id.year, item._id.month - 1, 1);
+      } else if (selectedPeriod === 'quarterly') {
+        timeKey = `${item._id.year}-Q${item._id.quarter}`;
+        displayDate = new Date(item._id.year, (item._id.quarter - 1) * 3, 1);
+      } else if (selectedPeriod === 'yearly') {
+        timeKey = `${item._id.year}`;
+        displayDate = new Date(item._id.year, 0, 1);
+      } else if (selectedPeriod === 'fiscal_yearly') {
+        timeKey = `FY${item._id.fiscalYear}`;
+        displayDate = new Date(item._id.fiscalYear, 6, 1); // Assuming July start
+      } else {
+        timeKey = item.TIME; // Use the original TIME format (YYYY-MM-DD)
+        displayDate = new Date(item.TIME);
       }
-      
-      // Filter by profile
-      if (item.PROFILE !== selectedProfile) return
+
+      if (!timeGroups[timeKey]) {
+        timeGroups[timeKey] = { TIME: timeKey, date: displayDate };
+      }
       
       // Filter by region
-      const regionMatch = selectedRegions.includes('ALL') || selectedRegions.includes(item.REGION)
+      const regionMatch = selectedRegions.includes('ALL') || selectedRegions.includes(item._id.REGION)
       if (!regionMatch) return
-      
-      // Process regular price types (ENERGY, GREEN, etc.)
-      if (selectedTypes.includes(item.TYPE)) {
-        const seriesKey = selectedRegions.includes('ALL') ? 
-          `${item.REGION}_${item.TYPE}` : 
-          item.TYPE
-        
-        timeGroups[timeKey][seriesKey] = item.PRICE
-      }
-      
-      // Process spreads if enabled and TYPE is ENERGY (assuming spreads are on energy records)
-      if (showSpreads && item.TYPE === 'ENERGY' && item.SPREAD) {
-        selectedSpreadDurations.forEach(duration => {
-          if (item.SPREAD[duration] !== undefined) {
-            const spreadKey = selectedRegions.includes('ALL') ? 
-              `${item.REGION}_SPREAD_${duration}H` : 
-              `SPREAD_${duration}H`
-            
-            timeGroups[timeKey][spreadKey] = item.SPREAD[duration]
-          }
-        })
+
+      if (selectedProfile === 'storage') {
+        // For storage profile, we specifically look for baseload ENERGY data to get spreads
+        if (item._id.PROFILE === 'baseload' && item._id.TYPE === 'ENERGY') {
+          allSpreadDurations.forEach(duration => {
+            const spreadFieldName = `SPREAD_${duration.replace('.', '_')}HR`;
+            if (item[spreadFieldName] !== undefined) {
+              const seriesKey = selectedRegions.includes('ALL') ? 
+                `${item._id.REGION}_SPREAD_${duration}H` : 
+                `SPREAD_${duration}H`
+              timeGroups[timeKey][seriesKey] = item[spreadFieldName]
+            }
+          })
+        }
+      } else {
+        // For other profiles, filter by selectedProfile and selectedTypes, and plot PRICE
+        if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
+          const seriesKey = selectedRegions.includes('ALL') ? 
+            `${item._id.REGION}_${item._id.TYPE}` : 
+            item._id.TYPE
+          timeGroups[timeKey][seriesKey] = item.PRICE
+        }
       }
     })
     
@@ -143,15 +178,31 @@ export default function PriceCurvesPage() {
       .sort((a, b) => a.date - b.date)
       .map(item => ({
         ...item,
-        TIME: new Date(item.date).toLocaleDateString('en-AU', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric' 
-        })
+        TIME: formatPeriodLabel(item.TIME, selectedPeriod) // Use a helper for formatting
       }))
     
     setChartData(processedData)
   }
+
+  const formatPeriodLabel = (timeKey, period) => {
+    if (period === 'monthly') {
+      const [year, month] = timeKey.split('-');
+      return new Date(year, parseInt(month) - 1, 1).toLocaleDateString('en-AU', { year: 'numeric', month: 'short' });
+    } else if (period === 'quarterly') {
+      const [year, quarter] = timeKey.split('-Q');
+      return `${year} Q${quarter}`;
+    } else if (period === 'yearly') {
+      return timeKey;
+    } else if (period === 'fiscal_yearly') {
+      return timeKey;
+    } else {
+      return new Date(timeKey).toLocaleDateString('en-AU', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+  };
 
   const handleRegionChange = (region) => {
     if (region === 'ALL') {
@@ -181,21 +232,24 @@ export default function PriceCurvesPage() {
     )
   }
 
-  const handleSpreadDurationChange = (duration) => {
-    setSelectedSpreadDurations(prev => 
-      prev.includes(duration) 
-        ? prev.filter(d => d !== duration)
-        : [...prev, duration]
-    )
-  }
+  const handlePeriodChange = (event) => {
+    setSelectedPeriod(event.target.value);
+  };
 
   const getSeriesKeys = () => {
     if (!chartData.length) return []
     
     const sampleData = chartData[0]
-    return Object.keys(sampleData).filter(key => 
+    const keys = Object.keys(sampleData).filter(key => 
       key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number'
     )
+
+    // If storage profile is selected, ensure spread keys are included
+    if (selectedProfile === 'storage') {
+      return keys.filter(key => key.includes('SPREAD_'));
+    } else {
+      return keys.filter(key => !key.includes('SPREAD_'));
+    }
   }
 
   const getLineColor = (index) => {
@@ -213,21 +267,6 @@ export default function PriceCurvesPage() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value)
-  }
-
-  const getAvailableSpreadDurations = () => {
-    // Get spread durations from the first record that has spreads
-    const recordWithSpreads = priceCurves.find(item => 
-      item.SPREAD && 
-      item.PROFILE === selectedProfile &&
-      (selectedRegions.includes('ALL') || selectedRegions.includes(item.REGION))
-    )
-    
-    if (recordWithSpreads && recordWithSpreads.SPREAD) {
-      return Object.keys(recordWithSpreads.SPREAD).sort((a, b) => parseFloat(a) - parseFloat(b))
-    }
-    
-    return []
   }
 
   if (loading) {
@@ -369,39 +408,22 @@ export default function PriceCurvesPage() {
             </div>
           </div>
 
-          {/* Spreads Filter */}
+          {/* Aggregation Period Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
-              <BarChart3 className="w-4 h-4 inline mr-1" />
-              Storage Spreads
+              <Calendar className="w-4 h-4 inline mr-1" />
+              Aggregate By
             </label>
-            <div className="space-y-2">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={showSpreads}
-                  onChange={(e) => setShowSpreads(e.target.checked)}
-                  className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                />
-                <span className="text-sm text-gray-700">Show Spreads</span>
-              </label>
-              
-              {showSpreads && (
-                <div className="ml-6 space-y-2">
-                  {getAvailableSpreadDurations().map(duration => (
-                    <label key={duration} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedSpreadDurations.includes(duration)}
-                        onChange={() => handleSpreadDurationChange(duration)}
-                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                      />
-                      <span className="text-xs text-gray-600">{duration} hour{duration !== '1' ? 's' : ''}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+            <select
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              value={selectedPeriod}
+              onChange={handlePeriodChange}
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+              <option value="fiscal_yearly">Fiscal Year</option>
+            </select>
           </div>
         </div>
       </div>
@@ -437,7 +459,7 @@ export default function PriceCurvesPage() {
                 />
                 <Tooltip 
                   formatter={(value, name) => [formatCurrency(value), name]}
-                  labelFormatter={(label) => `Date: ${label}`}
+                  labelFormatter={(label) => `Period: ${label}`}
                 />
                 <Legend />
                 {getSeriesKeys().map((key, index) => (

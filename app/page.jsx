@@ -23,9 +23,11 @@ import {
 import DashboardPage from './pages/dashboard/page'
 import AssetsPage from './pages/assets/page'
 import PriceCurvesPage from './pages/price-curves/page'
-import RevenuePage from './pages/revenue/page'
+
 import TestConnectionPage from './pages/test-connection/page'
-import Revenue2Page from './pages/revenue2/page'
+import AssetOutputPage from './pages/asset-output/page'
+import PortfolioOutputPage from './pages/portfolio-output/page'
+import PriceCurves2Page from './pages/price-curves2/page'
 import RunModelPage from './pages/run-model/page'
 
 // Navigation items with sections
@@ -53,6 +55,12 @@ const navigationItems = [
     section: 'inputs'
   },
   {
+    name: 'Price Curves 2',
+    href: '/pages/price-curves2',
+    icon: BarChart3,
+    section: 'inputs'
+  },
+  {
     section: 'Analysis',
     isSection: true
   },
@@ -62,15 +70,16 @@ const navigationItems = [
     icon: Calculator,
     section: 'analysis'
   },
+  
   {
-    name: 'Revenue - API',
-    href: '/pages/revenue',
+    name: 'Asset Output',
+    href: '/pages/asset-output',
     icon: TrendingUp,
     section: 'analysis'
   },
   {
-    name: 'Revenue2',
-    href: '/pages/revenue2',
+    name: 'Portfolio Output',
+    href: '/pages/portfolio-output',
     icon: TrendingUp,
     section: 'analysis'
   },
@@ -116,10 +125,13 @@ export default function HomePage() {
         return <AssetsPage />
       case '/pages/price-curves':
         return <PriceCurvesPage />
-      case '/pages/revenue':
-        return <RevenuePage />
-      case '/pages/revenue2':
-        return <Revenue2Page />
+      case '/pages/price-curves2':
+        return <PriceCurves2Page />
+      
+      case '/pages/asset-output':
+        return <AssetOutputPage />
+      case '/pages/portfolio-output':
+        return <PortfolioOutputPage />
       case '/pages/run-model':
         return <RunModelPage />
       case '/pages/finance':
