@@ -1,3 +1,4 @@
+// app/api/asset-output-data/route.js
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
 
@@ -9,7 +10,7 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const assetId = searchParams.get('asset_id');
-    const period = searchParams.get('period'); // New parameter for aggregation period
+    const period = searchParams.get('period');
 
     const numericalFields = [
       'revenue',
@@ -70,7 +71,7 @@ export async function GET(request) {
               year: { $year: '$date' },
               month: { $month: '$date' },
             },
-            date: { $first: '$date' }, // Keep the first date for sorting/display
+            date: { $first: '$date' },
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
@@ -101,14 +102,11 @@ export async function GET(request) {
         });
         pipeline.push({ $sort: { '_id.year': 1 } });
       } else if (period === 'fiscal_yearly') {
-        const fiscalYearStartMonth = 7; // Assuming July as the start month for fiscal year
+        const fiscalYearStartMonth = 7; // July as the start month for fiscal year
 
+        // First, add fields to calculate fiscal year
         pipeline.push({
-          $project: {
-            _id: 0, // Exclude default _id
-            asset_id: '$asset_id',
-            date: '$date',
-            // Calculate fiscal year
+          $addFields: {
             fiscalYear: {
               $cond: {
                 if: { $lt: [{ $month: '$date' }, fiscalYearStartMonth] },
@@ -116,11 +114,10 @@ export async function GET(request) {
                 else: { $year: '$date' },
               },
             },
-            // Include all numerical fields for aggregation
-            ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: `${field}` }), {}),
           },
         });
 
+        // Then group by fiscal year
         pipeline.push({
           $group: {
             _id: {
@@ -128,9 +125,10 @@ export async function GET(request) {
               fiscalYear: '$fiscalYear',
             },
             date: { $first: '$date' },
-            ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `${field}` } }), {}),
+            ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
+        
         pipeline.push({ $sort: { '_id.fiscalYear': 1 } });
       } else {
         // Default: return all documents sorted by date if no period or invalid period

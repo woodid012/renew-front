@@ -1,3 +1,4 @@
+// app/api/all-assets-summary/route.js
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
 
@@ -64,7 +65,6 @@ export async function GET(request) {
     }
 
     let pipeline = [];
-
     let groupStageId = {};
     let sortStage = {};
 
@@ -88,12 +88,9 @@ export async function GET(request) {
       };
       sortStage = { '_id.year': 1 };
     } else if (period === 'fiscal_yearly') {
+        // First add the fiscal year field
         pipeline.push({
-            $project: {
-                _id: 0,
-                asset_id: '$asset_id',
-                date: '$date',
-                [field]: `$${field}`,
+            $addFields: {
                 fiscalYear: {
                     $cond: {
                         if: { $lt: [{ $month: '$date' }, fiscalYearStartMonth] },
@@ -103,6 +100,7 @@ export async function GET(request) {
                 },
             },
         });
+        
         groupStageId = {
             fiscalYear: '$fiscalYear',
         };

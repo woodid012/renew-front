@@ -64,10 +64,21 @@ export default function PriceCurves2Page() {
       setPriceCurves(data)
       
       // Extract unique values for filters
-      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
+      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].filter(region => region !== 'TAS').sort()
       const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
-      const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
-      
+      let types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
+
+      // If 'storage' profile is available, ensure SPREAD types are in availableTypes
+      if (profiles.includes('storage')) {
+        allSpreadDurations.forEach(d => {
+          const spreadType = `SPREAD_${d}_0HR`;
+          if (!types.includes(spreadType)) {
+            types.push(spreadType);
+          }
+        });
+        types.sort(); // Re-sort after adding
+      }
+
       setAvailableRegions(['ALL', ...regions])
       // Add 'storage' to available profiles if not already present
       if (!profiles.includes('storage')) {
@@ -105,6 +116,11 @@ export default function PriceCurves2Page() {
       // Default to showing Green as well if it exists
       if (types.includes('GREEN') && !selectedTypes.includes('GREEN')) {
         setSelectedTypes(['ENERGY', 'GREEN'])
+      }
+
+      // If storage profile is selected, ensure SPREAD types are selected by default
+      if (selectedProfile === 'storage') {
+        setSelectedTypes(allSpreadDurations.map(d => `SPREAD_${d}_0HR`));
       }
       
     } catch (err) {
@@ -151,18 +167,14 @@ export default function PriceCurves2Page() {
 
       if (selectedProfile === 'storage') {
         // For storage profile, we specifically look for records with TYPE starting with 'SPREAD_'
-        if (item._id.PROFILE === 'storage' && item._id.TYPE.startsWith('SPREAD_')) {
-          const seriesKey = selectedRegions.includes('ALL') ? 
-            `${item._id.REGION}_${item._id.TYPE}` : 
-            item._id.TYPE
+        if (item._id.PROFILE === 'storage' && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
+          const seriesKey = `${item._id.REGION || 'AllRegions'}_${item._id.TYPE}`
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       } else {
         // For other profiles, filter by selectedProfile and selectedTypes, and plot PRICE
         if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ? 
-            `${item._id.REGION}_${item._id.TYPE}` : 
-            item._id.TYPE
+          const seriesKey = `${item._id.REGION || 'AllRegions'}_${item._id.TYPE}`
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       }
@@ -216,8 +228,19 @@ export default function PriceCurves2Page() {
   }
 
   const handleProfileChange = (profile) => {
-    setSelectedProfile(profile)
-  }
+    setSelectedProfile(profile);
+    if (profile === 'storage') {
+      // Automatically select all SPREAD types when storage is chosen
+      setSelectedTypes(allSpreadDurations.map(d => `SPREAD_${d}`));
+    } else {
+      // For other profiles, default to ENERGY and GREEN if available
+      const defaultTypes = ['ENERGY'];
+      if (availableTypes.includes('GREEN')) {
+        defaultTypes.push('GREEN');
+      }
+      setSelectedTypes(defaultTypes);
+    }
+  };
 
   const handleTypeChange = (type) => {
     setSelectedTypes(prev => 
@@ -241,9 +264,12 @@ export default function PriceCurves2Page() {
 
     // If storage profile is selected, ensure spread keys are included
     if (selectedProfile === 'storage') {
-      return keys.filter(key => key.startsWith('SPREAD_'));
+      // For storage, keys will either be 'SPREAD_X.X' (single region) or 'REGION_SPREAD_X.X' (ALL regions)
+      return keys.filter(key => key.includes('SPREAD_'));
     } else {
-      return keys.filter(key => !key.startsWith('SPREAD_'));
+      // For other profiles, keys will either be 'TYPE' (single region) or 'REGION_TYPE' (ALL regions)
+      // And should not contain 'SPREAD_'
+      return keys.filter(key => !key.includes('SPREAD_'));
     }
   }
 
