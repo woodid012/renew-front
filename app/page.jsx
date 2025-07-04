@@ -25,6 +25,8 @@ import AssetsPage from './pages/assets/page'
 import PriceCurvesPage from './pages/price-curves/page'
 import RevenuePage from './pages/revenue/page'
 import TestConnectionPage from './pages/test-connection/page'
+import Revenue2Page from './pages/revenue2/page'
+import RunModelPage from './pages/run-model/page'
 
 // Navigation items with sections
 const navigationItems = [
@@ -55,8 +57,20 @@ const navigationItems = [
     isSection: true
   },
   {
-    name: 'Revenue Analysis',
+    name: 'Run Calculation',
+    href: '/pages/run-model',
+    icon: Calculator,
+    section: 'analysis'
+  },
+  {
+    name: 'Revenue - API',
     href: '/pages/revenue',
+    icon: TrendingUp,
+    section: 'analysis'
+  },
+  {
+    name: 'Revenue2',
+    href: '/pages/revenue2',
     icon: TrendingUp,
     section: 'analysis'
   },
@@ -104,6 +118,10 @@ export default function HomePage() {
         return <PriceCurvesPage />
       case '/pages/revenue':
         return <RevenuePage />
+      case '/pages/revenue2':
+        return <Revenue2Page />
+      case '/pages/run-model':
+        return <RunModelPage />
       case '/pages/finance':
         return (
           <div className="text-center py-12">

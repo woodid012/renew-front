@@ -1,5 +1,4 @@
 {
-  "/pages/test-connection/page": "app/pages/test-connection/page.js",
-  "/page": "app/page.js",
-  "/pages/run-model/page": "app/pages/run-model/page.js"
+  "/api/asset-input-summary/route": "app/api/asset-input-summary/route.js",
+  "/page": "app/page.js"
 }
