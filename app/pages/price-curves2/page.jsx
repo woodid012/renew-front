@@ -1,4 +1,5 @@
 // app/pages/price-curves2/page.jsx
+'use client'
 import { useState, useEffect } from 'react'
 import { 
   LineChart, 
