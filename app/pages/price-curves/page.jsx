@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useEffect } from 'react'
 import { 
   LineChart, 
@@ -21,6 +23,7 @@ import {
   Loader2,
   Info
 } from 'lucide-react'
+import clientPromise from '@/lib/mongodb'
 
 export default function PriceCurvesPage() {
   const [priceCurves, setPriceCurves] = useState([])
