@@ -7,13 +7,14 @@ export async function POST(request) {
   try {
     const client = await clientPromise
     const db = client.db('renew_assets')
-    const assetData = await request.json()
+    const assetData = await request.json();
+    delete assetData._id; // Ensure _id is not part of the update
 
     if (!assetData.name) {
       return NextResponse.json({ error: 'Asset name is required' }, { status: 400 });
     }
 
-    const result = await db.collection('assets').updateOne(
+    const result = await db.collection('CONFIG_Asset_Inputs').updateOne(
       { name: assetData.name },
       { $set: assetData },
       { upsert: true }

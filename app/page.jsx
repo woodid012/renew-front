@@ -22,6 +22,7 @@ import {
 
 import DashboardPage from './pages/dashboard/page'
 import AssetsPage from './pages/assets/page'
+import Asset2Page from './pages/asset_2/page'
 import PriceCurvesPage from './pages/price-curves/page'
 
 import TestConnectionPage from './pages/test-connection/page'
@@ -45,6 +46,12 @@ const navigationItems = [
   {
     name: 'assets',
     href: '/pages/assets',
+    icon: Building2,
+    section: 'inputs'
+  },
+  {
+    name: 'assets_2',
+    href: '/pages/asset_2',
     icon: Building2,
     section: 'inputs'
   },

@@ -7,14 +7,14 @@ export async function GET() {
   try {
     const client = await clientPromise
     const db = client.db('renew_assets')
-    const asset = await db.collection('assets').findOne()
+    const assets = await db.collection('CONFIG_Asset_Inputs').find({}).toArray();
 
-    if (!asset) {
-      // If no asset is found, return a default structure
-      return NextResponse.json({
+    if (!assets || assets.length === 0) {
+      // If no asset is found, return a default structure in an array
+      return NextResponse.json([{
         name: "New Asset",
         state: "",
-        assetStartDate: "",
+        operatingStartDate: "",
         capacity: 0,
         type: "",
         volumeLossAdjustment: 0,
@@ -22,10 +22,12 @@ export async function GET() {
         assetLife: 0,
         constructionDuration: 0,
         constructionStartDate: "",
-      });
+        PlatformID: 1,
+        PlatformName: "ZEBRE",
+      }]);
     }
 
-    return NextResponse.json(asset)
+    return NextResponse.json(assets);
   } catch (error) {
     console.error('Failed to fetch asset data:', error);
     return NextResponse.json({ error: 'Failed to fetch asset data', details: error.message }, { status: 500 })
