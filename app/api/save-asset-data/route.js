@@ -9,11 +9,19 @@ export async function POST(request) {
     const db = client.db('renew_assets')
     const assetData = await request.json()
 
-    // Save to the INPUT collection
-    const result = await db.collection('INPUT').insertOne(assetData)
+    if (!assetData.name) {
+      return NextResponse.json({ error: 'Asset name is required' }, { status: 400 });
+    }
 
-    return NextResponse.json({ success: true, insertedId: result.insertedId })
+    const result = await db.collection('assets').updateOne(
+      { name: assetData.name },
+      { $set: assetData },
+      { upsert: true }
+    );
+
+    return NextResponse.json({ success: true, result: result })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to save asset data' }, { status: 500 })
+    console.error('Failed to save asset data:', error);
+    return NextResponse.json({ error: 'Failed to save asset data', details: error.message }, { status: 500 })
   }
 }

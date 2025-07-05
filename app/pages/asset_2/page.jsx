@@ -2,21 +2,10 @@
 // app/pages/asset_2/page.jsx
 'use client'
 import { useState, useEffect } from 'react'
-import { 
-  Box, 
-  Button, 
-  FormControl, 
-  FormLabel, 
-  Input, 
-  VStack, 
-  Heading, 
-  useToast 
-} from '@chakra-ui/react'
 
 export default function Asset2Page() {
   const [asset, setAsset] = useState(null)
   const [loading, setLoading] = useState(true)
-  const toast = useToast()
 
   useEffect(() => {
     // Fetch initial asset data
@@ -29,19 +18,13 @@ export default function Asset2Page() {
         const data = await response.json()
         setAsset(data)
       } catch (error) {
-        toast({
-          title: 'Error fetching asset data',
-          description: error.message,
-          status: 'error',
-          duration: 9000,
-          isClosable: true,
-        })
+        alert('Error fetching asset data: ' + error.message)
       } finally {
         setLoading(false)
       }
     }
     fetchAssetData()
-  }, [toast])
+  }, [])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -62,78 +45,66 @@ export default function Asset2Page() {
         throw new Error('Failed to save asset data')
       }
 
-      toast({
-        title: 'Asset data saved.',
-        description: "We've saved your asset data.",
-        status: 'success',
-        duration: 9000,
-        isClosable: true,
-      })
+      alert('Asset data saved.')
     } catch (error) {
-      toast({
-        title: 'Error saving asset data',
-        description: error.message,
-        status: 'error',
-        duration: 9000,
-        isClosable: true,
-      })
+      alert('Error saving asset data: ' + error.message)
     }
   }
 
   if (loading) {
-    return <Box>Loading...</Box>
+    return <div className="p-8">Loading...</div>
   }
 
   if (!asset) {
-    return <Box>No asset data found.</Box>
+    return <div className="p-8">No asset data found.</div>
   }
 
   return (
-    <Box p={8}>
-      <VStack spacing={8} align="stretch">
-        <Heading>Asset Definition</Heading>
-        <FormControl>
-          <FormLabel>Asset Name</FormLabel>
-          <Input name="name" value={asset.name} onChange={handleInputChange} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>State</FormLabel>
-          <Input name="state" value={asset.state} onChange={handleInputChange} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Asset Start Date</FormLabel>
-          <Input name="assetStartDate" value={asset.assetStartDate} onChange={handleInputChange} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Capacity</FormLabel>
-          <Input name="capacity" value={asset.capacity} onChange={handleInputChange} type="number" />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Type</FormLabel>
-          <Input name="type" value={asset.type} onChange={handleInputChange} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Volume Loss Adjustment</FormLabel>
-          <Input name="volumeLossAdjustment" value={asset.volumeLossAdjustment} onChange={handleInputChange} type="number" />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Annual Degradation</FormLabel>
-          <Input name="annualDegradation" value={asset.annualDegradation} onChange={handleInputChange} type="number" />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Asset Life</FormLabel>
-          <Input name="assetLife" value={asset.assetLife} onChange={handleInputChange} type="number" />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Construction Duration</FormLabel>
-          <Input name="constructionDuration" value={asset.constructionDuration} onChange={handleInputChange} type="number" />
-        </FormControl>
-        <FormControl>
-          <FormLabel>Construction Start Date</FormLabel>
-          <Input name="constructionStartDate" value={asset.constructionStartDate} onChange={handleInputChange} />
-        </FormControl>
-        <Button colorScheme="blue" onClick={handleSave}>Save</Button>
-      </VStack>
-    </Box>
+    <div className="p-8">
+      <div className="space-y-8">
+        <h1 className="text-2xl font-bold">Asset Definition</h1>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Asset Name</label>
+          <input name="name" value={asset.name} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">State</label>
+          <input name="state" value={asset.state} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Asset Start Date</label>
+          <input name="assetStartDate" value={asset.assetStartDate} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Capacity</label>
+          <input name="capacity" value={asset.capacity} onChange={handleInputChange} type="number" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Type</label>
+          <input name="type" value={asset.type} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Volume Loss Adjustment</label>
+          <input name="volumeLossAdjustment" value={asset.volumeLossAdjustment} onChange={handleInputChange} type="number" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Annual Degradation</label>
+          <input name="annualDegradation" value={asset.annualDegradation} onChange={handleInputChange} type="number" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Asset Life</label>
+          <input name="assetLife" value={asset.assetLife} onChange={handleInputChange} type="number" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Construction Duration</label>
+          <input name="constructionDuration" value={asset.constructionDuration} onChange={handleInputChange} type="number" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Construction Start Date</label>
+          <input name="constructionStartDate" value={asset.constructionStartDate} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <button onClick={handleSave} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save</button>
+      </div>
+    </div>
   )
 }

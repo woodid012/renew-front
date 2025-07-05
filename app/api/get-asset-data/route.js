@@ -6,18 +6,28 @@ import clientPromise from '@/lib/mongodb'
 export async function GET() {
   try {
     const client = await clientPromise
-    const db = client.db('energy_contracts')
-    const portfolio = await db.collection('portfolios').findOne({ userId: 'ZEBRE' })
+    const db = client.db('renew_assets')
+    const asset = await db.collection('assets').findOne()
 
-    if (!portfolio) {
-      return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
+    if (!asset) {
+      // If no asset is found, return a default structure
+      return NextResponse.json({
+        name: "New Asset",
+        state: "",
+        assetStartDate: "",
+        capacity: 0,
+        type: "",
+        volumeLossAdjustment: 0,
+        annualDegradation: 0,
+        assetLife: 0,
+        constructionDuration: 0,
+        constructionStartDate: "",
+      });
     }
 
-    // For simplicity, returning the first asset
-    const firstAsset = Object.values(portfolio.assets)[0]
-
-    return NextResponse.json(firstAsset)
+    return NextResponse.json(asset)
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch asset data' }, { status: 500 })
+    console.error('Failed to fetch asset data:', error);
+    return NextResponse.json({ error: 'Failed to fetch asset data', details: error.message }, { status: 500 })
   }
 }
