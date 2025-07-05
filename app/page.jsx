@@ -24,6 +24,7 @@ import DashboardPage from './pages/dashboard/page'
 import AssetsPage from './pages/assets/page'
 import Asset2Page from './pages/asset_2/page'
 import PriceCurvesPage from './pages/price-curves/page'
+import WIPNotesPage from './pages/wip-notes/page'
 
 import TestConnectionPage from './pages/test-connection/page'
 import AssetOutputPage from './pages/asset-output/page'
@@ -36,6 +37,12 @@ const navigationItems = [
   {
     name: 'Dashboard',
     href: '/',
+    icon: Home,
+    section: null
+  },
+  {
+    name: 'WIP Notes',
+    href: '/pages/wip-notes',
     icon: Home,
     section: null
   },
@@ -184,6 +191,8 @@ export default function HomePage() {
         )
       case '/pages/test-connection':
         return <TestConnectionPage />
+      case '/pages/wip-notes':
+        return <WIPNotesPage />
       default:
         return (
           <div className="text-center py-12">
