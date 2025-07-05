@@ -123,6 +123,8 @@ export default function HomePage() {
         return <DashboardPage />
       case '/pages/assets':
         return <AssetsPage />
+      case '/pages/asset_2':
+        return <Asset2Page />
       case '/pages/price-curves':
         return <PriceCurvesPage />
       case '/pages/price-curves2':
