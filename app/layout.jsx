@@ -41,8 +41,8 @@ const navigationItems = [
     isSection: true
   },
   {
-    name: 'assets_2',
-    href: '/pages/asset_2',
+    name: 'assets_3',
+    href: '/pages/asset_3',
     icon: Building2,
     section: 'inputs'
   },
