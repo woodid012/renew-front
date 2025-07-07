@@ -1,66 +1,62 @@
+// app/pages/asset-output/page.jsx
 'use client'
 
 import { useState, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Chart, registerables } from 'chart.js';
+import { 
+  TrendingUp, 
+  Download, 
+  Calendar, 
+  Building2, 
+  BarChart3,
+  Filter,
+  Loader2,
+  AlertCircle,
+  Eye,
+  DollarSign,
+  Activity
+} from 'lucide-react';
+
 Chart.register(...registerables);
 
 const AssetOutputPage = () => {
   const [assetIds, setAssetIds] = useState([]);
   const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
   const [selectedAssetId, setSelectedAssetId] = useState('1');
-  const [assetData, setAssetData] = useState([]); // Now an array
+  const [assetData, setAssetData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedField, setSelectedField] = useState('revenue'); // New state for selected field
-  const [selectedPeriod, setSelectedPeriod] = useState('yearly'); // New state for selected period, default to yearly
+  const [selectedField, setSelectedField] = useState('revenue');
+  const [selectedPeriod, setSelectedPeriod] = useState('yearly');
 
   const fieldsToPlot = [
-    'revenue',
-    'contractedGreenRevenue',
-    'contractedEnergyRevenue',
-    'merchantGreenRevenue',
-    'merchantEnergyRevenue',
-    'monthlyGeneration',
-    'avgGreenPrice',
-    'avgEnergyPrice',
-    'opex',
-    'capex',
-    'equity_capex',
-    'debt_capex',
-    'beginning_balance',
-    'drawdowns',
-    'interest',
-    'principal',
-    'ending_balance',
-    'd_and_a',
-    'cfads',
-    'debt_service',
-    'ebit',
-    'ebt',
-    'tax_expense',
-    'net_income',
-    'terminal_value',
-    'equity_cash_flow',
-    'equity_injection',
-    'cumulative_capex',
-    'cumulative_d_and_a',
-    'fixed_assets',
-    'debt',
-    'share_capital',
-    'retained_earnings',
-    'cash',
-    'total_assets',
-    'total_liabilities',
-    'net_assets',
-    'equity',
-    'distributions',
-    'dividends',
-    'redistributed_capital',
+    { key: 'revenue', label: 'Total Revenue', category: 'Revenue', color: '#10b981' },
+    { key: 'contractedGreenRevenue', label: 'Contracted Green Revenue', category: 'Revenue', color: '#22c55e' },
+    { key: 'contractedEnergyRevenue', label: 'Contracted Energy Revenue', category: 'Revenue', color: '#06b6d4' },
+    { key: 'merchantGreenRevenue', label: 'Merchant Green Revenue', category: 'Revenue', color: '#84cc16' },
+    { key: 'merchantEnergyRevenue', label: 'Merchant Energy Revenue', category: 'Revenue', color: '#06b6d4' },
+    { key: 'monthlyGeneration', label: 'Monthly Generation', category: 'Generation', color: '#f59e0b' },
+    { key: 'avgGreenPrice', label: 'Avg Green Price', category: 'Pricing', color: '#22c55e' },
+    { key: 'avgEnergyPrice', label: 'Avg Energy Price', category: 'Pricing', color: '#06b6d4' },
+    { key: 'opex', label: 'Operating Expenses', category: 'Costs', color: '#ef4444' },
+    { key: 'capex', label: 'Capital Expenditure', category: 'Costs', color: '#dc2626' },
+    { key: 'equity_capex', label: 'Equity CAPEX', category: 'Finance', color: '#8b5cf6' },
+    { key: 'debt_capex', label: 'Debt CAPEX', category: 'Finance', color: '#6366f1' },
+    { key: 'cfads', label: 'CFADS', category: 'Cash Flow', color: '#10b981' },
+    { key: 'debt_service', label: 'Debt Service', category: 'Finance', color: '#ef4444' },
+    { key: 'equity_cash_flow', label: 'Equity Cash Flow', category: 'Cash Flow', color: '#8b5cf6' },
+    { key: 'net_income', label: 'Net Income', category: 'Profitability', color: '#059669' }
+  ];
+
+  const periods = [
+    { key: 'monthly', label: 'Monthly', icon: Calendar },
+    { key: 'quarterly', label: 'Quarterly', icon: Calendar },
+    { key: 'yearly', label: 'Yearly', icon: Calendar },
+    { key: 'fiscal_yearly', label: 'Fiscal Year', icon: Calendar }
   ];
 
   useEffect(() => {
-    // Fetch unique asset IDs on component mount
     const fetchAssetIds = async () => {
       setLoading(true);
       try {
@@ -85,11 +81,10 @@ const AssetOutputPage = () => {
   }, []);
 
   useEffect(() => {
-    // Fetch asset data when selectedAssetId or selectedPeriod changes
     const fetchAssetData = async () => {
       if (selectedAssetId) {
         setLoading(true);
-        setAssetData([]); // Clear previous data
+        setAssetData([]);
         try {
           const url = `/api/asset-output-data?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}`;
           const response = await fetch(url);
@@ -107,18 +102,6 @@ const AssetOutputPage = () => {
     };
     fetchAssetData();
   }, [selectedAssetId, selectedPeriod]);
-
-  const handleAssetIdChange = (event) => {
-    setSelectedAssetId(event.target.value);
-  };
-
-  const handleFieldChange = (event) => {
-    setSelectedField(event.target.value);
-  };
-
-  const handlePeriodChange = (event) => {
-    setSelectedPeriod(event.target.value);
-  };
 
   const handleExportCsv = () => {
     if (!assetData || assetData.length === 0) {
@@ -150,6 +133,8 @@ const AssetOutputPage = () => {
     }
   };
 
+  const selectedFieldData = fieldsToPlot.find(f => f.key === selectedField);
+
   // Prepare chart data
   const chartData = {
     labels: assetData.map(item => {
@@ -167,116 +152,294 @@ const AssetOutputPage = () => {
     }),
     datasets: [
       {
-        label: selectedField,
+        label: selectedFieldData?.label || selectedField,
         data: assetData.map(item => item[selectedField]),
         fill: false,
-        backgroundColor: 'rgb(75, 192, 192)',
-        borderColor: 'rgba(75, 192, 192, 0.2)',
+        backgroundColor: selectedFieldData?.color || '#10b981',
+        borderColor: selectedFieldData?.color || '#10b981',
+        borderWidth: 3,
+        pointBackgroundColor: selectedFieldData?.color || '#10b981',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        tension: 0.4
       },
     ],
   };
 
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top',
+        display: false
       },
-      title: {
-        display: true,
-        text: `Time Series for ${selectedField}`,
-      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: selectedFieldData?.color || '#10b981',
+        borderWidth: 1,
+        cornerRadius: 8,
+        displayColors: false,
+        callbacks: {
+          title: function(context) {
+            return `Period: ${context[0].label}`;
+          },
+          label: function(context) {
+            const value = context.parsed.y;
+            if (selectedField.includes('Price')) {
+              return `${selectedFieldData?.label}: $${value.toLocaleString()}`;
+            } else if (selectedField.includes('Generation')) {
+              return `${selectedFieldData?.label}: ${value.toLocaleString()} MWh`;
+            } else {
+              return `${selectedFieldData?.label}: $${(value / 1000000).toFixed(2)}M`;
+            }
+          }
+        }
+      }
     },
     scales: {
       x: {
         title: {
           display: true,
-          text: selectedPeriod ? 'Period' : 'Date',
+          text: 'Period',
+          font: {
+            size: 14,
+            weight: 'bold'
+          },
+          color: '#374151'
         },
+        grid: {
+          color: '#f3f4f6',
+          borderColor: '#e5e7eb'
+        },
+        ticks: {
+          color: '#6b7280',
+          font: {
+            size: 12
+          }
+        }
       },
       y: {
         title: {
           display: true,
-          text: selectedField,
+          text: selectedFieldData?.label || selectedField,
+          font: {
+            size: 14,
+            weight: 'bold'
+          },
+          color: '#374151'
         },
+        grid: {
+          color: '#f9fafb',
+          borderColor: '#e5e7eb'
+        },
+        ticks: {
+          color: '#6b7280',
+          font: {
+            size: 12
+          },
+          callback: function(value) {
+            if (selectedField.includes('Price')) {
+              return `$${value.toLocaleString()}`;
+            } else if (selectedField.includes('Generation')) {
+              return `${(value / 1000).toFixed(0)}k`;
+            } else {
+              return `$${(value / 1000000).toFixed(1)}M`;
+            }
+          }
+        }
       },
     },
   };
 
+  // Calculate summary metrics
+  const summaryMetrics = assetData.length > 0 ? {
+    total: assetData.reduce((sum, item) => sum + (item[selectedField] || 0), 0),
+    average: assetData.reduce((sum, item) => sum + (item[selectedField] || 0), 0) / assetData.length,
+    max: Math.max(...assetData.map(item => item[selectedField] || 0)),
+    min: Math.min(...assetData.map(item => item[selectedField] || 0))
+  } : null;
+
+  const formatMetricValue = (value) => {
+    if (selectedField.includes('Price')) {
+      return `$${value.toLocaleString()}`;
+    } else if (selectedField.includes('Generation')) {
+      return `${(value / 1000).toFixed(1)}k MWh`;
+    } else {
+      return `$${(value / 1000000).toFixed(2)}M`;
+    }
+  };
+
+  // Group fields by category
+  const fieldsByCategory = fieldsToPlot.reduce((acc, field) => {
+    if (!acc[field.category]) acc[field.category] = [];
+    acc[field.category].push(field);
+    return acc;
+  }, {});
+
+  if (loading && assetIds.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center space-x-2">
+          <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+          <span className="text-gray-600">Loading asset data...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Asset Output - Asset Cash Flows</h1>
-
-      <div className="mb-4 flex space-x-4">
-        <div className="flex-1">
-          <label htmlFor="asset-select" className="block text-sm font-medium text-gray-700">Select Asset ID:</label>
-          <select
-            id="asset-select"
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            value={selectedAssetId}
-            onChange={handleAssetIdChange}
-          >
-            <option value="">-- Select an Asset ID --</option>
-            {assetIds.map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {assetIdToNameMap[asset.id]} ({asset.id})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1">
-          <label htmlFor="field-select" className="block text-sm font-medium text-gray-700">Select Field to Plot:</label>
-          <select
-            id="field-select"
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            value={selectedField}
-            onChange={handleFieldChange}
-          >
-            {fieldsToPlot.map((field) => (
-              <option key={field} value={field}>
-                {field}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1">
-          <label htmlFor="period-select" className="block text-sm font-medium text-gray-700">Aggregate By:</label>
-          <select
-            id="period-select"
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            value={selectedPeriod}
-            onChange={handlePeriodChange}
-          >
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="yearly">Yearly</option>
-            <option value="fiscal_yearly">Fiscal Year</option>
-          </select>
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Asset Cash Flow Analysis</h1>
+            <p className="text-gray-600 mt-2">Detailed financial performance analysis by asset and time period</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="bg-white rounded-lg border border-gray-200 px-4 py-2">
+              <div className="flex items-center space-x-2">
+                <Activity className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  {assetData.length} data points
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {loading && <p>Loading data...</p>}
-      {error && <p className="text-red-500">Error: {error}</p>}
+      {/* Controls */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center space-x-2 mb-4">
+          <Filter className="w-5 h-5 text-gray-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Analysis Configuration</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Asset Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              <Building2 className="w-4 h-4 inline mr-1" />
+              Select Asset
+            </label>
+            <select
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              value={selectedAssetId}
+              onChange={(e) => setSelectedAssetId(e.target.value)}
+            >
+              <option value="">-- Select an Asset --</option>
+              {assetIds.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {assetIdToNameMap[asset.id]} ({asset.id})
+                </option>
+              ))}
+            </select>
+          </div>
 
+          {/* Period Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              <Calendar className="w-4 h-4 inline mr-1" />
+              Time Period
+            </label>
+            <select
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+            >
+              {periods.map((period) => (
+                <option key={period.key} value={period.key}>
+                  {period.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Metric Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              <BarChart3 className="w-4 h-4 inline mr-1" />
+              Financial Metric
+            </label>
+            <select
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              value={selectedField}
+              onChange={(e) => setSelectedField(e.target.value)}
+            >
+              {Object.entries(fieldsByCategory).map(([category, fields]) => (
+                <optgroup key={category} label={category}>
+                  {fields.map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800 font-medium">Error: {error}</span>
+          </div>
+        </div>
+      )}
+
+      {loading && selectedAssetId && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+            <span className="text-blue-800">Loading asset data...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
       {assetData.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-bold mb-4">Time Series Chart (Selected Asset)</h2>
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <Line data={chartData} options={chartOptions} />
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <div 
+                className="w-4 h-4 rounded-full" 
+                style={{ backgroundColor: selectedFieldData?.color || '#10b981' }}
+              ></div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {selectedFieldData?.label || selectedField} - {assetIdToNameMap[selectedAssetId]}
+              </h3>
+              <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                {selectedFieldData?.category}
+              </span>
+            </div>
             <button
               onClick={handleExportCsv}
-              className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
-              Export Chart Data to CSV
+              <Download className="w-4 h-4" />
+              <span>Export CSV</span>
             </button>
+          </div>
+          
+          <div style={{ width: '100%', height: '400px' }}>
+            <Line data={chartData} options={chartOptions} />
           </div>
         </div>
       )}
 
       {!selectedAssetId && !loading && !error && (
-        <p>Please select an Asset ID to view its cash flow data and chart.</p>
+        <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+          <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Select an Asset to Begin</h3>
+          <p className="text-gray-600">Choose an asset from the dropdown above to view its cash flow analysis</p>
+        </div>
       )}
     </div>
   );
