@@ -251,11 +251,45 @@ export default function PriceCurves2Page() {
     
     const sampleData = chartData[0]
     const keys = Object.keys(sampleData).filter(key => 
-      key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number'
+      key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number' && !key.includes('TAS')
     )
 
     return keys
   }
+
+  const exportToCsv = () => {
+    if (!chartData.length) return;
+
+    const headers = ['TIME', ...getSeriesKeys()];
+    const csvRows = [];
+
+    // Add headers
+    csvRows.push(headers.map(header => `"${header.replace(/_/g, ' ')}"`).join(','));
+
+    // Add data rows
+    chartData.forEach(row => {
+      const values = headers.map(header => {
+        const value = row[header];
+        if (typeof value === 'number') {
+          return value.toFixed(2); // Format numbers to 2 decimal places
+        } else if (value === null || value === undefined) {
+          return '';
+        } else {
+          return `"${String(value).replace(/"/g, '""')}"`; // Escape double quotes
+        }
+      });
+      csvRows.push(values.join(','));
+    });
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `price_curves_${selectedPeriod}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const getLineColor = (index) => {
     const colors = [
@@ -339,13 +373,7 @@ export default function PriceCurves2Page() {
                 </span>
               </div>
             </div>
-            <button
-              onClick={fetchPriceCurves}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Refresh</span>
-            </button>
+            
           </div>
         </div>
       </div>
@@ -507,6 +535,16 @@ export default function PriceCurves2Page() {
             </div>
           )}
         </div>
+        {chartData.length > 0 && (
+          <div className="mt-4 text-right">
+            <button
+              onClick={exportToCsv}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Export to CSV
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Summary Stats */}

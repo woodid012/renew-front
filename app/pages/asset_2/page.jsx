@@ -7,6 +7,10 @@ export default function Asset2Page() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
+  const [configDocId, setConfigDocId] = useState(null);
+  const [platformName, setPlatformName] = useState('');
+  const [platformID, setPlatformID] = useState('');
+  const [platformInputs, setPlatformInputs] = useState(null);
 
   useEffect(() => {
     const fetchAssetData = async () => {
@@ -16,8 +20,12 @@ export default function Asset2Page() {
           throw new Error('Failed to fetch asset data');
         }
         const data = await response.json();
-        setAssets(data);
-        setOriginalAssets(JSON.parse(JSON.stringify(data))); // Deep copy for cancel
+        setAssets(data.asset_inputs);
+        setOriginalAssets(JSON.parse(JSON.stringify(data.asset_inputs))); // Deep copy for cancel
+        setConfigDocId(data._id);
+        setPlatformName(data.PlatformName || '');
+        setPlatformID(data.PlatformID || '');
+        setPlatformInputs(data.platformInputs || null);
       } catch (error) {
         alert('Error fetching asset data: ' + error.message);
       } finally {
@@ -27,7 +35,7 @@ export default function Asset2Page() {
     fetchAssetData();
   }, []);
 
-  const handleInputChange = (e, index) => {
+  const handleAssetInputChange = (e, index) => {
     const { name, value } = e.target;
     const updatedAssets = [...assets];
     updatedAssets[index] = { ...updatedAssets[index], [name]: value };
@@ -43,15 +51,35 @@ export default function Asset2Page() {
     setAssets(updatedAssets);
   };
 
-  const handleSave = async (index) => {
+  const handleNestedInputChange = (e, assetIndex, parentKey) => {
+    const { name, value } = e.target;
+    const updatedAssets = [...assets];
+    updatedAssets[assetIndex] = {
+      ...updatedAssets[assetIndex],
+      [parentKey]: {
+        ...updatedAssets[assetIndex][parentKey],
+        [name]: value,
+      },
+    };
+    setAssets(updatedAssets);
+  };
+
+  const handleSave = async () => {
     try {
-      const assetToSave = assets[index];
+      const dataToSave = {
+        _id: configDocId,
+        asset_inputs: assets,
+        PlatformName: platformName,
+        PlatformID: platformID,
+        platformInputs: platformInputs,
+      };
+
       const response = await fetch('/api/save-asset-data', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(assetToSave),
+        body: JSON.stringify(dataToSave),
       });
 
       const result = await response.json();
@@ -61,9 +89,7 @@ export default function Asset2Page() {
       }
 
       alert('Asset data saved.');
-      const newOriginalAssets = [...originalAssets];
-      newOriginalAssets[index] = { ...assets[index] };
-      setOriginalAssets(newOriginalAssets);
+      setOriginalAssets(JSON.parse(JSON.stringify(assets))); // Update originalAssets with current assets
       setIsEditing(false);
     } catch (error) {
       alert('Error saving asset data: ' + error.message);
@@ -74,10 +100,8 @@ export default function Asset2Page() {
     setIsEditing(true);
   };
 
-  const handleCancel = (index) => {
-    const restoredAssets = [...assets];
-    restoredAssets[index] = { ...originalAssets[index] };
-    setAssets(restoredAssets);
+  const handleCancel = () => {
+    setAssets(JSON.parse(JSON.stringify(originalAssets)));
     setIsEditing(false);
   };
 
@@ -98,7 +122,27 @@ export default function Asset2Page() {
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">Platform: {assets[0].PlatformName} (ID: {assets[0].PlatformID})</h1>
+      <h1 className="text-3xl font-bold mb-6">Platform: {platformName}</h1>
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700">Platform Name:</label>
+        <input
+          type="text"
+          value={platformName}
+          onChange={(e) => setPlatformName(e.target.value)}
+          readOnly={!isEditing}
+          className={`mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${!isEditing ? 'bg-gray-100' : ''}`}
+        />
+      </div>
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700">Platform ID:</label>
+        <input
+          type="text"
+          value={platformID}
+          onChange={(e) => setPlatformID(e.target.value)}
+          readOnly={!isEditing}
+          className={`mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${!isEditing ? 'bg-gray-100' : ''}`}
+        />
+      </div>
       <div className="flex border-b">
         {assets.map((asset, index) => (
           <button
@@ -139,6 +183,27 @@ export default function Asset2Page() {
                       ))}
                     </div>
                   )
+                } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                  // Handle nested objects like costAssumptions, debtSizingResults
+                  return (
+                    <div key={key} className="space-y-4">
+                      <h2 className="text-lg font-medium text-gray-900 mt-4 border-t pt-4">{formatLabel(key)}</h2>
+                      <div className="p-4 border rounded-md space-y-4">
+                        {Object.entries(value).map(([nestedKey, nestedValue]) => (
+                          <div key={nestedKey}>
+                            <label className="block text-sm font-medium text-gray-700">{formatLabel(nestedKey)}</label>
+                            <input
+                              name={nestedKey}
+                              value={nestedValue === null ? '' : nestedValue}
+                              onChange={(e) => handleNestedInputChange(e, index, key)}
+                              readOnly={!isEditing}
+                              className={`mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${!isEditing ? 'bg-gray-100' : ''}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
                 }
                 return (
                   <div key={key}>
@@ -146,7 +211,7 @@ export default function Asset2Page() {
                     <input
                       name={key}
                       value={value}
-                      onChange={(e) => handleInputChange(e, index)}
+                      onChange={(e) => handleAssetInputChange(e, index)}
                       readOnly={!isEditing}
                       className={`mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${!isEditing ? 'bg-gray-100' : ''}`}
                     />
@@ -158,8 +223,8 @@ export default function Asset2Page() {
                   <button onClick={handleEdit} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Edit</button>
                 ) : (
                   <>
-                    <button onClick={() => handleSave(index)} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Save</button>
-                    <button onClick={() => handleCancel(index)} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancel</button>
+                    <button onClick={handleSave} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Save</button>
+                    <button onClick={handleCancel} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancel</button>
                   </>
                 )}
               </div>

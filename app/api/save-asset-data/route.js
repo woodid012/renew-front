@@ -1,22 +1,24 @@
+export const dynamic = 'force-dynamic';
 
 // app/api/save-asset-data/route.js
 import { NextResponse } from 'next/server'
 import clientPromise from '@/lib/mongodb'
+import { ObjectId } from 'mongodb'
 
 export async function POST(request) {
   try {
     const client = await clientPromise
     const db = client.db('renew_assets')
-    const assetData = await request.json();
-    delete assetData._id; // Ensure _id is not part of the update
+    const configDoc = await request.json();
+    const { _id, ...updateFields } = configDoc; // Extract _id and other fields
 
-    if (!assetData.name) {
-      return NextResponse.json({ error: 'Asset name is required' }, { status: 400 });
+    if (!_id) {
+      return NextResponse.json({ error: 'Document _id is required for update' }, { status: 400 });
     }
 
-    const result = await db.collection('CONFIG_Asset_Inputs').updateOne(
-      { name: assetData.name },
-      { $set: assetData },
+    const result = await db.collection('CONFIG_Inputs').updateOne(
+      { _id: new ObjectId(_id) }, // Use ObjectId for _id
+      { $set: updateFields },
       { upsert: true }
     );
 

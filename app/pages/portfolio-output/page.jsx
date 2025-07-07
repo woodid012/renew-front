@@ -7,6 +7,7 @@ Chart.register(...registerables);
 
 const PortfolioOutputPage = () => {
   const [assetIds, setAssetIds] = useState([]);
+  const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedField, setSelectedField] = useState('revenue');
@@ -70,7 +71,12 @@ const PortfolioOutputPage = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        setAssetIds(data.uniqueAssetIds);
+        setAssetIds(data.uniqueAssetIds.map(asset => ({ id: asset._id, name: asset.name })));
+        const newMap = {};
+        data.uniqueAssetIds.forEach(asset => {
+          newMap[asset._id] = asset.name;
+        });
+        setAssetIdToNameMap(newMap);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -112,11 +118,45 @@ const PortfolioOutputPage = () => {
     setSelectedPeriod(event.target.value);
   };
 
+  const handleExportCsv = () => {
+    if (!allAssetsSummaryData || Object.keys(allAssetsSummaryData).length === 0) {
+      alert("No data to export.");
+      return;
+    }
+
+    const headers = ["Period", ...summaryChartData.datasets.map(d => d.label)];
+    const rows = summaryChartData.labels.map(label => {
+      const rowData = [label];
+      summaryChartData.datasets.forEach(dataset => {
+        const assetId = dataset.label.match(/\((\d+)\)/)[1]; // Extract asset ID from label
+        rowData.push(allAssetsSummaryData[label][assetId] || 0);
+      });
+      return rowData;
+    });
+
+    let csvContent = headers.join(",") + "\n";
+    rows.forEach((row) => {
+      csvContent += row.join(",") + "\n";
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `portfolio_${selectedField}_${selectedPeriod}_data.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Prepare summary chart data
   const summaryChartLabels = allAssetsSummaryData ? Object.keys(allAssetsSummaryData) : [];
-  const summaryChartDatasets = assetIds.map(assetId => ({
-    label: `Asset ${assetId}`,
-    data: summaryChartLabels.map(label => allAssetsSummaryData[label][assetId] || 0),
+  const summaryChartDatasets = assetIds.map(asset => ({
+    label: `${assetIdToNameMap[asset.id]} (${asset.id})`,
+    data: summaryChartLabels.map(label => allAssetsSummaryData[label][asset.id] || 0),
     backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.6)`,
   }));
 
@@ -199,6 +239,12 @@ const PortfolioOutputPage = () => {
           <h2 className="text-xl font-bold mb-4">Summary Chart (All Assets)</h2>
           <div className="bg-white p-4 rounded-lg shadow-md">
             <Bar data={summaryChartData} options={summaryChartOptions} />
+            <button
+              onClick={handleExportCsv}
+              className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
+              Export Chart Data to CSV
+            </button>
           </div>
         </div>
       )}

@@ -138,9 +138,17 @@ export async function GET(request) {
       const data = await collection.aggregate(pipeline).toArray();
       return NextResponse.json({ data });
     } else {
-      // If no asset_id, return all unique asset_ids
-      const uniqueAssetIds = await collection.distinct('asset_id');
-      return NextResponse.json({ uniqueAssetIds });
+      // If no asset_id, return all unique asset_ids and names
+      const uniqueAssetIdsFromCashFlows = await collection.distinct('asset_id');
+
+      const configCollection = db.collection('CONFIG_Inputs');
+      const assetNames = await configCollection.aggregate([
+        { $unwind: '$asset_inputs' },
+        { $match: { 'asset_inputs.id': { $in: uniqueAssetIdsFromCashFlows } } },
+        { $project: { _id: '$asset_inputs.id', name: '$asset_inputs.name' } }
+      ]).toArray();
+
+      return NextResponse.json({ uniqueAssetIds: assetNames });
     }
   } catch (error) {
     console.error('Error fetching data:', error);

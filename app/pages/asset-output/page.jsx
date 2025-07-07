@@ -7,6 +7,7 @@ Chart.register(...registerables);
 
 const AssetOutputPage = () => {
   const [assetIds, setAssetIds] = useState([]);
+  const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
   const [selectedAssetId, setSelectedAssetId] = useState('1');
   const [assetData, setAssetData] = useState([]); // Now an array
   const [loading, setLoading] = useState(false);
@@ -68,7 +69,12 @@ const AssetOutputPage = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        setAssetIds(data.uniqueAssetIds);
+        setAssetIds(data.uniqueAssetIds.map(asset => ({ id: asset._id, name: asset.name })));
+        const newMap = {};
+        data.uniqueAssetIds.forEach(asset => {
+          newMap[asset._id] = asset.name;
+        });
+        setAssetIdToNameMap(newMap);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -211,9 +217,9 @@ const AssetOutputPage = () => {
             onChange={handleAssetIdChange}
           >
             <option value="">-- Select an Asset ID --</option>
-            {assetIds.map((id) => (
-              <option key={id} value={id}>
-                {id}
+            {assetIds.map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {assetIdToNameMap[asset.id]} ({asset.id})
               </option>
             ))}
           </select>

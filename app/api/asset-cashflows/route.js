@@ -1,24 +1,25 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import clientPromise from '../../../lib/mongodb';
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const assetId = searchParams.get('asset_id');
 
+  if (!assetId) {
+    return NextResponse.json({ error: 'Missing asset_id parameter' }, { status: 400 });
+  }
+
   try {
-    // Construct the URL for the Python backend API
-    // Make sure this URL is correct for your backend deployment
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:10000';
-    const pythonApiUrl = `${backendUrl}/api/asset-cashflows${assetId ? `?asset_id=${assetId}` : ''}`;
+    const client = await clientPromise;
+    const db = client.db('renew_assets');
+    const collection = db.collection('ASSET_cash_flows');
 
-    const response = await fetch(pythonApiUrl);
+    const data = await collection.find({ asset_id: parseInt(assetId) }).sort({ date: 1 }).toArray();
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
     return NextResponse.json({ data });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Error fetching asset cashflows:', error);
+    return NextResponse.json({ error: 'Failed to fetch asset cashflows' }, { status: 500 });
   }
 }
