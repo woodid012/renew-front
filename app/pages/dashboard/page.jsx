@@ -1,4 +1,8 @@
 // app/pages/dashboard/page.jsx
+
+// WIP NOTES:
+// - check table duplicates on capex (base sens)
+
 'use client'
 
 import { useState, useEffect } from 'react'

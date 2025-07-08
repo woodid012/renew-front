@@ -1,4 +1,4 @@
-// app/api/asset-output-data/route.js
+// app/api/output-asset-data/route.js
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
 

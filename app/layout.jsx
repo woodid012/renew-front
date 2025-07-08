@@ -60,19 +60,19 @@ const navigationItems = [
   
   {
     name: 'Asset Output',
-    href: '/pages/asset-output',
+    href: '/pages/output-asset',
     icon: TrendingUp,
     section: 'analysis'
   },
   {
     name: 'Portfolio Output',
-    href: '/pages/portfolio-output',
+    href: '/pages/output-portfolio',
     icon: TrendingUp,
     section: 'analysis'
   },
   {
     name: 'Sensitivity Output',
-    href: '/pages/sensitivity-output',
+    href: '/pages/output-sensitivity',
     icon: TrendingUp,
     section: 'analysis'
   },

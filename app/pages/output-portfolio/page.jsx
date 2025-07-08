@@ -1,4 +1,4 @@
-// app/pages/portfolio-output/page.jsx
+// app/pages/output-portfolio/page.jsx
 'use client'
 
 import { useState, useEffect } from 'react';
@@ -70,7 +70,7 @@ const PortfolioOutputPage = () => {
     const fetchAssetIds = async () => {
       setLoading(true);
       try {
-        const response = await fetch('/api/asset-output-data');
+        const response = await fetch('/api/output-asset-data');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -369,7 +369,7 @@ const PortfolioOutputPage = () => {
           <h3 className="text-lg font-semibold text-gray-900">Portfolio Analysis Configuration</h3>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Metric Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -418,39 +418,20 @@ const PortfolioOutputPage = () => {
               <PieChart className="w-4 h-4 inline mr-1" />
               Chart Type
             </label>
-            <div className="space-y-2">
+            <select
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={chartType}
+              onChange={(e) => setChartType(e.target.value)}
+            >
               {chartTypes.map((type) => (
-                <button
-                  key={type.key}
-                  onClick={() => setChartType(type.key)}
-                  className={`w-full p-2 text-sm rounded-lg border transition-colors flex items-center space-x-2 ${
-                    chartType === type.key
-                      ? 'bg-blue-100 border-blue-500 text-blue-700'
-                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <type.icon className="w-4 h-4" />
-                  <span>{type.label}</span>
-                </button>
+                <option key={type.key} value={type.key}>
+                  {type.label}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
-          {/* Export Button */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              <Download className="w-4 h-4 inline mr-1" />
-              Export Data
-            </label>
-            <button
-              onClick={handleExportCsv}
-              disabled={!allAssetsSummaryData || Object.keys(allAssetsSummaryData).length === 0}
-              className="w-full flex items-center justify-center space-x-2 p-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export CSV</span>
-            </button>
-          </div>
+          
         </div>
       </div>
 
@@ -472,6 +453,8 @@ const PortfolioOutputPage = () => {
         </div>
       )}
 
+      
+
       {/* Chart */}
       {allAssetsSummaryData && Object.keys(allAssetsSummaryData).length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -491,6 +474,14 @@ const PortfolioOutputPage = () => {
                 {chartTypes.find(t => t.key === chartType)?.label}
               </span>
             </div>
+            <button
+              onClick={handleExportCsv}
+              disabled={!allAssetsSummaryData || Object.keys(allAssetsSummaryData).length === 0}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export CSV</span>
+            </button>
           </div>
           
           <div style={{ width: '100%', height: '500px' }}>

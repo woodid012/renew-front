@@ -1,4 +1,4 @@
-// app/pages/asset-output/page.jsx
+// app/pages/output-asset/page.jsx
 'use client'
 
 import { useState, useEffect } from 'react';
@@ -60,7 +60,7 @@ const AssetOutputPage = () => {
     const fetchAssetIds = async () => {
       setLoading(true);
       try {
-        const response = await fetch('/api/asset-output-data');
+        const response = await fetch('/api/output-asset-data');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -86,7 +86,7 @@ const AssetOutputPage = () => {
         setLoading(true);
         setAssetData([]);
         try {
-          const url = `/api/asset-output-data?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}`;
+          const url = `/api/output-asset-data?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}`;
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
