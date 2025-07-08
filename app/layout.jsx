@@ -21,18 +21,13 @@ import {
   CheckCircle,
   Loader2
 } from 'lucide-react'
+import { RunModelProvider } from './context/RunModelContext'
 
 // Navigation items with sections
 const navigationItems = [
   {
     name: 'Dashboard',
     href: '/',
-    icon: Home,
-    section: null
-  },
-  {
-    name: 'WIP Notes',
-    href: '/pages/wip-notes',
     icon: Home,
     section: null
   },
@@ -82,6 +77,22 @@ const navigationItems = [
     section: 'analysis'
   },
   {
+    name: '3-Way Forecast',
+    href: '/pages/three-way-forecast',
+    icon: TrendingUp,
+    section: 'analysis'
+  },
+  {
+    section: 'Export',
+    isSection: true
+  },
+  {
+    name: 'WIP',
+    href: '/pages/wip',
+    icon: TrendingUp, // You can choose a more appropriate icon if you have one
+    section: 'export'
+  },
+  {
     section: 'Settings',
     isSection: true
   },
@@ -101,6 +112,12 @@ const navigationItems = [
     name: 'TestConnection',
     href: '/pages/test-connection',
     icon: Wifi,
+    section: 'settings'
+  },
+  {
+    name: 'WIP Notes',
+    href: '/pages/wip-notes',
+    icon: Home,
     section: 'settings'
   },
 ]
@@ -250,9 +267,11 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
-        <LayoutContent>
-          {children}
-        </LayoutContent>
+        <RunModelProvider>
+          <LayoutContent>
+            {children}
+          </LayoutContent>
+        </RunModelProvider>
       </body>
     </html>
   )
