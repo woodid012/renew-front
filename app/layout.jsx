@@ -93,7 +93,7 @@ const navigationItems = [
     section: 'export'
   },
   {
-    section: 'SETTINGS + WIP Placeholders',
+    section: 'SETTINGS',
     isSection: true
   },
   {
@@ -103,22 +103,32 @@ const navigationItems = [
     section: 'settings'
   },
   {
-    name: 'Default Calculation Inputs',
-    href: '/pages/settings/defaults',
-    icon: Calculator,
-    section: 'settings'
-  },
-  {
-    name: 'TestConnection',
-    href: '/pages/test-connection',
-    icon: Wifi,
-    section: 'settings'
-  },
-  {
     name: 'WIP Notes',
     href: '/pages/wip-notes',
     icon: Home,
     section: 'settings'
+  },
+  {
+    section: 'TESTING',
+    isSection: true
+  },
+  {
+    name: 'WIP Timeseries',
+    href: '/pages/wip/timeseries',
+    icon: BarChart3,
+    section: 'testing'
+  },
+  {
+    name: 'Test Connection',
+    href: '/pages/test-connection',
+    icon: Wifi,
+    section: 'testing'
+  },
+  {
+    name: 'Default Calculation Inputs',
+    href: '/pages/settings/defaults',
+    icon: Calculator,
+    section: 'testing'
   },
 ]
 

@@ -81,8 +81,9 @@ const ThreeWayForecastPage = () => {
   }, [selectedAssetId, selectedPeriod]);
 
   const formatCurrency = (value) => {
-    if (value === undefined || value === null) return '-';
-    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    if (value === undefined || value === null || value === 0) return '-';
+    const formattedValue = Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return value < 0 ? `(${formattedValue})` : formattedValue;
   };
 
   const getPeriodLabel = (item) => {
@@ -122,7 +123,7 @@ const ThreeWayForecastPage = () => {
                 <tr key={fieldIndex}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{field.label}</td>
                   {forecastData.map((item, itemIndex) => (
-                    <td key={itemIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm ${item[field.key] < 0 ? 'text-red-600' : 'text-gray-700'}`}>
                       {formatCurrency(item[field.key])}
                     </td>
                   ))}
@@ -140,6 +141,7 @@ const ThreeWayForecastPage = () => {
   const profitAndLossFields = [
     { key: 'revenue', label: 'Revenue' },
     { key: 'opex', label: 'Operating Expenses' },
+    { key: 'ebitda', label: 'EBITDA' },
     { key: 'd_and_a', label: 'Depreciation & Amortization' },
     { key: 'ebit', label: 'EBIT' },
     { key: 'interest', label: 'Interest Expense' },
@@ -173,6 +175,45 @@ const ThreeWayForecastPage = () => {
     { key: 'equity_cash_flow', label: 'Equity Cash Flow' },
   ];
 
+  const handleExportCsv = () => {
+    if (forecastData.length === 0) return;
+
+    // Get all unique keys from all objects in forecastData to form the header
+    const allKeys = new Set();
+    forecastData.forEach(item => {
+      Object.keys(item).forEach(key => allKeys.add(key));
+    });
+    const headers = Array.from(allKeys).sort(); // Sort headers for consistent order
+
+    // Create CSV rows
+    const rows = forecastData.map(item => {
+      return headers.map(header => {
+        const value = item[header];
+        // Handle special formatting for currency values (remove $, commas, parentheses)
+        if (typeof value === 'number') {
+          return value; // Keep raw number for CSV
+        }
+        // For _id objects, stringify them
+        if (typeof value === 'object' && value !== null) {
+          return JSON.stringify(value);
+        }
+        return value;
+      }).join(',');
+    });
+
+    // Combine headers and rows
+    const csvContent = [headers.join(','), ...rows].join('\n');
+
+    // Create a Blob and download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `financial_forecast_${selectedAssetId}_${selectedPeriod}.csv`);
+    link.click();
+    URL.revokeObjectURL(url); // Clean up the URL object
+  };
+
   if (loading && assetIds.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -202,6 +243,12 @@ const ThreeWayForecastPage = () => {
                 </span>
               </div>
             </div>
+            <button
+              onClick={handleExportCsv}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
+              Export CSV
+            </button>
           </div>
         </div>
       </div>

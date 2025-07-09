@@ -14,11 +14,16 @@ export async function GET(request) {
     // Fields relevant for P&L, Balance Sheet, and Cash Flow Statement
     const financialFields = [
       // P&L
-      'revenue', 'opex', 'd_and_a', 'ebit', 'ebt', 'tax_expense', 'net_income',
+      'revenue', 'opex', 'ebitda', 'd_and_a', 'ebit', 'ebt', 'tax_expense', 'net_income',
       // Balance Sheet
-      'cash', 'fixed_assets', 'total_assets', 'debt', 'total_liabilities', 'equity', 'share_capital', 'retained_earnings',
+      'cash', 'fixed_assets', 'total_assets', 'debt', 'total_liabilities', 'equity', 'share_capital', 'retained_earnings', 'cumulative_d_and_a',
       // Cash Flow Statement (from ASSET_cash_flows)
       'capex', 'equity_cash_flow', 'debt_service', 'cfads', 'beginning_balance', 'drawdowns', 'interest', 'principal', 'ending_balance', 'equity_injection', 'distributions', 'dividends', 'redistributed_capital',
+      'total_dividends', 'total_redistributed_capital', 'total_distributions'
+    ];
+
+    const balanceSheetFields = [
+      'cash', 'fixed_assets', 'total_assets', 'debt', 'total_liabilities', 'equity', 'share_capital', 'retained_earnings', 'cumulative_d_and_a'
     ];
 
     if (assetId) {
@@ -36,8 +41,14 @@ export async function GET(request) {
               year: { $year: '$date' },
               month: { $month: '$date' },
             },
-            date: { $first: '$date' },
-            ...financialFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
+            date: { $last: '$date' }, // Use $last for date to get ending period date
+            ...financialFields.reduce((acc, field) => {
+              if (balanceSheetFields.includes(field)) {
+                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+              } else {
+                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+              }
+            }, {}),
           },
         });
         pipeline.push({ $sort: { '_id.year': 1, '_id.month': 1 } });
@@ -49,8 +60,14 @@ export async function GET(request) {
               year: { $year: '$date' },
               quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
             },
-            date: { $first: '$date' },
-            ...financialFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
+            date: { $last: '$date' }, // Use $last for date to get ending period date
+            ...financialFields.reduce((acc, field) => {
+              if (balanceSheetFields.includes(field)) {
+                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+              } else {
+                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+              }
+            }, {}),
           },
         });
         pipeline.push({ $sort: { '_id.year': 1, '_id.quarter': 1 } });
@@ -61,8 +78,14 @@ export async function GET(request) {
               asset_id: '$asset_id',
               year: { $year: '$date' },
             },
-            date: { $first: '$date' },
-            ...financialFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
+            date: { $last: '$date' }, // Use $last for date to get ending period date
+            ...financialFields.reduce((acc, field) => {
+              if (balanceSheetFields.includes(field)) {
+                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+              } else {
+                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+              }
+            }, {}),
           },
         });
         pipeline.push({ $sort: { '_id.year': 1 } });
@@ -89,8 +112,14 @@ export async function GET(request) {
               asset_id: '$asset_id',
               fiscalYear: '$fiscalYear',
             },
-            date: { $first: '$date' },
-            ...financialFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
+            date: { $last: '$date' }, // Use $last for date to get ending period date
+            ...financialFields.reduce((acc, field) => {
+              if (balanceSheetFields.includes(field)) {
+                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+              } else {
+                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+              }
+            }, {}),
           },
         });
         
