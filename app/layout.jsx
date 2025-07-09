@@ -36,13 +36,13 @@ const navigationItems = [
     isSection: true
   },
   {
-    name: 'assets_3',
+    name: 'Assets',
     href: '/pages/asset_3',
     icon: Building2,
     section: 'inputs'
   },
   {
-    name: 'Price Curves 2',
+    name: 'Price Curves',
     href: '/pages/price-curves2',
     icon: BarChart3,
     section: 'inputs'
@@ -93,7 +93,7 @@ const navigationItems = [
     section: 'export'
   },
   {
-    section: 'Settings',
+    section: 'SETTINGS + WIP Placeholders',
     isSection: true
   },
   {

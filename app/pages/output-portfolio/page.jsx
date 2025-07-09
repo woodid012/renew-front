@@ -332,7 +332,7 @@ const PortfolioOutputPage = () => {
     );
   }
 
-  return (
+  return ( 
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
