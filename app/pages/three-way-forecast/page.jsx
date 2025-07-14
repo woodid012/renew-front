@@ -10,7 +10,10 @@ import {
   AlertCircle,
   Eye,
   Table,
-  DollarSign
+  DollarSign,
+  TrendingUp,
+  PieChart,
+  BarChart3
 } from 'lucide-react';
 
 const ThreeWayForecastPage = () => {
@@ -44,7 +47,6 @@ const ThreeWayForecastPage = () => {
           newMap[asset._id] = asset.name;
         });
         setAssetIdToNameMap(newMap);
-        // Set default selected asset if available
         if (data.uniqueAssetIds.length > 0) {
           setSelectedAssetId(data.uniqueAssetIds[0]._id.toString());
         }
@@ -100,19 +102,22 @@ const ThreeWayForecastPage = () => {
     }
   };
 
-  const renderTable = (title, fields) => (
+  const renderTable = (title, fields, icon) => (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
       <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-        <Table className="w-5 h-5 mr-2 text-green-600" />{title}
+        {icon}
+        {title}
       </h3>
       {forecastData.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+                  Metric
+                </th>
                 {forecastData.map((item, index) => (
-                  <th key={index} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th key={index} className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                     {getPeriodLabel(item)}
                   </th>
                 ))}
@@ -120,13 +125,22 @@ const ThreeWayForecastPage = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {fields.map((field, fieldIndex) => (
-                <tr key={fieldIndex}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{field.label}</td>
-                  {forecastData.map((item, itemIndex) => (
-                    <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm ${item[field.key] < 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                      {formatCurrency(item[field.key])}
-                    </td>
-                  ))}
+                <tr key={fieldIndex} className={field.isSubtotal ? 'bg-gray-50 font-semibold' : ''}>
+                  <td className={`px-6 py-4 whitespace-nowrap text-sm ${field.isSubtotal ? 'font-semibold' : 'font-medium'} text-gray-900 sticky left-0 bg-white z-10 border-r`}>
+                    {field.indent && <span className="ml-4" />}
+                    {field.label}
+                  </td>
+                  {forecastData.map((item, itemIndex) => {
+                    const value = item[field.key];
+                    const isNegative = value < 0;
+                    return (
+                      <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm text-center ${
+                        isNegative ? 'text-red-600' : 'text-gray-700'
+                      } ${field.isSubtotal ? 'font-semibold bg-gray-50' : ''}`}>
+                        {formatCurrency(value)}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -138,62 +152,77 @@ const ThreeWayForecastPage = () => {
     </div>
   );
 
+  // Enhanced field definitions with better organization
   const profitAndLossFields = [
     { key: 'revenue', label: 'Revenue' },
-    { key: 'opex', label: 'Operating Expenses' },
-    { key: 'ebitda', label: 'EBITDA' },
-    { key: 'd_and_a', label: 'Depreciation & Amortization' },
-    { key: 'ebit', label: 'EBIT' },
-    { key: 'interest', label: 'Interest Expense' },
-    { key: 'ebt', label: 'EBT' },
-    { key: 'tax_expense', label: 'Tax Expense' },
-    { key: 'net_income', label: 'Net Income' },
+    { key: 'opex', label: 'Operating Expenses', indent: true },
+    { key: 'ebitda', label: 'EBITDA', isSubtotal: true },
+    { key: 'd_and_a', label: 'Depreciation & Amortization', indent: true },
+    { key: 'ebit', label: 'EBIT', isSubtotal: true },
+    { key: 'interest', label: 'Interest Expense', indent: true },
+    { key: 'ebt', label: 'Earnings Before Tax', isSubtotal: true },
+    { key: 'tax_expense', label: 'Tax Expense', indent: true },
+    { key: 'net_income', label: 'Net Income', isSubtotal: true },
   ];
 
   const balanceSheetFields = [
-    { key: 'cash', label: 'Cash' },
-    { key: 'fixed_assets', label: 'Fixed Assets' },
-    { key: 'total_assets', label: 'Total Assets' },
-    { key: 'debt', label: 'Debt' },
-    { key: 'total_liabilities', label: 'Total Liabilities' },
-    { key: 'equity', label: 'Equity' },
+    // Assets
+    { key: 'cash', label: 'Cash & Cash Equivalents' },
+    { key: 'fixed_assets', label: 'Property, Plant & Equipment (net)' },
+    { key: 'total_assets', label: 'Total Assets', isSubtotal: true },
+    // Liabilities
+    { key: 'debt', label: 'Long-term Debt' },
+    { key: 'total_liabilities', label: 'Total Liabilities', isSubtotal: true },
+    // Equity
     { key: 'share_capital', label: 'Share Capital' },
     { key: 'retained_earnings', label: 'Retained Earnings' },
+    { key: 'equity', label: 'Total Equity', isSubtotal: true },
   ];
 
   const cashFlowStatementFields = [
-    { key: 'net_income', label: 'Net Income (from P&L)' },
-    { key: 'd_and_a', label: 'Depreciation & Amortization (Non-cash)' },
-    { key: 'capex', label: 'Capital Expenditure' },
-    { key: 'equity_injection', label: 'Equity Injection' },
-    { key: 'distributions', label: 'Distributions' },
-    { key: 'dividends', label: 'Dividends' },
-    { key: 'debt_service', label: 'Debt Service' },
-    { key: 'drawdowns', label: 'Debt Drawdowns' },
-    { key: 'principal', label: 'Principal Repayments' },
-    { key: 'cfads', label: 'CFADS' },
-    { key: 'equity_cash_flow', label: 'Equity Cash Flow' },
+    // Operating Activities
+    { key: 'net_income', label: 'Net Income' },
+    { key: 'd_and_a', label: 'Add: Depreciation & Amortization', indent: true },
+    { key: 'operating_cash_flow', label: 'Cash Flow from Operating Activities', isSubtotal: true },
+    
+    // Investing Activities
+    { key: 'capex', label: 'Capital Expenditures', indent: true },
+    { key: 'terminal_value', label: 'Terminal Value Proceeds', indent: true },
+    { key: 'investing_cash_flow', label: 'Cash Flow from Investing Activities', isSubtotal: true },
+    
+    // Financing Activities
+    { key: 'drawdowns', label: 'Debt Drawdowns', indent: true },
+    { key: 'interest', label: 'Interest Payments', indent: true },
+    { key: 'principal', label: 'Principal Repayments', indent: true },
+    { key: 'equity_injection', label: 'Equity Contributions', indent: true },
+    { key: 'distributions', label: 'Distributions to Equity', indent: true },
+    { key: 'dividends', label: '  - Dividends', indent: true },
+    { key: 'redistributed_capital', label: '  - Capital Returns', indent: true },
+    { key: 'financing_cash_flow', label: 'Cash Flow from Financing Activities', isSubtotal: true },
+    
+    // Net Cash Flow
+    { key: 'net_cash_flow', label: 'Net Change in Cash', isSubtotal: true },
+    
+    // CRITICAL FIX: Show both pre and post distribution equity cash flows
+    { key: 'equity_cash_flow_pre_distributions', label: 'Equity Cash Flow (Pre-Distributions)', isSubtotal: true },
+    { key: 'equity_cash_flow', label: 'Equity Cash Flow (Post-Distributions)', isSubtotal: true },
   ];
 
   const handleExportCsv = () => {
     if (forecastData.length === 0) return;
 
-    // Get all unique keys from all objects in forecastData to form the header
     const allKeys = new Set();
     forecastData.forEach(item => {
       Object.keys(item).forEach(key => allKeys.add(key));
     });
-    const headers = Array.from(allKeys).sort(); // Sort headers for consistent order
+    const headers = Array.from(allKeys).sort();
 
-    // Create CSV rows
     const rows = forecastData.map(item => {
       return headers.map(header => {
         const value = item[header];
-        // Handle special formatting for currency values (remove $, commas, parentheses)
         if (typeof value === 'number') {
-          return value; // Keep raw number for CSV
+          return value;
         }
-        // For _id objects, stringify them
         if (typeof value === 'object' && value !== null) {
           return JSON.stringify(value);
         }
@@ -201,17 +230,14 @@ const ThreeWayForecastPage = () => {
       }).join(',');
     });
 
-    // Combine headers and rows
     const csvContent = [headers.join(','), ...rows].join('\n');
-
-    // Create a Blob and download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
     link.setAttribute('download', `financial_forecast_${selectedAssetId}_${selectedPeriod}.csv`);
     link.click();
-    URL.revokeObjectURL(url); // Clean up the URL object
+    URL.revokeObjectURL(url);
   };
 
   if (loading && assetIds.length === 0) {
@@ -232,7 +258,12 @@ const ThreeWayForecastPage = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">3-Way Financial Forecast</h1>
-            <p className="text-gray-600 mt-2">View integrated Profit & Loss, Balance Sheet, and Cash Flow statements</p>
+            <p className="text-gray-600 mt-2">Integrated Profit & Loss, Balance Sheet, and Cash Flow statements</p>
+            {selectedAssetId && (
+              <div className="mt-2 text-sm text-gray-500">
+                Asset: <span className="font-medium">{assetIdToNameMap[selectedAssetId]} ({selectedAssetId})</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-3">
             <div className="bg-white rounded-lg border border-gray-200 px-4 py-2">
@@ -245,7 +276,8 @@ const ThreeWayForecastPage = () => {
             </div>
             <button
               onClick={handleExportCsv}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+              disabled={forecastData.length === 0}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Export CSV
             </button>
@@ -330,9 +362,9 @@ const ThreeWayForecastPage = () => {
 
       {selectedAssetId && forecastData.length > 0 && (
         <>
-          {renderTable('Profit & Loss Statement', profitAndLossFields)}
-          {renderTable('Balance Sheet', balanceSheetFields)}
-          {renderTable('Cash Flow Statement', cashFlowStatementFields)}
+          {renderTable('Profit & Loss Statement', profitAndLossFields, <TrendingUp className="w-5 h-5 mr-2 text-green-600" />)}
+          {renderTable('Balance Sheet', balanceSheetFields, <PieChart className="w-5 h-5 mr-2 text-blue-600" />)}
+          {renderTable('Cash Flow Statement', cashFlowStatementFields, <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />)}
         </>
       )}
     </div>

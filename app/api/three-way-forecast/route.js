@@ -1,3 +1,5 @@
+// app/api/three-way-forecast/route.js
+
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
 
@@ -11,20 +13,34 @@ export async function GET(request) {
     const assetId = searchParams.get('asset_id');
     const period = searchParams.get('period');
 
-    // Fields relevant for P&L, Balance Sheet, and Cash Flow Statement
-    const financialFields = [
-      // P&L
-      'revenue', 'opex', 'ebitda', 'd_and_a', 'ebit', 'ebt', 'tax_expense', 'net_income',
-      // Balance Sheet
-      'cash', 'fixed_assets', 'total_assets', 'debt', 'total_liabilities', 'equity', 'share_capital', 'retained_earnings', 'cumulative_d_and_a',
-      // Cash Flow Statement (from ASSET_cash_flows)
-      'capex', 'equity_cash_flow', 'debt_service', 'cfads', 'beginning_balance', 'drawdowns', 'interest', 'principal', 'ending_balance', 'equity_injection', 'distributions', 'dividends', 'redistributed_capital',
-      'total_dividends', 'total_redistributed_capital', 'total_distributions'
+    // Enhanced fields for comprehensive 3-way financials
+    const profitLossFields = [
+      'revenue', 'opex', 'ebitda', 'd_and_a', 'ebit', 'interest', 'ebt', 'tax_expense', 'net_income'
     ];
 
     const balanceSheetFields = [
-      'cash', 'fixed_assets', 'total_assets', 'debt', 'total_liabilities', 'equity', 'share_capital', 'retained_earnings', 'cumulative_d_and_a'
+      'cash', 'fixed_assets', 'total_assets', 'debt', 'total_liabilities', 
+      'equity', 'share_capital', 'retained_earnings', 'cumulative_capex', 'cumulative_d_and_a'
     ];
+
+    const cashFlowFields = [
+      // Operating Activities
+      'cfads', 'operating_cash_flow',
+      // Investing Activities  
+      'capex', 'terminal_value', 'investing_cash_flow',
+      // Financing Activities
+      'drawdowns', 'interest', 'principal', 'equity_injection', 'distributions', 
+      'dividends', 'redistributed_capital', 'financing_cash_flow',
+      // Pre and Post Distribution Equity Cash Flows
+      'equity_cash_flow_pre_distributions', 'equity_cash_flow',
+      // Net Cash Flow
+      'net_cash_flow',
+      // Debt Service
+      'debt_service', 'beginning_balance', 'ending_balance'
+    ];
+
+    // All fields combined
+    const allFields = [...new Set([...profitLossFields, ...balanceSheetFields, ...cashFlowFields])];
 
     if (assetId) {
       let pipeline = [];
@@ -41,12 +57,12 @@ export async function GET(request) {
               year: { $year: '$date' },
               month: { $month: '$date' },
             },
-            date: { $last: '$date' }, // Use $last for date to get ending period date
-            ...financialFields.reduce((acc, field) => {
+            date: { $last: '$date' },
+            ...allFields.reduce((acc, field) => {
               if (balanceSheetFields.includes(field)) {
-                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+                return { ...acc, [field]: { $last: `$${field}` } };
               } else {
-                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+                return { ...acc, [field]: { $sum: `$${field}` } };
               }
             }, {}),
           },
@@ -60,12 +76,12 @@ export async function GET(request) {
               year: { $year: '$date' },
               quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
             },
-            date: { $last: '$date' }, // Use $last for date to get ending period date
-            ...financialFields.reduce((acc, field) => {
+            date: { $last: '$date' },
+            ...allFields.reduce((acc, field) => {
               if (balanceSheetFields.includes(field)) {
-                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+                return { ...acc, [field]: { $last: `$${field}` } };
               } else {
-                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+                return { ...acc, [field]: { $sum: `$${field}` } };
               }
             }, {}),
           },
@@ -78,12 +94,12 @@ export async function GET(request) {
               asset_id: '$asset_id',
               year: { $year: '$date' },
             },
-            date: { $last: '$date' }, // Use $last for date to get ending period date
-            ...financialFields.reduce((acc, field) => {
+            date: { $last: '$date' },
+            ...allFields.reduce((acc, field) => {
               if (balanceSheetFields.includes(field)) {
-                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+                return { ...acc, [field]: { $last: `$${field}` } };
               } else {
-                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+                return { ...acc, [field]: { $sum: `$${field}` } };
               }
             }, {}),
           },
@@ -92,7 +108,6 @@ export async function GET(request) {
       } else if (period === 'fiscal_yearly') {
         const fiscalYearStartMonth = 7; // July as the start month for fiscal year
 
-        // First, add fields to calculate fiscal year
         pipeline.push({
           $addFields: {
             fiscalYear: {
@@ -105,19 +120,18 @@ export async function GET(request) {
           },
         });
 
-        // Then group by fiscal year
         pipeline.push({
           $group: {
             _id: {
               asset_id: '$asset_id',
               fiscalYear: '$fiscalYear',
             },
-            date: { $last: '$date' }, // Use $last for date to get ending period date
-            ...financialFields.reduce((acc, field) => {
+            date: { $last: '$date' },
+            ...allFields.reduce((acc, field) => {
               if (balanceSheetFields.includes(field)) {
-                return { ...acc, [field]: { $last: `$${field}` } }; // Use $last for balance sheet items
+                return { ...acc, [field]: { $last: `$${field}` } };
               } else {
-                return { ...acc, [field]: { $sum: `$${field}` } }; // Use $sum for P&L/CFS items
+                return { ...acc, [field]: { $sum: `$${field}` } };
               }
             }, {}),
           },
@@ -125,14 +139,14 @@ export async function GET(request) {
         
         pipeline.push({ $sort: { '_id.fiscalYear': 1 } });
       } else {
-        // Default: return all documents sorted by date if no period or invalid period
+        // Default: return all documents sorted by date
         pipeline.push({ $sort: { date: 1 } });
       }
 
       const data = await collection.aggregate(pipeline).toArray();
       return NextResponse.json({ data });
     } else {
-      // If no asset_id, return all unique asset_ids and names
+      // Return unique asset IDs and names
       const uniqueAssetIdsFromCashFlows = await collection.distinct('asset_id');
 
       const configCollection = db.collection('CONFIG_Inputs');
