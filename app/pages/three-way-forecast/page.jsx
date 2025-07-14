@@ -82,10 +82,31 @@ const ThreeWayForecastPage = () => {
     fetchForecastData();
   }, [selectedAssetId, selectedPeriod]);
 
-  const formatCurrency = (value) => {
-    if (value === undefined || value === null || value === 0) return '-';
-    const formattedValue = Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    return value < 0 ? `(${formattedValue})` : formattedValue;
+  const formatCurrency = (value, fieldKey = '') => {
+    if (value === undefined || value === null || value === 0) return { display: '-', isNegative: false };
+    
+    // Fields that should be displayed as negative (expenses/outflows) even if stored as positive
+    const expenseFields = [
+      'opex', 'interest', 'tax_expense', 'capex', 'principal', 'distributions', 
+      'dividends', 'redistributed_capital', 'd_and_a'
+    ];
+    
+    let displayValue = value;
+    
+    // Convert expense fields to negative for display if they're positive in data
+    if (expenseFields.includes(fieldKey) && value > 0) {
+      displayValue = -value;
+    }
+    
+    const isNegative = displayValue < 0;
+    const formattedValue = Math.abs(displayValue).toLocaleString(undefined, { 
+      minimumFractionDigits: 0, 
+      maximumFractionDigits: 0 
+    });
+    
+    const display = isNegative ? `(${formattedValue})` : formattedValue;
+    
+    return { display, isNegative };
   };
 
   const getPeriodLabel = (item) => {
@@ -131,13 +152,12 @@ const ThreeWayForecastPage = () => {
                     {field.label}
                   </td>
                   {forecastData.map((item, itemIndex) => {
-                    const value = item[field.key];
-                    const isNegative = value < 0;
+                    const { display, isNegative } = formatCurrency(item[field.key], field.key);
                     return (
                       <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm text-center ${
                         isNegative ? 'text-red-600' : 'text-gray-700'
                       } ${field.isSubtotal ? 'font-semibold bg-gray-50' : ''}`}>
-                        {formatCurrency(value)}
+                        {display}
                       </td>
                     );
                   })}
@@ -152,16 +172,16 @@ const ThreeWayForecastPage = () => {
     </div>
   );
 
-  // Enhanced field definitions with better organization
+  // Enhanced field definitions with proper expense formatting
   const profitAndLossFields = [
     { key: 'revenue', label: 'Revenue' },
-    { key: 'opex', label: 'Operating Expenses', indent: true },
+    { key: 'opex', label: 'Operating Expenses', indent: true }, // Will show as negative
     { key: 'ebitda', label: 'EBITDA', isSubtotal: true },
-    { key: 'd_and_a', label: 'Depreciation & Amortization', indent: true },
+    { key: 'd_and_a', label: 'Depreciation & Amortization', indent: true }, // Will show as negative
     { key: 'ebit', label: 'EBIT', isSubtotal: true },
-    { key: 'interest', label: 'Interest Expense', indent: true },
+    { key: 'interest', label: 'Interest Expense', indent: true }, // Will show as negative
     { key: 'ebt', label: 'Earnings Before Tax', isSubtotal: true },
-    { key: 'tax_expense', label: 'Tax Expense', indent: true },
+    { key: 'tax_expense', label: 'Tax Expense', indent: true }, // Will show as negative
     { key: 'net_income', label: 'Net Income', isSubtotal: true },
   ];
 
@@ -182,22 +202,22 @@ const ThreeWayForecastPage = () => {
   const cashFlowStatementFields = [
     // Operating Activities
     { key: 'net_income', label: 'Net Income' },
-    { key: 'd_and_a', label: 'Add: Depreciation & Amortization', indent: true },
+    { key: 'd_and_a', label: 'Add: Depreciation & Amortization', indent: true }, // Will show as negative but added back
     { key: 'operating_cash_flow', label: 'Cash Flow from Operating Activities', isSubtotal: true },
     
     // Investing Activities
-    { key: 'capex', label: 'Capital Expenditures', indent: true },
+    { key: 'capex', label: 'Capital Expenditures', indent: true }, // Will show as negative (cash outflow)
     { key: 'terminal_value', label: 'Terminal Value Proceeds', indent: true },
     { key: 'investing_cash_flow', label: 'Cash Flow from Investing Activities', isSubtotal: true },
     
     // Financing Activities
-    { key: 'drawdowns', label: 'Debt Drawdowns', indent: true },
-    { key: 'interest', label: 'Interest Payments', indent: true },
-    { key: 'principal', label: 'Principal Repayments', indent: true },
-    { key: 'equity_injection', label: 'Equity Contributions', indent: true },
-    { key: 'distributions', label: 'Distributions to Equity', indent: true },
-    { key: 'dividends', label: '  - Dividends', indent: true },
-    { key: 'redistributed_capital', label: '  - Capital Returns', indent: true },
+    { key: 'drawdowns', label: 'Debt Drawdowns', indent: true }, // Positive (cash inflow)
+    { key: 'interest', label: 'Interest Payments', indent: true }, // Will show as negative (cash outflow)
+    { key: 'principal', label: 'Principal Repayments', indent: true }, // Will show as negative (cash outflow)
+    { key: 'equity_injection', label: 'Equity Contributions', indent: true }, // Positive (cash inflow)
+    { key: 'distributions', label: 'Distributions to Equity', indent: true }, // Will show as negative (cash outflow)
+    { key: 'dividends', label: '  - Dividends', indent: true }, // Will show as negative (cash outflow)
+    { key: 'redistributed_capital', label: '  - Capital Returns', indent: true }, // Will show as negative (cash outflow)
     { key: 'financing_cash_flow', label: 'Cash Flow from Financing Activities', isSubtotal: true },
     
     // Net Cash Flow
