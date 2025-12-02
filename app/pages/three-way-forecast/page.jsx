@@ -1,10 +1,10 @@
 // app/pages/three-way-forecast/page.jsx
 'use client'
 
-import { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  Building2, 
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Calendar,
+  Building2,
   Filter,
   Loader2,
   AlertCircle,
@@ -13,8 +13,32 @@ import {
   DollarSign,
   TrendingUp,
   PieChart,
-  BarChart3
+  BarChart3,
+  CheckCircle,
+  XCircle,
+  Activity,
+  Percent,
+  BarChart,
+  LineChart as LineChartIcon
 } from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ComposedChart
+} from 'recharts';
+
+const CHART_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+];
 
 const ThreeWayForecastPage = () => {
   const [assetIds, setAssetIds] = useState([]);
@@ -24,6 +48,7 @@ const ThreeWayForecastPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('yearly');
+  const [showCharts, setShowCharts] = useState(true);
 
   const periods = [
     { key: 'monthly', label: 'Monthly', icon: Calendar },
@@ -82,33 +107,6 @@ const ThreeWayForecastPage = () => {
     fetchForecastData();
   }, [selectedAssetId, selectedPeriod]);
 
-  const formatCurrency = (value, fieldKey = '') => {
-    if (value === undefined || value === null || value === 0) return { display: '-', isNegative: false };
-    
-    // Fields that should be displayed as negative (expenses/outflows) even if stored as positive
-    const expenseFields = [
-      'opex', 'interest', 'tax_expense', 'capex', 'principal', 'distributions', 
-      'dividends', 'redistributed_capital', 'd_and_a'
-    ];
-    
-    let displayValue = value;
-    
-    // Convert expense fields to negative for display if they're positive in data
-    if (expenseFields.includes(fieldKey) && value > 0) {
-      displayValue = -value;
-    }
-    
-    const isNegative = displayValue < 0;
-    const formattedValue = Math.abs(displayValue).toLocaleString(undefined, { 
-      minimumFractionDigits: 0, 
-      maximumFractionDigits: 0 
-    });
-    
-    const display = isNegative ? `(${formattedValue})` : formattedValue;
-    
-    return { display, isNegative };
-  };
-
   const getPeriodLabel = (item) => {
     if (selectedPeriod === 'monthly') {
       return `${item._id.year}-${String(item._id.month).padStart(2, '0')}`;
@@ -121,6 +119,208 @@ const ThreeWayForecastPage = () => {
     } else {
       return new Date(item.date).toLocaleDateString();
     }
+  };
+
+  // Calculate financial metrics and ratios
+  const financialMetrics = useMemo(() => {
+    if (!forecastData || forecastData.length === 0) return [];
+
+    return forecastData.map((item, index) => {
+      const revenue = item.revenue || 0;
+      const ebitda = item.ebitda || 0;
+      const ebit = item.ebit || 0;
+      const netIncome = item.net_income || 0;
+      const opex = Math.abs(item.opex || 0);
+      const interest = Math.abs(item.interest || 0);
+      const taxExpense = Math.abs(item.tax_expense || 0);
+      const totalAssets = item.total_assets || 0;
+      const totalLiabilities = item.total_liabilities || 0;
+      const equity = item.equity || 0;
+      const debt = item.debt || 0;
+      const cash = item.cash || 0;
+      const operatingCashFlow = item.operating_cash_flow || 0;
+      const debtService = Math.abs(item.interest || 0) + Math.abs(item.principal || 0);
+      const cfads = item.cfads || operatingCashFlow || 0;
+
+      // Profitability Ratios
+      const netMargin = revenue !== 0 ? (netIncome / revenue) * 100 : 0;
+      const ebitdaMargin = revenue !== 0 ? (ebitda / revenue) * 100 : 0;
+      const ebitMargin = revenue !== 0 ? (ebit / revenue) * 100 : 0;
+      const roe = equity !== 0 ? (netIncome / equity) * 100 : 0;
+      const roa = totalAssets !== 0 ? (netIncome / totalAssets) * 100 : 0;
+
+      // Liquidity Ratios
+      const currentRatio = totalLiabilities !== 0 ? (cash / totalLiabilities) : 0;
+      const quickRatio = currentRatio; // Assuming cash is the only current asset
+
+      // Leverage Ratios
+      const debtToEquity = equity !== 0 ? (debt / equity) : 0;
+      const debtToAssets = totalAssets !== 0 ? (debt / totalAssets) * 100 : 0;
+      const equityRatio = totalAssets !== 0 ? (equity / totalAssets) * 100 : 0;
+
+      // Coverage Ratios
+      const interestCoverage = interest !== 0 ? (ebitda / interest) : 0;
+      const dscr = debtService !== 0 ? (cfads / debtService) : 0;
+
+      // Growth (compared to previous period)
+      let revenueGrowth = 0;
+      let ebitdaGrowth = 0;
+      let netIncomeGrowth = 0;
+      if (index > 0) {
+        const prevRevenue = forecastData[index - 1].revenue || 0;
+        const prevEbitda = forecastData[index - 1].ebitda || 0;
+        const prevNetIncome = forecastData[index - 1].net_income || 0;
+        revenueGrowth = prevRevenue !== 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : 0;
+        ebitdaGrowth = prevEbitda !== 0 ? ((ebitda - prevEbitda) / prevEbitda) * 100 : 0;
+        netIncomeGrowth = prevNetIncome !== 0 ? ((netIncome - prevNetIncome) / prevNetIncome) * 100 : 0;
+      }
+
+      return {
+        period: getPeriodLabel(item),
+        ...item,
+        // Profitability
+        netMargin,
+        ebitdaMargin,
+        ebitMargin,
+        roe,
+        roa,
+        // Liquidity
+        currentRatio,
+        quickRatio,
+        // Leverage
+        debtToEquity,
+        debtToAssets,
+        equityRatio,
+        // Coverage
+        interestCoverage,
+        dscr,
+        // Growth
+        revenueGrowth,
+        ebitdaGrowth,
+        netIncomeGrowth
+      };
+    });
+  }, [forecastData, selectedPeriod]);
+
+  // Data validation
+  const validationResults = useMemo(() => {
+    if (!forecastData || forecastData.length === 0) return { isValid: true, issues: [] };
+
+    const issues = [];
+
+    forecastData.forEach((item, index) => {
+      const period = getPeriodLabel(item);
+
+      // Balance Sheet Validation: Assets = Liabilities + Equity
+      const totalAssets = item.total_assets || 0;
+      const totalLiabilities = item.total_liabilities || 0;
+      const equity = item.equity || 0;
+      const balanceCheck = Math.abs(totalAssets - (totalLiabilities + equity));
+      const balanceTolerance = 1000; // Allow small rounding differences
+
+      if (balanceCheck > balanceTolerance) {
+        issues.push({
+          type: 'balance_sheet',
+          period,
+          severity: 'error',
+          message: `Balance sheet doesn't balance: Assets (${totalAssets.toLocaleString()}) ≠ Liabilities + Equity (${(totalLiabilities + equity).toLocaleString()}). Difference: ${balanceCheck.toLocaleString()}`
+        });
+      }
+
+      // Cash Flow Reconciliation: Net Cash Flow should reconcile with change in cash
+      if (index > 0) {
+        const prevCash = forecastData[index - 1].cash || 0;
+        const currentCash = item.cash || 0;
+        const netCashFlow = item.net_cash_flow || 0;
+        const expectedCash = prevCash + netCashFlow;
+        const cashReconciliation = Math.abs(currentCash - expectedCash);
+        const cashTolerance = 1000;
+
+        if (cashReconciliation > cashTolerance) {
+          issues.push({
+            type: 'cash_flow',
+            period,
+            severity: 'warning',
+            message: `Cash flow reconciliation issue: Expected cash ${expectedCash.toLocaleString()} but actual is ${currentCash.toLocaleString()}. Difference: ${cashReconciliation.toLocaleString()}`
+          });
+        }
+      }
+
+      // Warning: Negative equity
+      if (equity < 0) {
+        issues.push({
+          type: 'equity',
+          period,
+          severity: 'warning',
+          message: `Negative equity: ${equity.toLocaleString()}`
+        });
+      }
+
+      // Warning: Negative cash
+      const cash = item.cash || 0;
+      if (cash < 0) {
+        issues.push({
+          type: 'cash',
+          period,
+          severity: 'warning',
+          message: `Negative cash balance: ${cash.toLocaleString()}`
+        });
+      }
+
+      // Warning: Low interest coverage
+      const interest = Math.abs(item.interest || 0);
+      const ebitda = item.ebitda || 0;
+      if (interest > 0 && ebitda / interest < 1.5) {
+        issues.push({
+          type: 'coverage',
+          period,
+          severity: 'warning',
+          message: `Low interest coverage ratio: ${(ebitda / interest).toFixed(2)}x (should be > 1.5x)`
+        });
+      }
+    });
+
+    return {
+      isValid: issues.filter(i => i.severity === 'error').length === 0,
+      issues
+    };
+  }, [forecastData, selectedPeriod]);
+
+  const formatCurrency = (value, fieldKey = '') => {
+    if (value === undefined || value === null || value === 0) return { display: '-', isNegative: false };
+
+    // Fields that should be displayed as negative (expenses/outflows) even if stored as positive
+    const expenseFields = [
+      'opex', 'interest', 'tax_expense', 'capex', 'principal', 'distributions',
+      'dividends', 'redistributed_capital', 'd_and_a'
+    ];
+
+    let displayValue = value;
+
+    // Convert expense fields to negative for display if they're positive in data
+    if (expenseFields.includes(fieldKey) && value > 0) {
+      displayValue = -value;
+    }
+
+    const isNegative = displayValue < 0;
+    const formattedValue = Math.abs(displayValue).toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+
+    const display = isNegative ? `(${formattedValue})` : formattedValue;
+
+    return { display, isNegative };
+  };
+
+  const formatPercent = (value) => {
+    if (value === undefined || value === null || isNaN(value)) return '-';
+    return `${value.toFixed(1)}%`;
+  };
+
+  const formatRatio = (value) => {
+    if (value === undefined || value === null || isNaN(value)) return '-';
+    return value.toFixed(2);
   };
 
   const renderTable = (title, fields, icon) => (
@@ -154,9 +354,8 @@ const ThreeWayForecastPage = () => {
                   {forecastData.map((item, itemIndex) => {
                     const { display, isNegative } = formatCurrency(item[field.key], field.key);
                     return (
-                      <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm text-center ${
-                        isNegative ? 'text-red-600' : 'text-gray-700'
-                      } ${field.isSubtotal ? 'font-semibold bg-gray-50' : ''}`}>
+                      <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm text-center ${isNegative ? 'text-red-600' : 'text-gray-700'
+                        } ${field.isSubtotal ? 'font-semibold bg-gray-50' : ''}`}>
                         {display}
                       </td>
                     );
@@ -204,12 +403,12 @@ const ThreeWayForecastPage = () => {
     { key: 'net_income', label: 'Net Income' },
     { key: 'd_and_a', label: 'Add: Depreciation & Amortization', indent: true }, // Will show as negative but added back
     { key: 'operating_cash_flow', label: 'Cash Flow from Operating Activities', isSubtotal: true },
-    
+
     // Investing Activities
     { key: 'capex', label: 'Capital Expenditures', indent: true }, // Will show as negative (cash outflow)
     { key: 'terminal_value', label: 'Terminal Value Proceeds', indent: true },
     { key: 'investing_cash_flow', label: 'Cash Flow from Investing Activities', isSubtotal: true },
-    
+
     // Financing Activities
     { key: 'drawdowns', label: 'Debt Drawdowns', indent: true }, // Positive (cash inflow)
     { key: 'interest', label: 'Interest Payments', indent: true }, // Will show as negative (cash outflow)
@@ -219,14 +418,31 @@ const ThreeWayForecastPage = () => {
     { key: 'dividends', label: '  - Dividends', indent: true }, // Will show as negative (cash outflow)
     { key: 'redistributed_capital', label: '  - Capital Returns', indent: true }, // Will show as negative (cash outflow)
     { key: 'financing_cash_flow', label: 'Cash Flow from Financing Activities', isSubtotal: true },
-    
+
     // Net Cash Flow
     { key: 'net_cash_flow', label: 'Net Change in Cash', isSubtotal: true },
-    
+
     // CRITICAL FIX: Show both pre and post distribution equity cash flows
     { key: 'equity_cash_flow_pre_distributions', label: 'Equity Cash Flow (Pre-Distributions)', isSubtotal: true },
     { key: 'equity_cash_flow', label: 'Equity Cash Flow (Post-Distributions)', isSubtotal: true },
   ];
+
+  // Prepare chart data
+  const chartData = useMemo(() => {
+    return financialMetrics.map(metric => ({
+      period: metric.period,
+      revenue: metric.revenue || 0,
+      ebitda: metric.ebitda || 0,
+      netIncome: metric.net_income || 0,
+      operatingCashFlow: metric.operating_cash_flow || 0,
+      equityCashFlow: metric.equity_cash_flow || 0,
+      totalAssets: metric.total_assets || 0,
+      debt: metric.debt || 0,
+      equity: metric.equity || 0,
+      cash: metric.cash || 0
+    }));
+  }, [financialMetrics]);
+
 
   const handleExportCsv = () => {
     if (forecastData.length === 0) return;
@@ -235,9 +451,12 @@ const ThreeWayForecastPage = () => {
     forecastData.forEach(item => {
       Object.keys(item).forEach(key => allKeys.add(key));
     });
+    financialMetrics.forEach(metric => {
+      Object.keys(metric).forEach(key => allKeys.add(key));
+    });
     const headers = Array.from(allKeys).sort();
 
-    const rows = forecastData.map(item => {
+    const rows = financialMetrics.map(item => {
       return headers.map(header => {
         const value = item[header];
         if (typeof value === 'number') {
@@ -311,7 +530,7 @@ const ThreeWayForecastPage = () => {
           <Filter className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-900">Analysis Configuration</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Asset Selection */}
           <div>
@@ -382,9 +601,190 @@ const ThreeWayForecastPage = () => {
 
       {selectedAssetId && forecastData.length > 0 && (
         <>
+          {/* Data Validation Section */}
+          {validationResults.issues.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+              <div className="flex items-center space-x-2 mb-4">
+                {validationResults.isValid ? (
+                  <CheckCircle className="w-5 h-5 text-yellow-600" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-red-600" />
+                )}
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Data Validation {validationResults.isValid ? '(Warnings Only)' : '(Errors Found)'}
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {validationResults.issues.map((issue, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg ${issue.severity === 'error'
+                        ? 'bg-red-50 border border-red-200'
+                        : 'bg-yellow-50 border border-yellow-200'
+                      }`}
+                  >
+                    <div className="flex items-start space-x-2">
+                      {issue.severity === 'error' ? (
+                        <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        <span className="font-medium text-sm">
+                          {issue.period}: {issue.type.replace('_', ' ').toUpperCase()}
+                        </span>
+                        <p className="text-sm mt-1">{issue.message}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+
+          {/* Visualizations */}
+          {showCharts && chartData.length > 0 && (
+            <div className="space-y-6 mb-6">
+              {/* Revenue, EBITDA, Net Income Trends */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                  <LineChartIcon className="w-5 h-5 mr-2 text-green-600" />
+                  Profitability Trends
+                </h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" />
+                    <YAxis
+                      tickFormatter={(value) => {
+                        if (value === 0) return '$0';
+                        if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                        if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}k`;
+                        return `$${value}`;
+                      }}
+                    />
+                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                    <Legend />
+                    <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS[0]} strokeWidth={2} name="Revenue" />
+                    <Line type="monotone" dataKey="ebitda" stroke={CHART_COLORS[1]} strokeWidth={2} name="EBITDA" />
+                    <Line type="monotone" dataKey="netIncome" stroke={CHART_COLORS[2]} strokeWidth={2} name="Net Income" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Cash Flow Waterfall */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                  <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />
+                  Cash Flow Analysis
+                </h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <ComposedChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" />
+                    <YAxis
+                      tickFormatter={(value) => {
+                        if (value === 0) return '$0';
+                        if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                        if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}k`;
+                        return `$${value}`;
+                      }}
+                    />
+                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                    <Legend />
+                    <Bar dataKey="operatingCashFlow" fill={CHART_COLORS[0]} name="Operating CF" />
+                    <Bar dataKey="equityCashFlow" fill={CHART_COLORS[1]} name="Equity CF" />
+                    <Line type="monotone" dataKey="cash" stroke={CHART_COLORS[2]} strokeWidth={2} name="Cash Balance" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+            </div>
+          )}
+
+          {/* Toggle Charts Button */}
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={() => setShowCharts(!showCharts)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg shadow-sm hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+            >
+              {showCharts ? 'Hide Charts' : 'Show Charts'}
+            </button>
+          </div>
+
+          {/* Financial Statements Tables */}
           {renderTable('Profit & Loss Statement', profitAndLossFields, <TrendingUp className="w-5 h-5 mr-2 text-green-600" />)}
           {renderTable('Balance Sheet', balanceSheetFields, <PieChart className="w-5 h-5 mr-2 text-blue-600" />)}
           {renderTable('Cash Flow Statement', cashFlowStatementFields, <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />)}
+
+          {/* Key Financial Metrics & Ratios - Moved to Bottom */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <Activity className="w-5 h-5 mr-2 text-green-600" />
+              Key Financial Metrics & Ratios
+            </h3>
+            {financialMetrics.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+                        Metric
+                      </th>
+                      {financialMetrics.map((metric, index) => (
+                        <th key={index} className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                          {metric.period}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    <tr className="bg-green-50">
+                      <td colSpan={financialMetrics.length + 1} className="px-6 py-2 text-sm font-semibold text-gray-900">
+                        Leverage Ratios
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">
+                        Debt-to-Assets (%)
+                      </td>
+                      {financialMetrics.map((metric, index) => (
+                        <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-700">
+                          {formatPercent(metric.debtToAssets)}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="bg-purple-50">
+                      <td colSpan={financialMetrics.length + 1} className="px-6 py-2 text-sm font-semibold text-gray-900">
+                        Coverage Ratios
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">
+                        Interest Coverage (x)
+                      </td>
+                      {financialMetrics.map((metric, index) => (
+                        <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-700">
+                          {formatRatio(metric.interestCoverage)}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">
+                        DSCR (x)
+                      </td>
+                      {financialMetrics.map((metric, index) => (
+                        <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-700">
+                          {formatRatio(metric.dscr)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

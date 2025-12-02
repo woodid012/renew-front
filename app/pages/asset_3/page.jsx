@@ -93,12 +93,24 @@ const Asset3Page = () => {
       const constantsObject = { assetCosts: {} };
       
       data.asset_inputs.forEach(asset => {
-        assetsObject[asset.id] = {
+        // Calculate durationHours for storage assets if not set
+        let processedAsset = {
           ...asset,
           // Map database fields to match component expectations
           state: asset.region || 'NSW',
           assetStartDate: asset.OperatingStartDate
         };
+        
+        // Auto-calculate durationHours for storage assets
+        if (asset.type === 'storage' && (!asset.durationHours || asset.durationHours === '')) {
+          const volume = parseFloat(asset.volume) || 0;
+          const capacity = parseFloat(asset.capacity) || 0;
+          if (volume > 0 && capacity > 0) {
+            processedAsset.durationHours = (volume / capacity).toFixed(2);
+          }
+        }
+        
+        assetsObject[asset.id] = processedAsset;
         
         // Extract cost assumptions to constants
         if (asset.costAssumptions) {
@@ -200,12 +212,22 @@ const Asset3Page = () => {
       let assetId;
       let updatedAssets;
 
+      // Calculate durationHours for storage assets if not set
+      const processedFormData = { ...formData };
+      if (formData.type === 'storage') {
+        const volume = parseFloat(formData.volume) || 0;
+        const capacity = parseFloat(formData.capacity) || 0;
+        if (volume > 0 && capacity > 0 && (!formData.durationHours || formData.durationHours === '')) {
+          processedFormData.durationHours = (volume / capacity).toFixed(2);
+        }
+      }
+
       if (editingAsset) {
         assetId = editingAsset.id;
         updatedAssets = {
           ...assets,
           [assetId]: {
-            ...formData,
+            ...processedFormData,
             id: assetId,
             lastUpdated: new Date().toISOString()
           }
@@ -217,7 +239,7 @@ const Asset3Page = () => {
         updatedAssets = {
           ...assets,
           [assetId]: {
-            ...formData,
+            ...processedFormData,
             id: assetId,
             createdAt: new Date().toISOString(),
             lastUpdated: new Date().toISOString()
@@ -278,7 +300,7 @@ const Asset3Page = () => {
       volumeLossAdjustment: 95, annualDegradation: 0.5, constructionStartDate: '',
       constructionDuration: 18, OperatingStartDate: '', qtrCapacityFactor_q1: '',
       qtrCapacityFactor_q2: '', qtrCapacityFactor_q3: '', qtrCapacityFactor_q4: '',
-      volume: '', contracts: []
+      volume: '', durationHours: '', contracts: []
     });
     setShowForm(false);
     setEditingAsset(null);
@@ -302,6 +324,9 @@ const Asset3Page = () => {
       qtrCapacityFactor_q3: safeValue(asset.qtrCapacityFactor_q3),
       qtrCapacityFactor_q4: safeValue(asset.qtrCapacityFactor_q4),
       volume: safeValue(asset.volume),
+      durationHours: safeValue(asset.durationHours) || (asset.type === 'storage' && asset.volume && asset.capacity && parseFloat(asset.volume) > 0 && parseFloat(asset.capacity) > 0 
+        ? (parseFloat(asset.volume) / parseFloat(asset.capacity)).toFixed(2) 
+        : ''),
       contracts: asset.contracts ? asset.contracts.map(contract => ({
         id: safeValue(contract.id) || Date.now().toString(),
         counterparty: safeValue(contract.counterparty),

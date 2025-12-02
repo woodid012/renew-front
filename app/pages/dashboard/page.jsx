@@ -144,7 +144,7 @@ export default function DashboardPage() {
 
     const datasets = assetIds.map((assetId, index) => ({
       label: assetNames[assetId] || `Asset ${assetId}`,
-      data: periods.map(period => (data[period][assetId] || 0) / 1000000), // Convert to millions
+      data: periods.map(period => (data[period][assetId] || 0)), // Values already in millions
       backgroundColor: colors[index % colors.length],
       borderColor: colors[index % colors.length],
       borderWidth: 0,
@@ -413,7 +413,6 @@ export default function DashboardPage() {
                           <div className="w-2 h-2 rounded-full mr-2 bg-green-500" />
                           <div>
                             <div className="text-sm font-medium text-gray-900">{asset.asset_name}</div>
-                            <div className="text-xs text-gray-500">ID: {asset.asset_id}</div>
                           </div>
                         </div>
                       </td>

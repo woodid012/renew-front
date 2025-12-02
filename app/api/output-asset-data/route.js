@@ -58,48 +58,140 @@ export async function GET(request) {
 
     if (assetId) {
       let pipeline = [];
+      
+      // Check if this is a hybrid asset by looking at config
+      const configCollection = db.collection('CONFIG_Inputs');
+      const configData = await configCollection.findOne({});
+      let hybridGroup = null;
+      let isHybrid = false;
+      let componentAssetIds = [parseInt(assetId)];
+      
+      if (configData && configData.asset_inputs) {
+        const asset = configData.asset_inputs.find(a => parseInt(a.id) === parseInt(assetId));
+        if (asset && asset.hybridGroup) {
+          // Find all assets in this hybrid group
+          const groupAssets = configData.asset_inputs.filter(a => a.hybridGroup === asset.hybridGroup);
+          if (groupAssets.length > 1) {
+            hybridGroup = asset.hybridGroup;
+            isHybrid = true;
+            componentAssetIds = groupAssets.map(a => parseInt(a.id));
+          }
+        }
+      }
 
-      // Match by asset_id
-      pipeline.push({ $match: { asset_id: parseInt(assetId) } });
-
-      // Add aggregation stages based on period
+      // If it's a hybrid asset, try to get the combined data first
+      if (isHybrid && hybridGroup) {
+        // Check if combined hybrid data exists (from backend processing)
+        const hybridDataExists = await collection.findOne({ 
+          hybrid_group: hybridGroup,
+          asset_id: parseInt(assetId)
+        });
+        
+        if (hybridDataExists) {
+          // Use the pre-combined hybrid asset data
+          pipeline.push({ $match: { 
+            hybrid_group: hybridGroup,
+            asset_id: parseInt(assetId)
+          } });
+        } else {
+          // Combine on the fly by matching all component assets
+          // We'll combine them in the period grouping stage
+          pipeline.push({ $match: { asset_id: { $in: componentAssetIds } } });
+        }
+      } else {
+        // Regular asset - match by asset_id
+        pipeline.push({ $match: { asset_id: parseInt(assetId) } });
+      }
+      
+      // Track if we need to combine hybrid assets on the fly
+      const needsOnFlyCombination = isHybrid && hybridGroup && !hybridDataExists && componentAssetIds.length > 1;
+      
       if (period === 'monthly') {
-        pipeline.push({
-          $group: {
-            _id: {
+        // For hybrid assets combining on the fly, group by date only (not asset_id)
+        const groupId = needsOnFlyCombination
+          ? {
+              year: { $year: '$date' },
+              month: { $month: '$date' },
+            }
+          : {
               asset_id: '$asset_id',
               year: { $year: '$date' },
               month: { $month: '$date' },
-            },
+            };
+        
+        pipeline.push({
+          $group: {
+            _id: groupId,
             date: { $first: '$date' },
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
+        
+        // Add asset_id back for hybrid assets combining on the fly
+        if (needsOnFlyCombination) {
+          pipeline.push({
+            $addFields: {
+              asset_id: parseInt(assetId)
+            }
+          });
+        }
+        
         pipeline.push({ $sort: { '_id.year': 1, '_id.month': 1 } });
       } else if (period === 'quarterly') {
-        pipeline.push({
-          $group: {
-            _id: {
+        const groupId = needsOnFlyCombination
+          ? {
+              year: { $year: '$date' },
+              quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
+            }
+          : {
               asset_id: '$asset_id',
               year: { $year: '$date' },
               quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
-            },
-            date: { $first: '$date' },
-            ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
-          },
-        });
-        pipeline.push({ $sort: { '_id.year': 1, '_id.quarter': 1 } });
-      } else if (period === 'yearly') {
+            };
+        
         pipeline.push({
           $group: {
-            _id: {
-              asset_id: '$asset_id',
-              year: { $year: '$date' },
-            },
+            _id: groupId,
             date: { $first: '$date' },
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
+        
+        if (needsOnFlyCombination) {
+          pipeline.push({
+            $addFields: {
+              asset_id: parseInt(assetId)
+            }
+          });
+        }
+        
+        pipeline.push({ $sort: { '_id.year': 1, '_id.quarter': 1 } });
+      } else if (period === 'yearly') {
+        const groupId = needsOnFlyCombination
+          ? {
+              year: { $year: '$date' },
+            }
+          : {
+              asset_id: '$asset_id',
+              year: { $year: '$date' },
+            };
+        
+        pipeline.push({
+          $group: {
+            _id: groupId,
+            date: { $first: '$date' },
+            ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
+          },
+        });
+        
+        if (needsOnFlyCombination) {
+          pipeline.push({
+            $addFields: {
+              asset_id: parseInt(assetId)
+            }
+          });
+        }
+        
         pipeline.push({ $sort: { '_id.year': 1 } });
       } else if (period === 'fiscal_yearly') {
         const fiscalYearStartMonth = 7; // July as the start month for fiscal year
@@ -118,16 +210,30 @@ export async function GET(request) {
         });
 
         // Then group by fiscal year
-        pipeline.push({
-          $group: {
-            _id: {
+        const groupId = needsOnFlyCombination
+          ? {
+              fiscalYear: '$fiscalYear',
+            }
+          : {
               asset_id: '$asset_id',
               fiscalYear: '$fiscalYear',
-            },
+            };
+        
+        pipeline.push({
+          $group: {
+            _id: groupId,
             date: { $first: '$date' },
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
+        
+        if (needsOnFlyCombination) {
+          pipeline.push({
+            $addFields: {
+              asset_id: parseInt(assetId)
+            }
+          });
+        }
         
         pipeline.push({ $sort: { '_id.fiscalYear': 1 } });
       } else {
@@ -142,13 +248,71 @@ export async function GET(request) {
       const uniqueAssetIdsFromCashFlows = await collection.distinct('asset_id');
 
       const configCollection = db.collection('CONFIG_Inputs');
-      const assetNames = await configCollection.aggregate([
+      const assetData = await configCollection.aggregate([
         { $unwind: '$asset_inputs' },
         { $match: { 'asset_inputs.id': { $in: uniqueAssetIdsFromCashFlows } } },
-        { $project: { _id: '$asset_inputs.id', name: '$asset_inputs.name' } }
+        { $project: { 
+          _id: '$asset_inputs.id', 
+          name: '$asset_inputs.name',
+          hybridGroup: '$asset_inputs.hybridGroup' 
+        } }
       ]).toArray();
 
-      return NextResponse.json({ uniqueAssetIds: assetNames });
+      // Check for hybrid groups in cashflow data (pre-combined hybrid assets)
+      const hybridGroupsInCashflow = await collection.distinct('hybrid_group', { hybrid_group: { $exists: true, $ne: null } });
+      
+      // Build hybrid group mapping and identify which assets are in groups
+      const hybridGroupMap = {};
+      const assetsInHybridGroups = new Set();
+      
+      assetData.forEach(asset => {
+        if (asset.hybridGroup) {
+          if (!hybridGroupMap[asset.hybridGroup]) {
+            hybridGroupMap[asset.hybridGroup] = [];
+          }
+          hybridGroupMap[asset.hybridGroup].push({
+            _id: asset._id,
+            name: asset.name
+          });
+          assetsInHybridGroups.add(asset._id);
+        }
+      });
+
+      // Create a list that includes hybrid groups as combined assets
+      // By default, show hybrid groups instead of individual components
+      const displayAssets = [];
+      const processedHybridGroups = new Set();
+      
+      assetData.forEach(asset => {
+        if (asset.hybridGroup && hybridGroupMap[asset.hybridGroup] && !processedHybridGroups.has(asset.hybridGroup)) {
+          // Add the hybrid group as a combined asset (use first asset ID as primary)
+          const groupAssets = hybridGroupMap[asset.hybridGroup];
+          const primaryAsset = groupAssets[0];
+          displayAssets.push({
+            _id: primaryAsset._id,
+            name: `${asset.hybridGroup} (Hybrid)`,
+            hybridGroup: asset.hybridGroup,
+            isHybrid: true,
+            componentIds: groupAssets.map(a => a._id),
+            componentNames: groupAssets.map(a => a.name)
+          });
+          processedHybridGroups.add(asset.hybridGroup);
+        } else if (!asset.hybridGroup || !assetsInHybridGroups.has(asset._id)) {
+          // Add non-hybrid assets or individual components (when not grouped)
+          displayAssets.push({
+            _id: asset._id,
+            name: asset.name,
+            hybridGroup: asset.hybridGroup || null,
+            isHybrid: false
+          });
+        }
+      });
+
+      return NextResponse.json({ 
+        uniqueAssetIds: displayAssets,
+        hybridGroups: hybridGroupMap,
+        allAssets: assetData // Include all individual assets for reference
+      });
     }
   } catch (error) {
     console.error('Error fetching data:', error);

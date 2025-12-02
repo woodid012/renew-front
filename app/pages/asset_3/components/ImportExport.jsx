@@ -105,7 +105,7 @@ const ImportExport = ({
 
     // Define CSV headers
     const headers = [
-      'id', 'name', 'region', 'type', 'capacity', 'volume', 'assetLife',
+      'id', 'name', 'region', 'type', 'capacity', 'volume', 'durationHours', 'assetLife',
       'volumeLossAdjustment', 'annualDegradation', 'constructionStartDate',
       'constructionDuration', 'OperatingStartDate', 'qtrCapacityFactor_q1',
       'qtrCapacityFactor_q2', 'qtrCapacityFactor_q3', 'qtrCapacityFactor_q4',

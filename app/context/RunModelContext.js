@@ -53,9 +53,13 @@ export const RunModelProvider = ({ children }) => {
 
   // Get backend URL and check base results on component mount
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com';
+    // Use Next.js API route for local development, direct URL for production
+    const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+    const url = isDevelopment 
+      ? '' // Use relative path to Next.js API route
+      : (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com');
     setBackendUrl(url);
-    addLog(`Backend URL: ${url}`, 'info');
+    addLog(`Backend mode: ${isDevelopment ? 'Local (via Next.js API)' : 'Remote'}`, 'info');
 
     const fetchInitialData = async () => {
       try {
@@ -100,30 +104,39 @@ export const RunModelProvider = ({ children }) => {
     addLog('Starting base model run...', 'info');
     
     try {
-      // First, check backend status
-      addLog('Checking backend status...', 'info');
+      // Use Next.js API route (which proxies to local backend) or direct backend URL
+      const apiEndpoint = backendUrl 
+        ? `${backendUrl}/api/run-model` 
+        : '/api/run-model';
       
-      const statusResponse = await fetch(`${backendUrl}/`);
-      if (!statusResponse.ok) {
-        throw new Error(`Backend is not accessible (HTTP ${statusResponse.status})`);
-      }
-      
-      const statusData = await statusResponse.json();
-      addLog(`Backend status: ${statusData.status}`, 'success');
-      addLog(`Connected to database: ${statusData.mongo_db}`, 'info');
-      
-      // Check import status
-      const imports = statusData.imports || {};
-      addLog(`Model imports available: ${Object.entries(imports).map(([k,v]) => `${k}:${v}`).join(', ')}`, 'info');
-      
-      if (!imports.run_cashflow_model) {
-        throw new Error('Backend model functionality not available - import failed');
+      // Check backend status if using direct URL
+      if (backendUrl) {
+        addLog('Checking backend status...', 'info');
+        
+        const statusResponse = await fetch(`${backendUrl}/`);
+        if (!statusResponse.ok) {
+          throw new Error(`Backend is not accessible (HTTP ${statusResponse.status})`);
+        }
+        
+        const statusData = await statusResponse.json();
+        addLog(`Backend status: ${statusData.status}`, 'success');
+        addLog(`Connected to database: ${statusData.mongo_db}`, 'info');
+        
+        // Check import status
+        const imports = statusData.imports || {};
+        addLog(`Model imports available: ${Object.entries(imports).map(([k,v]) => `${k}:${v}`).join(', ')}`, 'info');
+        
+        if (!imports.run_cashflow_model) {
+          throw new Error('Backend model functionality not available - import failed');
+        }
+      } else {
+        addLog('Using local backend via Next.js API route...', 'info');
       }
       
       addLog('Sending request to run cash flow model (base case)...', 'info');
 
-      // Make API call to run the model
-      const response = await fetch(`${backendUrl}/api/run-model`, {
+      // Make API call to run the model (via Next.js API route or direct)
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +195,14 @@ export const RunModelProvider = ({ children }) => {
     addLog('Starting sensitivity analysis...', 'info');
 
     try {
-      const sensitivityResponse = await fetch(`${backendUrl}/api/sensitivity`, {
+      // Use Next.js API route (which proxies to local backend) or direct backend URL
+      const apiEndpoint = backendUrl 
+        ? `${backendUrl}/api/sensitivity` 
+        : '/api/run-sensitivity';
+      
+      addLog('Sending request to run sensitivity analysis...', 'info');
+      
+      const sensitivityResponse = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

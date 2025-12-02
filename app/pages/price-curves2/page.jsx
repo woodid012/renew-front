@@ -1,6 +1,6 @@
 // app/pages/price-curves2/page.jsx
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { 
   LineChart, 
   Line, 
@@ -9,7 +9,9 @@ import {
   CartesianGrid, 
   Tooltip, 
   Legend, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  Brush,
+  ReferenceLine
 } from 'recharts'
 import { 
   Filter, 
@@ -21,8 +23,25 @@ import {
   RefreshCw,
   AlertCircle,
   Loader2,
-  Info
+  Info,
+  Download,
+  Maximize2,
+  X,
+  Search
 } from 'lucide-react'
+
+// Constants
+const CHART_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+]
+
+const PERIOD_OPTIONS = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'yearly', label: 'Yearly' },
+  { value: 'fiscal_yearly', label: 'Fiscal Year' }
+]
 
 export default function PriceCurves2Page() {
   const [priceCurves, setPriceCurves] = useState([])
@@ -31,29 +50,138 @@ export default function PriceCurves2Page() {
   const [selectedRegions, setSelectedRegions] = useState(['ALL'])
   const [selectedProfile, setSelectedProfile] = useState('baseload')
   const [selectedTypes, setSelectedTypes] = useState(['ENERGY'])
-  const [chartData, setChartData] = useState([])
   const [availableRegions, setAvailableRegions] = useState([])
   const [availableProfiles, setAvailableProfiles] = useState([])
   const [availableTypes, setAvailableTypes] = useState([])
   const [dateRange, setDateRange] = useState({ start: null, end: null })
   const [selectedPeriod, setSelectedPeriod] = useState('yearly')
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showZeroLine, setShowZeroLine] = useState(false)
 
+  // Format period label helper function
+  const formatPeriodLabel = useCallback((timeKey, period) => {
+    if (!timeKey) return timeKey || '';
+    
+    if (period === 'monthly') {
+      const [year, month] = timeKey.split('-')
+      if (!year || !month) return timeKey;
+      return new Date(year, parseInt(month) - 1, 1).toLocaleDateString('en-AU', { year: 'numeric', month: 'short' })
+    } else if (period === 'quarterly') {
+      const [year, quarter] = timeKey.split('-Q')
+      if (!year || !quarter) return timeKey;
+      return `${year} Q${quarter}`
+    } else if (period === 'yearly') {
+      return timeKey
+    } else if (period === 'fiscal_yearly') {
+      return timeKey
+    } else {
+      try {
+        return new Date(timeKey).toLocaleDateString('en-AU', { 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric' 
+        })
+      } catch (e) {
+        return timeKey;
+      }
+    }
+  }, [])
+
+  // Fetch price curves when period changes
   useEffect(() => {
     fetchPriceCurves()
   }, [selectedPeriod])
 
-  useEffect(() => {
-    if (priceCurves.length > 0) {
-      processChartData()
-    }
-  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes])
+  // Process chart data when filters change
+  const chartData = useMemo(() => {
+    if (!priceCurves.length) return []
 
-  const fetchPriceCurves = async () => {
+    const timeGroups = {}
+    
+    priceCurves.forEach(item => {
+      let timeKey, displayDate
+
+      if (selectedPeriod === 'monthly') {
+        timeKey = `${item._id.year}-${String(item._id.month).padStart(2, '0')}`
+        displayDate = new Date(item._id.year, item._id.month - 1, 1)
+      } else if (selectedPeriod === 'quarterly') {
+        timeKey = `${item._id.year}-Q${item._id.quarter}`
+        displayDate = new Date(item._id.year, (item._id.quarter - 1) * 3, 1)
+      } else if (selectedPeriod === 'yearly') {
+        timeKey = `${item._id.year}`
+        displayDate = new Date(item._id.year, 0, 1)
+      } else if (selectedPeriod === 'fiscal_yearly') {
+        timeKey = `FY${item._id.fiscalYear}`
+        displayDate = new Date(item._id.fiscalYear, 6, 1)
+      } else {
+        timeKey = item.TIME
+        displayDate = new Date(item.TIME)
+      }
+
+      if (!timeGroups[timeKey]) {
+        timeGroups[timeKey] = { TIME: timeKey, date: displayDate }
+      }
+      
+      const regionMatch = selectedRegions.includes('ALL') || selectedRegions.includes(item._id.REGION)
+      if (!regionMatch) return
+
+      if (selectedProfile === 'storage') {
+        if (item._id.TYPE && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
+          const seriesKey = selectedRegions.includes('ALL') ? 
+            `${item._id.REGION}_${item._id.TYPE}` : 
+            item._id.TYPE
+          timeGroups[timeKey][seriesKey] = item.PRICE
+        }
+      } else {
+        if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
+          const seriesKey = selectedRegions.includes('ALL') ? 
+            `${item._id.REGION}_${item._id.TYPE}` : 
+            item._id.TYPE
+          timeGroups[timeKey][seriesKey] = item.PRICE
+        }
+      }
+    })
+    
+    return Object.values(timeGroups)
+      .sort((a, b) => a.date - b.date)
+      .map(item => ({
+        ...item,
+        TIME: item.TIME ? formatPeriodLabel(item.TIME, selectedPeriod) : item.TIME
+      }))
+  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes, selectedPeriod, formatPeriodLabel])
+
+  // Get series keys from chart data
+  const seriesKeys = useMemo(() => {
+    if (!chartData.length) return []
+    const sampleData = chartData[0]
+    return Object.keys(sampleData).filter(key => 
+      key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number' && !key.includes('TAS')
+    )
+  }, [chartData])
+
+  // Get relevant types for current profile
+  const relevantTypes = useMemo(() => {
+    if (selectedProfile === 'storage') {
+      return availableTypes.filter(type => type.startsWith('SPREAD_'))
+    }
+    return availableTypes.filter(type => !type.startsWith('SPREAD_'))
+  }, [selectedProfile, availableTypes])
+
+  // Filter regions by search term
+  const filteredRegions = useMemo(() => {
+    if (!searchTerm) return availableRegions
+    return availableRegions.filter(region => 
+      region.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [availableRegions, searchTerm])
+
+  const fetchPriceCurves = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const url = `/api/price-curves2${selectedPeriod ? `?period=${selectedPeriod}` : ''}`;
+      const url = `/api/price-curves2${selectedPeriod ? `?period=${selectedPeriod}` : ''}`
       const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -69,7 +197,6 @@ export default function PriceCurves2Page() {
       
       setAvailableRegions(['ALL', ...regions])
       
-      // Add 'storage' to available profiles and check for SPREAD types
       const hasSpreadTypes = types.some(type => type.startsWith('SPREAD_'))
       if (hasSpreadTypes && !profiles.includes('storage')) {
         setAvailableProfiles([...profiles, 'storage'])
@@ -78,27 +205,27 @@ export default function PriceCurves2Page() {
       }
       setAvailableTypes(types)
       
-      // Set date range (adjust for aggregated data)
+      // Set date range
       if (data.length > 0) {
         const dates = data.map(item => {
           if (selectedPeriod === 'monthly') {
-            return new Date(item._id.year, item._id.month - 1, 1);
+            return new Date(item._id.year, item._id.month - 1, 1)
           } else if (selectedPeriod === 'quarterly') {
-            return new Date(item._id.year, (item._id.quarter - 1) * 3, 1);
+            return new Date(item._id.year, (item._id.quarter - 1) * 3, 1)
           } else if (selectedPeriod === 'yearly') {
-            return new Date(item._id.year, 0, 1);
+            return new Date(item._id.year, 0, 1)
           } else if (selectedPeriod === 'fiscal_yearly') {
-            return new Date(item._id.fiscalYear, 6, 1); 
+            return new Date(item._id.fiscalYear, 6, 1)
           } else {
-            return new Date(item.TIME);
+            return new Date(item.TIME)
           }
-        }).filter(d => !isNaN(d));
+        }).filter(d => !isNaN(d))
 
         if (dates.length > 0) {
           setDateRange({
             start: new Date(Math.min(...dates)),
             end: new Date(Math.max(...dates))
-          });
+          })
         }
       }
       
@@ -115,93 +242,9 @@ export default function PriceCurves2Page() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedPeriod])
 
-  const processChartData = () => {
-    if (!priceCurves.length) return
-
-    const timeGroups = {}
-    
-    priceCurves.forEach(item => {
-      let timeKey;
-      let displayDate;
-
-      if (selectedPeriod === 'monthly') {
-        timeKey = `${item._id.year}-${String(item._id.month).padStart(2, '0')}`;
-        displayDate = new Date(item._id.year, item._id.month - 1, 1);
-      } else if (selectedPeriod === 'quarterly') {
-        timeKey = `${item._id.year}-Q${item._id.quarter}`;
-        displayDate = new Date(item._id.year, (item._id.quarter - 1) * 3, 1);
-      } else if (selectedPeriod === 'yearly') {
-        timeKey = `${item._id.year}`;
-        displayDate = new Date(item._id.year, 0, 1);
-      } else if (selectedPeriod === 'fiscal_yearly') {
-        timeKey = `FY${item._id.fiscalYear}`;
-        displayDate = new Date(item._id.fiscalYear, 6, 1);
-      } else {
-        timeKey = item.TIME;
-        displayDate = new Date(item.TIME);
-      }
-
-      if (!timeGroups[timeKey]) {
-        timeGroups[timeKey] = { TIME: timeKey, date: displayDate };
-      }
-      
-      // Filter by region
-      const regionMatch = selectedRegions.includes('ALL') || selectedRegions.includes(item._id.REGION)
-      if (!regionMatch) return
-
-      if (selectedProfile === 'storage') {
-        // For storage profile, we look for records with TYPE starting with 'SPREAD_'
-        if (item._id.TYPE && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ? 
-            `${item._id.REGION}_${item._id.TYPE}` : 
-            item._id.TYPE
-          timeGroups[timeKey][seriesKey] = item.PRICE
-        }
-      } else {
-        // For other profiles, filter by selectedProfile and selectedTypes, and plot PRICE
-        if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ? 
-            `${item._id.REGION}_${item._id.TYPE}` : 
-            item._id.TYPE
-          timeGroups[timeKey][seriesKey] = item.PRICE
-        }
-      }
-    })
-    
-    // Convert to array and sort by date
-    const processedData = Object.values(timeGroups)
-      .sort((a, b) => a.date - b.date)
-      .map(item => ({
-        ...item,
-        TIME: formatPeriodLabel(item.TIME, selectedPeriod)
-      }))
-    
-    setChartData(processedData)
-  }
-
-  const formatPeriodLabel = (timeKey, period) => {
-    if (period === 'monthly') {
-      const [year, month] = timeKey.split('-');
-      return new Date(year, parseInt(month) - 1, 1).toLocaleDateString('en-AU', { year: 'numeric', month: 'short' });
-    } else if (period === 'quarterly') {
-      const [year, quarter] = timeKey.split('-Q');
-      return `${year} Q${quarter}`;
-    } else if (period === 'yearly') {
-      return timeKey;
-    } else if (period === 'fiscal_yearly') {
-      return timeKey;
-    } else {
-      return new Date(timeKey).toLocaleDateString('en-AU', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-      });
-    }
-  };
-
-  const handleRegionChange = (region) => {
+  const handleRegionChange = useCallback((region) => {
     if (region === 'ALL') {
       setSelectedRegions(['ALL'])
     } else {
@@ -215,112 +258,105 @@ export default function PriceCurves2Page() {
         }
       })
     }
-  }
+  }, [])
 
-  const handleProfileChange = (profile) => {
+  const handleProfileChange = useCallback((profile) => {
     setSelectedProfile(profile)
-    // Reset selected types when switching profiles
     if (profile === 'storage') {
-      // For storage, start with the first available SPREAD type
       const spreadTypes = availableTypes.filter(type => type.startsWith('SPREAD_'))
       setSelectedTypes(spreadTypes.length > 0 ? [spreadTypes[0]] : [])
     } else {
-      // For other profiles, default to ENERGY and GREEN if available
       const defaultTypes = ['ENERGY']
       if (availableTypes.includes('GREEN')) {
         defaultTypes.push('GREEN')
       }
       setSelectedTypes(defaultTypes)
     }
-  }
+  }, [availableTypes])
 
-  const handleTypeChange = (type) => {
+  const handleTypeChange = useCallback((type) => {
     setSelectedTypes(prev => 
       prev.includes(type) 
         ? prev.filter(t => t !== type)
         : [...prev, type]
     )
-  }
+  }, [])
 
-  const handlePeriodChange = (event) => {
-    setSelectedPeriod(event.target.value);
-  };
+  const handlePeriodChange = useCallback((event) => {
+    setSelectedPeriod(event.target.value)
+  }, [])
 
-  const getSeriesKeys = () => {
-    if (!chartData.length) return []
-    
-    const sampleData = chartData[0]
-    const keys = Object.keys(sampleData).filter(key => 
-      key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number' && !key.includes('TAS')
-    )
+  const exportToCsv = useCallback(() => {
+    if (!chartData.length) return
 
-    return keys
-  }
+    const headers = ['TIME', ...seriesKeys]
+    const csvRows = []
 
-  const exportToCsv = () => {
-    if (!chartData.length) return;
+    csvRows.push(headers.map(header => `"${header.replace(/_/g, ' ')}"`).join(','))
 
-    const headers = ['TIME', ...getSeriesKeys()];
-    const csvRows = [];
-
-    // Add headers
-    csvRows.push(headers.map(header => `"${header.replace(/_/g, ' ')}"`).join(','));
-
-    // Add data rows
     chartData.forEach(row => {
       const values = headers.map(header => {
-        const value = row[header];
+        const value = row[header]
         if (typeof value === 'number') {
-          return value.toFixed(2); // Format numbers to 2 decimal places
+          return value.toFixed(2)
         } else if (value === null || value === undefined) {
-          return '';
+          return ''
         } else {
-          return `"${String(value).replace(/"/g, '""')}"`; // Escape double quotes
+          return `"${String(value).replace(/"/g, '""')}"`
         }
-      });
-      csvRows.push(values.join(','));
-    });
+      })
+      csvRows.push(values.join(','))
+    })
 
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `price_curves_${selectedPeriod}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    const csvString = csvRows.join('\n')
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.setAttribute('download', `price_curves_${selectedPeriod}_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }, [chartData, seriesKeys, selectedPeriod])
 
-  const getLineColor = (index) => {
-    const colors = [
-      '#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1', 
-      '#d084d0', '#ffb347', '#87ceeb', '#dda0dd', '#98fb98'
-    ]
-    return colors[index % colors.length]
-  }
-
-  const formatCurrency = (value) => {
+  const formatCurrency = useCallback((value) => {
     return new Intl.NumberFormat('en-AU', {
       style: 'currency',
       currency: 'AUD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value)
-  }
+  }, [])
 
-  // Get the relevant types for the current profile
-  const getRelevantTypes = () => {
-    if (selectedProfile === 'storage') {
-      return availableTypes.filter(type => type.startsWith('SPREAD_'))
-    }
-    return availableTypes.filter(type => !type.startsWith('SPREAD_'))
-  }
+  const getLineColor = useCallback((index) => {
+    return CHART_COLORS[index % CHART_COLORS.length]
+  }, [])
+
+  // Calculate summary statistics
+  const summaryStats = useMemo(() => {
+    if (!chartData.length || !seriesKeys.length) return null
+
+    const allValues = seriesKeys.flatMap(key => 
+      chartData.map(d => d[key]).filter(v => typeof v === 'number')
+    )
+
+    if (allValues.length === 0) return null
+
+    const sorted = [...allValues].sort((a, b) => a - b)
+    const min = sorted[0]
+    const max = sorted[sorted.length - 1]
+    const avg = allValues.reduce((a, b) => a + b, 0) / allValues.length
+    const median = sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)]
+
+    return { min, max, avg, median }
+  }, [chartData, seriesKeys])
 
   if (loading) {
     return (
       <div className="p-6 min-h-screen flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
           <span className="text-gray-600">Loading price curves...</span>
         </div>
       </div>
@@ -330,13 +366,13 @@ export default function PriceCurves2Page() {
   if (error) {
     return (
       <div className="p-6 min-h-screen flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Price Curves</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button 
             onClick={fetchPriceCurves}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center mx-auto"
           >
             <RefreshCw className="w-4 h-4 inline mr-2" />
             Retry
@@ -346,16 +382,16 @@ export default function PriceCurves2Page() {
     )
   }
 
-  const relevantTypes = getRelevantTypes()
+  const chartHeight = isFullscreen ? 'calc(100vh - 300px)' : 500
 
   return (
-    <div className="p-6">
+    <div className={`p-6 ${isFullscreen ? 'fixed inset-0 z-50 bg-white overflow-auto' : ''}`}>
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Price Curves 2</h1>
-            <p className="text-gray-600 mt-2">
+      <div className="mb-6">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-3xl font-bold text-gray-900">Price Curves</h1>
+            <p className="text-gray-600 mt-1">
               Analyze electricity price trends across regions and profiles
             </p>
             {dateRange.start && dateRange.end && (
@@ -364,7 +400,7 @@ export default function PriceCurves2Page() {
               </p>
             )}
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <div className="bg-white rounded-lg border border-gray-200 px-4 py-2">
               <div className="flex items-center space-x-2">
                 <BarChart3 className="w-4 h-4 text-green-600" />
@@ -373,16 +409,37 @@ export default function PriceCurves2Page() {
                 </span>
               </div>
             </div>
-            
+            {isFullscreen && (
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                aria-label="Exit fullscreen"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex items-center space-x-2 mb-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Filter className="w-5 h-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedRegions(['ALL'])
+              setSelectedProfile('baseload')
+              setSelectedTypes(['ENERGY'])
+              setSearchTerm('')
+            }}
+            className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            Reset Filters
+          </button>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -390,20 +447,34 @@ export default function PriceCurves2Page() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <MapPin className="w-4 h-4 inline mr-1" />
-              Regions
+              Regions ({selectedRegions.includes('ALL') ? 'All' : selectedRegions.length})
             </label>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {availableRegions.map(region => (
-                <label key={region} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedRegions.includes(region)}
-                    onChange={() => handleRegionChange(region)}
-                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700">{region}</span>
-                </label>
-              ))}
+            <div className="relative mb-2">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search regions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
+              {filteredRegions.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-2">No regions found</p>
+              ) : (
+                filteredRegions.map(region => (
+                  <label key={region} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <input
+                      type="checkbox"
+                      checked={selectedRegions.includes(region)}
+                      onChange={() => handleRegionChange(region)}
+                      className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    />
+                    <span className="text-sm text-gray-700 flex-1">{region}</span>
+                  </label>
+                ))
+              )}
             </div>
           </div>
 
@@ -413,9 +484,9 @@ export default function PriceCurves2Page() {
               <Zap className="w-4 h-4 inline mr-1" />
               Profile
             </label>
-            <div className="space-y-2">
+            <div className="space-y-2 border border-gray-200 rounded-md p-2 max-h-48 overflow-y-auto">
               {availableProfiles.map(profile => (
-                <label key={profile} className="flex items-center space-x-2">
+                <label key={profile} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
                   <input
                     type="radio"
                     name="profile"
@@ -424,7 +495,7 @@ export default function PriceCurves2Page() {
                     onChange={() => handleProfileChange(profile)}
                     className="w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500"
                   />
-                  <span className="text-sm text-gray-700 capitalize">{profile}</span>
+                  <span className="text-sm text-gray-700 capitalize flex-1">{profile}</span>
                 </label>
               ))}
             </div>
@@ -434,26 +505,28 @@ export default function PriceCurves2Page() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <TrendingUp className="w-4 h-4 inline mr-1" />
-              {selectedProfile === 'storage' ? 'Spread Types' : 'Price Types'}
+              {selectedProfile === 'storage' ? 'Spread Types' : 'Price Types'} ({selectedTypes.length})
             </label>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {relevantTypes.map(type => (
-                <label key={type} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.includes(type)}
-                    onChange={() => handleTypeChange(type)}
-                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700">{type}</span>
-                </label>
-              ))}
+            <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
+              {relevantTypes.length === 0 ? (
+                <div className="text-xs text-gray-500 text-center py-2">
+                  <Info className="w-4 h-4 inline mr-1" />
+                  No {selectedProfile === 'storage' ? 'spread' : 'price'} types available
+                </div>
+              ) : (
+                relevantTypes.map(type => (
+                  <label key={type} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.includes(type)}
+                      onChange={() => handleTypeChange(type)}
+                      className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    />
+                    <span className="text-sm text-gray-700 flex-1">{type}</span>
+                  </label>
+                ))
+              )}
             </div>
-            {relevantTypes.length === 0 && (
-              <div className="text-xs text-gray-500 mt-2">
-                No {selectedProfile === 'storage' ? 'spread' : 'price'} types available
-              </div>
-            )}
           </div>
 
           {/* Aggregation Period Filter */}
@@ -463,14 +536,15 @@ export default function PriceCurves2Page() {
               Aggregate By
             </label>
             <select
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              className="w-full pl-3 pr-10 py-2.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
               value={selectedPeriod}
               onChange={handlePeriodChange}
             >
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="yearly">Yearly</option>
-              <option value="fiscal_yearly">Fiscal Year</option>
+              {PERIOD_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -478,117 +552,175 @@ export default function PriceCurves2Page() {
 
       {/* Chart */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)} 
-            {selectedProfile === 'storage' ? ' Spread' : ' Price'} Trends
-            {selectedRegions.includes('ALL') ? ' - All Regions' : ` - ${selectedRegions.join(', ')}`}
-          </h3>
-          <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <Calendar className="w-4 h-4" />
-            <span>{chartData.length} data points</span>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)} 
+              {selectedProfile === 'storage' ? ' Spread' : ' Price'} Trends
+              {selectedRegions.includes('ALL') ? ' - All Regions' : ` - ${selectedRegions.join(', ')}`}
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {chartData.length} data points • {seriesKeys.length} series
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showZeroLine}
+                onChange={(e) => setShowZeroLine(e.target.checked)}
+                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              />
+              <span>Show zero line</span>
+            </label>
+            {!isFullscreen && (
+              <button
+                onClick={() => setIsFullscreen(true)}
+                className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                aria-label="Fullscreen"
+                title="Fullscreen"
+              >
+                <Maximize2 className="w-5 h-5 text-gray-600" />
+              </button>
+            )}
+            <button
+              onClick={exportToCsv}
+              disabled={chartData.length === 0}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export CSV</span>
+            </button>
           </div>
         </div>
         
-        <div style={{ width: '100%', height: 500 }}>
-          {chartData.length > 0 ? (
+        <div style={{ width: '100%', height: chartHeight }}>
+          {chartData.length > 0 && seriesKeys.length > 0 ? (
             <ResponsiveContainer>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
+              <LineChart 
+                data={chartData}
+                margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis 
                   dataKey="TIME"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
                 <YAxis 
                   tickFormatter={formatCurrency}
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  label={{ value: 'Price (AUD)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#374151' } }}
                 />
                 <Tooltip 
-                  formatter={(value, name) => [formatCurrency(value), name]}
+                  formatter={(value, name) => [formatCurrency(value), name.replace(/_/g, ' ')]}
                   labelFormatter={(label) => `Period: ${label}`}
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    padding: '8px'
+                  }}
                 />
-                <Legend />
-                {getSeriesKeys().map((key, index) => (
+                <Legend 
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="line"
+                />
+                {showZeroLine && (
+                  <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="2 2" />
+                )}
+                {seriesKeys.map((key, index) => (
                   <Line
                     key={key}
                     type="monotone"
                     dataKey={key}
                     stroke={getLineColor(index)}
                     strokeWidth={2}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
+                    dot={{ r: 3, fill: getLineColor(index) }}
+                    activeDot={{ r: 5, stroke: getLineColor(index), strokeWidth: 2 }}
                     name={key.replace(/_/g, ' ')}
+                    connectNulls
                   />
                 ))}
+                {chartData.length > 20 && (
+                  <Brush 
+                    dataKey="TIME" 
+                    height={30}
+                    stroke="#3b82f6"
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No data available for selected filters</p>
+                <p className="text-gray-600 font-medium">No data available</p>
                 <p className="text-sm text-gray-500 mt-2">Try adjusting your region, profile, or type selections</p>
               </div>
             </div>
           )}
         </div>
-        {chartData.length > 0 && (
-          <div className="mt-4 text-right">
-            <button
-              onClick={exportToCsv}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Export to CSV
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Summary Stats */}
-      {chartData.length > 0 && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+      {chartData.length > 0 && seriesKeys.length > 0 && (
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mb-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               <span className="text-sm font-medium text-gray-700">Active Series</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
-              {getSeriesKeys().length}
+            <p className="text-2xl font-bold text-gray-900">
+              {seriesKeys.length}
             </p>
           </div>
           
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mb-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
               <span className="text-sm font-medium text-gray-700">Data Points</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+            <p className="text-2xl font-bold text-gray-900">
               {chartData.length}
             </p>
           </div>
           
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mb-2">
               <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
               <span className="text-sm font-medium text-gray-700">Regions</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+            <p className="text-2xl font-bold text-gray-900">
               {selectedRegions.includes('ALL') ? availableRegions.length - 1 : selectedRegions.length}
             </p>
           </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-              <span className="text-sm font-medium text-gray-700">Profile</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
-              {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)}
-            </p>
-          </div>
+
+          {summaryStats && (
+            <>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                  <span className="text-sm font-medium text-gray-700">Average Price</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(summaryStats.avg)}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <span className="text-sm font-medium text-gray-700">Price Range</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900">
+                  {formatCurrency(summaryStats.min)} - {formatCurrency(summaryStats.max)}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

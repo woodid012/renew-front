@@ -31,7 +31,29 @@ const AssetForm = ({
   };
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-calculate durationHours for storage assets when volume or capacity changes
+      if (prev.type === 'storage' && (field === 'volume' || field === 'capacity')) {
+        const volume = field === 'volume' ? parseFloat(value) || 0 : parseFloat(prev.volume) || 0;
+        const capacity = field === 'capacity' ? parseFloat(value) || 0 : parseFloat(prev.capacity) || 0;
+        
+        // Only auto-calculate if both values are present and durationHours wasn't manually set
+        if (volume > 0 && capacity > 0) {
+          const calculatedDuration = volume / capacity;
+          // Only update if durationHours is empty or matches previous calculated value (to allow manual override)
+          if (!prev.durationHours || Math.abs(parseFloat(prev.durationHours) - calculatedDuration) < 0.01) {
+            updated.durationHours = calculatedDuration.toFixed(2);
+          }
+        } else if (volume === 0 || capacity === 0) {
+          // Clear duration if volume or capacity is cleared
+          updated.durationHours = '';
+        }
+      }
+      
+      return updated;
+    });
   };
 
   const handleContractChange = (contractIndex, field, value) => {
@@ -175,16 +197,35 @@ const AssetForm = ({
                     />
                   </div>
                   {formData.type === 'storage' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Storage Volume (MWh)</label>
-                      <input
-                        type="number"
-                        value={safeValue(formData.volume)}
-                        onChange={(e) => handleInputChange('volume', e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        step="0.1"
-                      />
-                    </div>
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Storage Volume (MWh)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.volume)}
+                          onChange={(e) => handleInputChange('volume', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (hours)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.durationHours || (formData.volume && formData.capacity ? (parseFloat(formData.volume) / parseFloat(formData.capacity)).toFixed(2) : ''))}
+                          onChange={(e) => handleInputChange('durationHours', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                          min="0.1"
+                          placeholder="Auto-calculated from Volume/Capacity"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          {formData.volume && formData.capacity && parseFloat(formData.volume) > 0 && parseFloat(formData.capacity) > 0
+                            ? `Calculated: ${(parseFloat(formData.volume) / parseFloat(formData.capacity)).toFixed(2)}h (Volume ÷ Capacity). Used for merchant price curve lookup.`
+                            : 'Used for merchant price curve lookup. Auto-calculated from Volume ÷ Capacity when both are set.'}
+                        </p>
+                      </div>
+                    </>
                   )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Asset Life (years)</label>

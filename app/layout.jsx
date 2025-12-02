@@ -4,10 +4,10 @@ import './globals.css'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  Building2, 
-  Home, 
-  TrendingUp, 
+import {
+  Building2,
+  Home,
+  TrendingUp,
   Calculator,
   Settings,
   Menu,
@@ -57,16 +57,10 @@ const navigationItems = [
     icon: Calculator,
     section: 'analysis'
   },
-  
+
   {
-    name: 'Asset Output',
-    href: '/pages/output-asset',
-    icon: TrendingUp,
-    section: 'analysis'
-  },
-  {
-    name: 'Portfolio Output',
-    href: '/pages/output-portfolio',
+    name: 'Outputs',
+    href: '/pages/output',
     icon: TrendingUp,
     section: 'analysis'
   },
@@ -124,12 +118,6 @@ const navigationItems = [
     icon: Wifi,
     section: 'testing'
   },
-  {
-    name: 'Default Calculation Inputs',
-    href: '/pages/settings/defaults',
-    icon: Calculator,
-    section: 'testing'
-  },
 ]
 
 function LayoutContent({ children }) {
@@ -145,7 +133,7 @@ function LayoutContent({ children }) {
     <div className="min-h-screen flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -191,7 +179,7 @@ function LayoutContent({ children }) {
               // Render navigation items
               const Icon = item.icon
               const isActive = pathname === item.href
-              
+
               return (
                 <Link
                   key={item.name}
