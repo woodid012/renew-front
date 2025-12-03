@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link';
-import { Settings, Sliders, DollarSign, FileText } from 'lucide-react';
+import { Settings, Sliders, DollarSign, FileText, Users, Shield } from 'lucide-react';
 
 export default function SettingsPage() {
   const settingsSections = [
@@ -11,6 +11,13 @@ export default function SettingsPage() {
       href: '/pages/settings/asset-defaults',
       icon: Sliders,
       color: 'green'
+    },
+    {
+      title: 'Administrator',
+      description: 'Manage accounts and user access controls',
+      href: '/pages/settings/administrator',
+      icon: Shield,
+      color: 'blue'
     }
   ];
 

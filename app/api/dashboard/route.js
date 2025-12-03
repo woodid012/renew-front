@@ -1,11 +1,18 @@
 // app/api/dashboard/route.js
 import { NextResponse } from 'next/server'
 import clientPromise from '../../../lib/mongodb'
+import { getPortfolioAssetIds } from '../utils/portfolio-helper'
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+    
     const client = await clientPromise
     const db = client.db(process.env.MONGODB_DB)
+    
+    // Get asset IDs for this portfolio
+    const portfolioAssetIds = await getPortfolioAssetIds(db, portfolio);
     
     // Get collections
     const cashFlowCollection = db.collection('ASSET_cash_flows')
@@ -13,6 +20,8 @@ export async function GET() {
     
     // 1. Portfolio CAPEX/Debt/Equity metrics from cash flows
     const capexPipeline = [
+      // Always filter by portfolio asset IDs
+      { $match: { asset_id: { $in: portfolioAssetIds } } },
       {
         $group: {
           _id: null,
@@ -25,6 +34,8 @@ export async function GET() {
     
     // 2. Revenue/OPEX metrics from cash flows
     const revenuePipeline = [
+      // Always filter by portfolio asset IDs
+      { $match: { asset_id: { $in: portfolioAssetIds } } },
       {
         $group: {
           _id: null,
@@ -38,12 +49,23 @@ export async function GET() {
     
     // 3. Asset count from cash flows
     const assetCountPipeline = [
+      // Always filter by portfolio asset IDs
+      { $match: { asset_id: { $in: portfolioAssetIds } } },
       { $group: { _id: '$asset_id' } },
       { $count: 'totalAssets' }
     ]
     
     // 4. Asset type/region breakdown from inputs if available
+    // Note: ASSET_inputs_summary may not have asset_id, so we'll filter by matching names from CONFIG_Inputs
+    const configCollection = db.collection('CONFIG_Inputs');
+    const portfolioConfig = await configCollection.findOne({ PlatformName: portfolio.trim() });
+    const portfolioAssetNames = portfolioConfig && portfolioConfig.asset_inputs 
+      ? portfolioConfig.asset_inputs.map(a => a.name).filter(Boolean)
+      : [];
+    
     const assetTypesPipeline = [
+      // Filter by asset names if we have them
+      ...(portfolioAssetNames.length > 0 ? [{ $match: { asset_name: { $in: portfolioAssetNames } } }] : []),
       {
         $group: {
           _id: '$type',
@@ -53,6 +75,8 @@ export async function GET() {
     ]
     
     const assetRegionsPipeline = [
+      // Filter by asset names if we have them
+      ...(portfolioAssetNames.length > 0 ? [{ $match: { asset_name: { $in: portfolioAssetNames } } }] : []),
       {
         $group: {
           _id: '$region',
@@ -63,6 +87,8 @@ export async function GET() {
     
     // 5. Total capacity from inputs if available
     const capacityPipeline = [
+      // Filter by asset names if we have them
+      ...(portfolioAssetNames.length > 0 ? [{ $match: { asset_name: { $in: portfolioAssetNames } } }] : []),
       {
         $group: {
           _id: null,

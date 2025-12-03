@@ -8,9 +8,9 @@
 import { useState, useEffect } from 'react'
 import { Bar } from 'react-chartjs-2'
 import { Chart, registerables } from 'chart.js'
-import { 
-  Building2, 
-  TrendingUp, 
+import {
+  Building2,
+  TrendingUp,
   Calculator,
   DollarSign,
   BarChart3,
@@ -30,10 +30,12 @@ import {
   Users,
   Activity
 } from 'lucide-react'
+import { usePortfolio } from '../../context/PortfolioContext'
 
 Chart.register(...registerables)
 
 export default function DashboardPage() {
+  const { selectedPortfolio } = usePortfolio()
   const [dashboardData, setDashboardData] = useState(null)
   const [assetInputsData, setAssetInputsData] = useState(null)
   const [portfolioData, setPortfolioData] = useState(null)
@@ -41,52 +43,123 @@ export default function DashboardPage() {
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [expandedAsset, setExpandedAsset] = useState(null)
+  const [hasInitialFetch, setHasInitialFetch] = useState(false)
 
+  // Initial fetch - read directly from localStorage to avoid race condition with context initialization
   useEffect(() => {
-    fetchAllDashboardData()
-  }, [])
+    // Read from localStorage directly (synchronous, available immediately)
+    // This runs only once on mount, before context has initialized
+    const initialPortfolio = typeof window !== 'undefined'
+      ? localStorage.getItem('selectedPortfolio') || 'ZEBRE'
+      : 'ZEBRE'
 
-  const fetchAllDashboardData = async () => {
+    console.log('Dashboard - Initial fetch for portfolio (from localStorage):', initialPortfolio)
+    fetchAllDashboardData(initialPortfolio)
+    setHasInitialFetch(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps - only run once on mount
+
+  // Listen for portfolio changes from context or events
+  useEffect(() => {
+    // Skip if this is the initial mount (handled by the first useEffect)
+    if (!hasInitialFetch) return
+
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('selectedPortfolio') : null
+
+    // If context is 'ZEBRE' (default) but storage is different, ignore context update (it's likely stale/initializing)
+    if (selectedPortfolio === 'ZEBRE' && stored && stored !== 'ZEBRE') {
+      console.log('Dashboard - Ignoring stale context (ZEBRE) in favor of localStorage:', stored)
+      return
+    }
+
+    // Use the portfolio from context (which should now be synced with localStorage)
+    const portfolio = selectedPortfolio || stored || 'ZEBRE'
+    console.log('Dashboard - Portfolio changed (from context):', portfolio)
+    fetchAllDashboardData(portfolio)
+  }, [selectedPortfolio, hasInitialFetch])
+
+  // Listen for portfolio change events
+  useEffect(() => {
+    const handlePortfolioChange = (event) => {
+      // Use the portfolio from the event detail (most reliable)
+      const portfolio = event?.detail?.portfolio || selectedPortfolio || (typeof window !== 'undefined' ? localStorage.getItem('selectedPortfolio') : null) || 'ZEBRE'
+      console.log('Dashboard - Portfolio changed event received:', portfolio)
+      fetchAllDashboardData(portfolio)
+    }
+
+    window.addEventListener('portfolioChanged', handlePortfolioChange)
+    return () => window.removeEventListener('portfolioChanged', handlePortfolioChange)
+  }, [selectedPortfolio])
+
+  const fetchAllDashboardData = async (portfolioOverride) => {
     try {
       setLoading(true)
-      
+
+      // Use the portfolio from the parameter, context, or localStorage as fallback
+      // Ensure portfolioOverride is a string (it might be an event object if called from a button)
+      let portfolioToUse = (typeof portfolioOverride === 'string' ? portfolioOverride : null)
+        || selectedPortfolio
+        || (typeof window !== 'undefined' ? localStorage.getItem('selectedPortfolio') : null)
+        || 'ZEBRE'
+
+      console.log('Dashboard - Fetching data for portfolio:', portfolioToUse)
+
       // Fetch asset output summary data and portfolio revenue/net income data
       const [assetOutputResponse, revenueResponse, netIncomeResponse] = await Promise.all([
-        fetch('/api/dashboard/asset-output-summary'),
-        fetch('/api/all-assets-summary?period=yearly&field=revenue').catch(err => {
+        fetch(`/api/dashboard/asset-output-summary?portfolio=${encodeURIComponent(portfolioToUse)}`),
+        fetch(`/api/all-assets-summary?period=yearly&field=revenue&portfolio=${encodeURIComponent(portfolioToUse)}`).catch(err => {
           console.warn('Revenue data API not available:', err)
           return { ok: false, status: 404 }
         }),
-        fetch('/api/all-assets-summary?period=yearly&field=net_income').catch(err => {
+        fetch(`/api/all-assets-summary?period=yearly&field=net_income&portfolio=${encodeURIComponent(portfolioToUse)}`).catch(err => {
           console.warn('Net income data API not available:', err)
           return { ok: false, status: 404 }
         })
       ])
-      
+
       if (!assetOutputResponse.ok) {
         throw new Error('Failed to fetch asset output summary data')
       }
-      
+
       const assetOutputData = await assetOutputResponse.json()
+      console.log('Dashboard - Asset output data:', {
+        assetCount: assetOutputData.assets?.length || 0,
+        assetIds: assetOutputData.assets?.map(a => a.asset_id) || [],
+        assetNames: assetOutputData.assets?.map(a => a.asset_name) || []
+      })
       setAssetInputsData(assetOutputData)
 
       // Handle portfolio data responses
       let portfolioChartData = { revenue: null, netIncome: null }
-      
+
       if (revenueResponse.ok) {
         const revenueData = await revenueResponse.json()
         portfolioChartData.revenue = revenueData.data
+        console.log('Dashboard - Revenue data:', {
+          hasData: !!revenueData.data,
+          periods: revenueData.data ? Object.keys(revenueData.data) : [],
+          assetIdsInData: revenueData.data ? Object.values(revenueData.data).flatMap(p => Object.keys(p)) : []
+        })
+      } else {
+        console.warn('Dashboard - Revenue response not OK:', revenueResponse.status)
       }
-      
+
       if (netIncomeResponse.ok) {
         const netIncomeData = await netIncomeResponse.json()
         portfolioChartData.netIncome = netIncomeData.data
+        console.log('Dashboard - Net income data:', {
+          hasData: !!netIncomeData.data,
+          periods: netIncomeData.data ? Object.keys(netIncomeData.data) : [],
+          assetIdsInData: netIncomeData.data ? Object.values(netIncomeData.data).flatMap(p => Object.keys(p)) : []
+        })
+      } else {
+        console.warn('Dashboard - Net income response not OK:', netIncomeResponse.status)
       }
-      
+
       setPortfolioData(portfolioChartData)
       setLastUpdated(new Date())
       setError(null)
-      
+
     } catch (err) {
       console.error('Dashboard data fetch error:', err)
       setError(err.message)
@@ -127,28 +200,60 @@ export default function DashboardPage() {
 
   // Generate portfolio chart data
   const generateChartData = (data, assetInputsData, fieldName) => {
-    if (!data || !assetInputsData) return null
+    if (!data || !assetInputsData) {
+      console.log(`Dashboard - generateChartData: Missing data for ${fieldName}`, {
+        hasData: !!data,
+        hasAssetInputsData: !!assetInputsData
+      })
+      return null
+    }
 
+    // Build asset name map from assetInputsData
     const assetNames = {}
     assetInputsData.assets.forEach(asset => {
       assetNames[asset.asset_id] = asset.asset_name
     })
 
     const periods = Object.keys(data).sort()
-    const assetIds = assetInputsData.assets.map(asset => asset.asset_id)
-    
+
+    // Get unique asset IDs that actually appear in the data (not just from summary)
+    const assetIdsInData = new Set()
+    periods.forEach(period => {
+      Object.keys(data[period] || {}).forEach(assetId => {
+        assetIdsInData.add(parseInt(assetId))
+      })
+    })
+    const assetIds = Array.from(assetIdsInData).sort()
+
+    console.log(`Dashboard - generateChartData for ${fieldName}:`, {
+      periods: periods.length,
+      assetIds: assetIds,
+      assetNames: assetIds.map(id => assetNames[id] || `Asset ${id}`),
+      dataKeys: periods.map(p => ({ period: p, assetIds: Object.keys(data[p] || {}) }))
+    })
+
     const colors = [
       '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
       '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'
     ]
 
-    const datasets = assetIds.map((assetId, index) => ({
-      label: assetNames[assetId] || `Asset ${assetId}`,
-      data: periods.map(period => (data[period][assetId] || 0)), // Values already in millions
-      backgroundColor: colors[index % colors.length],
-      borderColor: colors[index % colors.length],
-      borderWidth: 0,
-    }))
+    const datasets = assetIds.map((assetId, index) => {
+      const values = periods.map(period => {
+        const value = data[period]?.[assetId] || 0
+        return value
+      })
+      console.log(`Dashboard - Dataset for asset ${assetId} (${assetNames[assetId] || 'Unknown'}):`, {
+        values: values,
+        hasNonZero: values.some(v => v !== 0)
+      })
+      return {
+        label: assetNames[assetId] || `Asset ${assetId}`,
+        data: values,
+        backgroundColor: colors[index % colors.length],
+        borderColor: colors[index % colors.length],
+        borderWidth: 0,
+      }
+    })
 
     return {
       labels: periods,
@@ -170,7 +275,7 @@ export default function DashboardPage() {
       },
       tooltip: {
         callbacks: {
-          label: function(context) {
+          label: function (context) {
             const value = context.parsed.y
             const assetName = context.dataset.label
             return `${assetName}: $${value.toFixed(1)}M`
@@ -195,7 +300,7 @@ export default function DashboardPage() {
           font: { size: 12, weight: 'bold' }
         },
         ticks: {
-          callback: function(value) {
+          callback: function (value) {
             return `$${value.toFixed(0)}M`
           }
         }
@@ -224,7 +329,7 @@ export default function DashboardPage() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Dashboard</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button 
+          <button
             onClick={fetchAllDashboardData}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
           >
@@ -345,12 +450,31 @@ export default function DashboardPage() {
           </div>
           <div style={{ width: '100%', height: '300px' }}>
             {revenueChartData ? (
-              <Bar data={revenueChartData} options={chartOptions} />
+              revenueChartData.datasets.some(ds => ds.data.some(v => v !== 0)) ? (
+                <Bar data={revenueChartData} options={chartOptions} />
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 font-medium mb-2">No revenue data available</p>
+                    <p className="text-sm text-gray-500">
+                      {assetInputsData && assetInputsData.assets && assetInputsData.assets.length > 0
+                        ? 'Run the model to generate revenue data for your assets'
+                        : 'No assets found in this portfolio'}
+                    </p>
+                  </div>
+                </div>
+              )
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
                   <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No revenue data available</p>
+                  <p className="text-gray-600 font-medium mb-2">No revenue data available</p>
+                  <p className="text-sm text-gray-500">
+                    {assetInputsData && assetInputsData.assets && assetInputsData.assets.length > 0
+                      ? 'Run the model to generate revenue data for your assets'
+                      : 'No assets found in this portfolio'}
+                  </p>
                 </div>
               </div>
             )}
@@ -368,12 +492,31 @@ export default function DashboardPage() {
           </div>
           <div style={{ width: '100%', height: '300px' }}>
             {netIncomeChartData ? (
-              <Bar data={netIncomeChartData} options={chartOptions} />
+              netIncomeChartData.datasets.some(ds => ds.data.some(v => v !== 0)) ? (
+                <Bar data={netIncomeChartData} options={chartOptions} />
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 font-medium mb-2">No net income data available</p>
+                    <p className="text-sm text-gray-500">
+                      {assetInputsData && assetInputsData.assets && assetInputsData.assets.length > 0
+                        ? 'Run the model to generate net income data for your assets'
+                        : 'No assets found in this portfolio'}
+                    </p>
+                  </div>
+                </div>
+              )
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
                   <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No net income data available</p>
+                  <p className="text-gray-600 font-medium mb-2">No net income data available</p>
+                  <p className="text-sm text-gray-500">
+                    {assetInputsData && assetInputsData.assets && assetInputsData.assets.length > 0
+                      ? 'Run the model to generate net income data for your assets'
+                      : 'No assets found in this portfolio'}
+                  </p>
                 </div>
               </div>
             )}
@@ -391,7 +534,7 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold text-gray-900">Asset Portfolio Summary</h3>
             <p className="text-sm text-gray-600">Key financial metrics from ASSET_Output_Summary</p>
           </div>
-          
+
           <div className="overflow-x-auto">
             {assetInputsData && assetInputsData.assets ? (
               <table className="min-w-full divide-y divide-gray-200">
@@ -442,7 +585,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          
+
           {assetInputsData && assetInputsData.assets && assetInputsData.assets.length > 0 && (
             <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-500">
               Showing all {assetInputsData.assets.length} assets

@@ -6,9 +6,9 @@ import AssetCards from './components/AssetCards';
 import BulkEdit from './components/BulkEdit';
 import ImportExport from './components/ImportExport';
 import AssetForm from './components/AssetForm';
-import { 
-  Plus, 
-  Save, 
+import {
+  Plus,
+  Save,
   X,
   Zap,
   AlertCircle,
@@ -23,12 +23,12 @@ const Asset3Page = () => {
   const [originalAssets, setOriginalAssets] = useState({});
   const [originalConstants, setOriginalConstants] = useState({});
   const [originalPlatformName, setOriginalPlatformName] = useState('');
-  
+
   // Local working state
   const [assets, setAssets] = useState({});
   const [constants, setConstants] = useState({});
   const [platformName, setPlatformName] = useState('');
-  
+
   // UI state
   const [currentView, setCurrentView] = useState('cards'); // 'cards', 'bulk', 'import'
   const [showForm, setShowForm] = useState(false);
@@ -39,6 +39,7 @@ const Asset3Page = () => {
   const [configDocId, setConfigDocId] = useState(null);
   const [platformID, setPlatformID] = useState('');
   const [platformInputs, setPlatformInputs] = useState(null);
+  const [assetDefaults, setAssetDefaults] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -68,31 +69,67 @@ const Asset3Page = () => {
   // Load asset data on component mount
   useEffect(() => {
     loadAssetData();
+    loadDefaults();
   }, []);
+
+  // Listen for portfolio changes
+  useEffect(() => {
+    const handlePortfolioChange = (event) => {
+      const newPortfolio = event.detail.portfolio;
+      // Reload asset data when portfolio changes
+      loadAssetData(newPortfolio);
+    };
+
+    window.addEventListener('portfolioChanged', handlePortfolioChange);
+    return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
+  }, []);
+
+  const loadDefaults = async () => {
+    try {
+      const response = await fetch('/api/asset-defaults');
+      if (response.ok) {
+        const data = await response.json();
+        setAssetDefaults(data);
+      }
+    } catch (error) {
+      console.error('Error loading asset defaults:', error);
+    }
+  };
 
   // Check for changes when local state updates
   useEffect(() => {
     const assetsChanged = JSON.stringify(assets) !== JSON.stringify(originalAssets);
     const constantsChanged = JSON.stringify(constants) !== JSON.stringify(originalConstants);
     const nameChanged = platformName !== originalPlatformName;
-    
+
     setHasUnsavedChanges(assetsChanged || constantsChanged || nameChanged);
   }, [assets, constants, platformName, originalAssets, originalConstants, originalPlatformName]);
 
-  const loadAssetData = async () => {
+  const loadAssetData = async (portfolio = null) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/get-asset-data');
+      // Get portfolio from localStorage if not provided
+      const selectedPortfolio = portfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+      const response = await fetch(`/api/get-asset-data?portfolio=${encodeURIComponent(selectedPortfolio)}`);
       if (!response.ok) {
         throw new Error('Failed to fetch asset data');
       }
       const data = await response.json();
-      
+      console.log(`Loaded data for portfolio: ${data.PlatformName}, requested: ${selectedPortfolio}, assets count: ${data.asset_inputs?.length || 0}`);
+
+      // Verify the returned data matches the requested portfolio
+      if (data.PlatformName !== selectedPortfolio) {
+        console.warn(`Portfolio mismatch! Requested: ${selectedPortfolio}, Got: ${data.PlatformName}`);
+      }
+
       // Convert array to object format with asset.id as key
       const assetsObject = {};
       const constantsObject = { assetCosts: {} };
-      
-      data.asset_inputs.forEach(asset => {
+
+      // Ensure asset_inputs is an array
+      const assetInputs = Array.isArray(data.asset_inputs) ? data.asset_inputs : [];
+
+      assetInputs.forEach(asset => {
         // Calculate durationHours for storage assets if not set
         let processedAsset = {
           ...asset,
@@ -100,7 +137,7 @@ const Asset3Page = () => {
           state: asset.region || 'NSW',
           assetStartDate: asset.OperatingStartDate
         };
-        
+
         // Auto-calculate durationHours for storage assets
         if (asset.type === 'storage' && (!asset.durationHours || asset.durationHours === '')) {
           const volume = parseFloat(asset.volume) || 0;
@@ -109,33 +146,33 @@ const Asset3Page = () => {
             processedAsset.durationHours = (volume / capacity).toFixed(2);
           }
         }
-        
+
         assetsObject[asset.id] = processedAsset;
-        
+
         // Extract cost assumptions to constants
         if (asset.costAssumptions) {
           constantsObject.assetCosts[asset.name] = asset.costAssumptions;
         }
       });
-      
+
       // Set original data
       setOriginalAssets(assetsObject);
       setOriginalConstants(constantsObject);
       setOriginalPlatformName(data.PlatformName || '');
-      
+
       // Set working data (copies)
       setAssets(JSON.parse(JSON.stringify(assetsObject)));
       setConstants(JSON.parse(JSON.stringify(constantsObject)));
       setPlatformName(data.PlatformName || '');
-      
+
       // Set other platform data
       setConfigDocId(data._id);
       setPlatformID(data.PlatformID || '');
       setPlatformInputs(data.platformInputs || null);
-      
+
       // Reset unsaved changes flag
       setHasUnsavedChanges(false);
-      
+
     } catch (error) {
       console.error('Error loading asset data:', error);
       alert('Error fetching asset data: ' + error.message);
@@ -184,7 +221,7 @@ const Asset3Page = () => {
       setOriginalConstants(JSON.parse(JSON.stringify(constants)));
       setOriginalPlatformName(platformName);
       setHasUnsavedChanges(false);
-      
+
       alert('Asset data saved successfully.');
       return true;
     } catch (error) {
@@ -207,7 +244,7 @@ const Asset3Page = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       let assetId;
       let updatedAssets;
@@ -235,7 +272,7 @@ const Asset3Page = () => {
       } else {
         const existingIds = Object.keys(assets).map(id => parseInt(id)).filter(id => !isNaN(id));
         assetId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
-        
+
         updatedAssets = {
           ...assets,
           [assetId]: {
@@ -249,12 +286,12 @@ const Asset3Page = () => {
 
       // Update local state
       setAssets(updatedAssets);
-      
+
       // Update constants if needed
       if (!constants.assetCosts) {
         setConstants(prev => ({ ...prev, assetCosts: {} }));
       }
-      
+
       if (!constants.assetCosts || !constants.assetCosts[formData.name]) {
         const defaultCosts = getDefaultAssetCosts(formData.type, formData.capacity);
         setConstants(prev => ({
@@ -274,12 +311,31 @@ const Asset3Page = () => {
   };
 
   const getDefaultAssetCosts = (type, capacity) => {
+    // Use loaded defaults if available
+    if (assetDefaults && assetDefaults.assetDefaults && assetDefaults.assetDefaults[type]) {
+      const defaults = assetDefaults.assetDefaults[type].costAssumptions;
+      const cap = parseFloat(capacity) || 100;
+
+      return {
+        capex: Math.round((defaults.capexPerMW || 1.0) * cap * 10) / 10,
+        operatingCosts: Math.round((defaults.opexPerMWPerYear || 0.02) * cap * 100) / 100,
+        operatingCostEscalation: defaults.operatingCostEscalation || 2.5,
+        terminalValue: Math.round((defaults.terminalValuePerMW || 0) * cap * 10) / 10,
+        maxGearing: defaults.maxGearing || 0.65,
+        targetDSCRContract: defaults.targetDSCRContract || 1.4,
+        targetDSCRMerchant: defaults.targetDSCRMerchant || 1.8,
+        interestRate: defaults.interestRate || 0.06,
+        tenorYears: defaults.tenorYears || 20,
+        debtStructure: defaults.debtStructure || 'sculpting'
+      };
+    }
+
     const capexRates = { solar: 0.9, wind: 1.5, storage: 2.0 };
     const opexRates = { solar: 0.01, wind: 0.02, storage: 0.03 };
-    
+
     const capex = (capexRates[type] || 1.0) * (capacity || 100);
     const operatingCosts = (opexRates[type] || 0.02) * (capacity || 100);
-    
+
     return {
       capex: Math.round(capex * 10) / 10,
       operatingCosts: Math.round(operatingCosts * 100) / 100,
@@ -294,16 +350,43 @@ const Asset3Page = () => {
     };
   };
 
-  const resetForm = () => {
-    setFormData({
+  const handleAddNew = () => {
+    let initialData = {
       name: '', region: 'NSW', type: 'solar', capacity: '', assetLife: 25,
       volumeLossAdjustment: 95, annualDegradation: 0.5, constructionStartDate: '',
       constructionDuration: 18, OperatingStartDate: '', qtrCapacityFactor_q1: '',
       qtrCapacityFactor_q2: '', qtrCapacityFactor_q3: '', qtrCapacityFactor_q4: '',
       volume: '', durationHours: '', contracts: []
-    });
+    };
+
+    // Apply defaults if available
+    if (assetDefaults && assetDefaults.assetDefaults) {
+      const typeDefaults = assetDefaults.assetDefaults['solar'];
+      if (typeDefaults) {
+        initialData.assetLife = typeDefaults.assetLife;
+        initialData.volumeLossAdjustment = typeDefaults.volumeLossAdjustment;
+        initialData.annualDegradation = typeDefaults.annualDegradation;
+        initialData.constructionDuration = typeDefaults.constructionDuration;
+
+        if (typeDefaults.capacityFactors && typeDefaults.capacityFactors['NSW']) {
+          const factors = typeDefaults.capacityFactors['NSW'];
+          initialData.qtrCapacityFactor_q1 = factors.q1;
+          initialData.qtrCapacityFactor_q2 = factors.q2;
+          initialData.qtrCapacityFactor_q3 = factors.q3;
+          initialData.qtrCapacityFactor_q4 = factors.q4;
+        }
+      }
+    }
+
+    setFormData(initialData);
+    setEditingAsset(null);
+    setShowForm(true);
+  };
+
+  const resetForm = () => {
     setShowForm(false);
     setEditingAsset(null);
+    // We don't strictly need to reset formData here as it gets reset on open
   };
 
   const handleEdit = (asset) => {
@@ -324,8 +407,8 @@ const Asset3Page = () => {
       qtrCapacityFactor_q3: safeValue(asset.qtrCapacityFactor_q3),
       qtrCapacityFactor_q4: safeValue(asset.qtrCapacityFactor_q4),
       volume: safeValue(asset.volume),
-      durationHours: safeValue(asset.durationHours) || (asset.type === 'storage' && asset.volume && asset.capacity && parseFloat(asset.volume) > 0 && parseFloat(asset.capacity) > 0 
-        ? (parseFloat(asset.volume) / parseFloat(asset.capacity)).toFixed(2) 
+      durationHours: safeValue(asset.durationHours) || (asset.type === 'storage' && asset.volume && asset.capacity && parseFloat(asset.volume) > 0 && parseFloat(asset.capacity) > 0
+        ? (parseFloat(asset.volume) / parseFloat(asset.capacity)).toFixed(2)
         : ''),
       contracts: asset.contracts ? asset.contracts.map(contract => ({
         id: safeValue(contract.id) || Date.now().toString(),
@@ -343,7 +426,21 @@ const Asset3Page = () => {
         greenPrice: safeValue(contract.greenPrice)
       })) : []
     };
-    
+
+    // Prepopulate missing capacity factors from defaults if available
+    if (assetDefaults && assetDefaults.assetDefaults && cleanedAsset.type !== 'storage') {
+      const typeDefaults = assetDefaults.assetDefaults[cleanedAsset.type];
+      if (typeDefaults && typeDefaults.capacityFactors) {
+        const regionFactors = typeDefaults.capacityFactors[cleanedAsset.region];
+        if (regionFactors) {
+          if (!cleanedAsset.qtrCapacityFactor_q1) cleanedAsset.qtrCapacityFactor_q1 = regionFactors.q1;
+          if (!cleanedAsset.qtrCapacityFactor_q2) cleanedAsset.qtrCapacityFactor_q2 = regionFactors.q2;
+          if (!cleanedAsset.qtrCapacityFactor_q3) cleanedAsset.qtrCapacityFactor_q3 = regionFactors.q3;
+          if (!cleanedAsset.qtrCapacityFactor_q4) cleanedAsset.qtrCapacityFactor_q4 = regionFactors.q4;
+        }
+      }
+    }
+
     setFormData(cleanedAsset);
     setEditingAsset(asset);
     setShowForm(true);
@@ -354,7 +451,7 @@ const Asset3Page = () => {
       const updatedAssets = { ...assets };
       delete updatedAssets[assetId];
       setAssets(updatedAssets);
-      
+
       if (constants.assetCosts && assets[assetId]) {
         const updatedConstants = { ...constants };
         if (updatedConstants.assetCosts) {
@@ -443,7 +540,7 @@ const Asset3Page = () => {
             )}
           </div>
           <p className="text-gray-600">
-            {Object.keys(assets).length} assets • {calculateTotalCapacity().toFixed(1)} MW • 
+            {Object.keys(assets).length} assets • {calculateTotalCapacity().toFixed(1)} MW •
             ${calculateTotalValue().toFixed(1)}M CAPEX
           </p>
           <p className="text-sm text-gray-500">
@@ -463,11 +560,10 @@ const Asset3Page = () => {
           <button
             onClick={saveAssetData}
             disabled={saving || !hasUnsavedChanges}
-            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-              hasUnsavedChanges 
-                ? 'bg-green-600 text-white hover:bg-green-700' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${hasUnsavedChanges
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
           >
             {saving ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -477,7 +573,7 @@ const Asset3Page = () => {
             <span>{saving ? 'Saving...' : 'Save Changes'}</span>
           </button>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={handleAddNew}
             className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700"
           >
             <Plus className="w-4 h-4" />
@@ -499,11 +595,10 @@ const Asset3Page = () => {
               <button
                 key={tab.id}
                 onClick={() => setCurrentView(tab.id)}
-                className={`py-4 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                  currentView === tab.id
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 border-b-2 font-medium text-sm flex items-center space-x-2 ${currentView === tab.id
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
@@ -518,10 +613,12 @@ const Asset3Page = () => {
         <AssetCards
           assets={assets}
           constants={constants}
+          setConstants={setConstants}
+          setHasUnsavedChanges={setHasUnsavedChanges}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
-          onAddNew={() => setShowForm(true)}
+          onAddNew={handleAddNew}
         />
       )}
 
@@ -556,14 +653,14 @@ const Asset3Page = () => {
         onSubmit={handleSubmit}
         onCancel={resetForm}
         getDefaultAssetCosts={getDefaultAssetCosts}
+        assetDefaults={assetDefaults}
       />
 
       {/* Status Information */}
-      <div className={`border rounded-lg p-4 ${
-        hasUnsavedChanges 
-          ? 'bg-orange-50 border-orange-200' 
-          : 'bg-green-50 border-green-200'
-      }`}>
+      <div className={`border rounded-lg p-4 ${hasUnsavedChanges
+        ? 'bg-orange-50 border-orange-200'
+        : 'bg-green-50 border-green-200'
+        }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             {hasUnsavedChanges ? (
@@ -571,18 +668,16 @@ const Asset3Page = () => {
             ) : (
               <CheckCircle className="w-5 h-5 text-green-500" />
             )}
-            <span className={`font-medium ${
-              hasUnsavedChanges ? 'text-orange-800' : 'text-green-800'
-            }`}>
-              {hasUnsavedChanges 
+            <span className={`font-medium ${hasUnsavedChanges ? 'text-orange-800' : 'text-green-800'
+              }`}>
+              {hasUnsavedChanges
                 ? 'You have unsaved changes - remember to save your work'
                 : 'All changes saved to MongoDB'
               }
             </span>
           </div>
-          <div className={`text-sm ${
-            hasUnsavedChanges ? 'text-orange-600' : 'text-green-600'
-          }`}>
+          <div className={`text-sm ${hasUnsavedChanges ? 'text-orange-600' : 'text-green-600'
+            }`}>
             Current View: {currentView === 'cards' ? 'Asset Cards' : currentView === 'bulk' ? 'Bulk Edit' : 'Import/Export'}
           </div>
         </div>

@@ -1,7 +1,7 @@
 // app/pages/three-way-forecast/page.jsx
 'use client'
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Calendar,
   Building2,
@@ -34,6 +34,7 @@ import {
   ResponsiveContainer,
   ComposedChart
 } from 'recharts';
+import { usePortfolio } from '../../context/PortfolioContext';
 
 const CHART_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -41,6 +42,7 @@ const CHART_COLORS = [
 ];
 
 const ThreeWayForecastPage = () => {
+  const { selectedPortfolio } = usePortfolio();
   const [assetIds, setAssetIds] = useState([]);
   const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
   const [selectedAssetId, setSelectedAssetId] = useState('');
@@ -49,6 +51,12 @@ const ThreeWayForecastPage = () => {
   const [error, setError] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('yearly');
   const [showCharts, setShowCharts] = useState(true);
+  
+  // Refs for synchronized scrolling
+  const pnlScrollRef = useRef(null);
+  const balanceSheetScrollRef = useRef(null);
+  const cashFlowScrollRef = useRef(null);
+  const isScrollingRef = useRef(false);
 
   const periods = [
     { key: 'monthly', label: 'Monthly', icon: Calendar },
@@ -61,7 +69,8 @@ const ThreeWayForecastPage = () => {
     const fetchAssetIds = async () => {
       setLoading(true);
       try {
-        const response = await fetch('/api/three-way-forecast');
+        const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+        const response = await fetch(`/api/three-way-forecast?portfolio=${encodeURIComponent(portfolio)}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -82,7 +91,14 @@ const ThreeWayForecastPage = () => {
       }
     };
     fetchAssetIds();
-  }, []);
+    
+    // Listen for portfolio changes
+    const handlePortfolioChange = () => {
+      fetchAssetIds();
+    };
+    window.addEventListener('portfolioChanged', handlePortfolioChange);
+    return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
+  }, [selectedPortfolio]);
 
   useEffect(() => {
     const fetchForecastData = async () => {
@@ -90,7 +106,8 @@ const ThreeWayForecastPage = () => {
         setLoading(true);
         setForecastData([]);
         try {
-          const url = `/api/three-way-forecast?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}`;
+          const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+          const url = `/api/three-way-forecast?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}&portfolio=${encodeURIComponent(portfolio)}`;
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -106,6 +123,47 @@ const ThreeWayForecastPage = () => {
     };
     fetchForecastData();
   }, [selectedAssetId, selectedPeriod]);
+
+  // Synchronize horizontal scrolling across all tables
+  useEffect(() => {
+    const scrollRefs = [pnlScrollRef, balanceSheetScrollRef, cashFlowScrollRef].filter(ref => ref.current);
+    
+    if (scrollRefs.length === 0) return;
+
+    const handleScroll = (sourceRef) => {
+      if (isScrollingRef.current) return;
+      isScrollingRef.current = true;
+
+      const scrollLeft = sourceRef.current.scrollLeft;
+      
+      scrollRefs.forEach(ref => {
+        if (ref.current && ref !== sourceRef) {
+          ref.current.scrollLeft = scrollLeft;
+        }
+      });
+
+      // Use requestAnimationFrame to reset the flag after scroll completes
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          isScrollingRef.current = false;
+        }, 50);
+      });
+    };
+
+    const cleanupFunctions = scrollRefs.map(ref => {
+      const scrollHandler = () => handleScroll(ref);
+      ref.current.addEventListener('scroll', scrollHandler);
+      return () => {
+        if (ref.current) {
+          ref.current.removeEventListener('scroll', scrollHandler);
+        }
+      };
+    });
+
+    return () => {
+      cleanupFunctions.forEach(cleanup => cleanup());
+    };
+  }, [forecastData.length]); // Re-run when data changes
 
   const getPeriodLabel = (item) => {
     if (selectedPeriod === 'monthly') {
@@ -323,14 +381,14 @@ const ThreeWayForecastPage = () => {
     return value.toFixed(2);
   };
 
-  const renderTable = (title, fields, icon) => (
+  const renderTable = (title, fields, icon, scrollRef) => (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
       <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
         {icon}
         {title}
       </h3>
       {forecastData.length > 0 ? (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={scrollRef}>
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -714,9 +772,9 @@ const ThreeWayForecastPage = () => {
           </div>
 
           {/* Financial Statements Tables */}
-          {renderTable('Profit & Loss Statement', profitAndLossFields, <TrendingUp className="w-5 h-5 mr-2 text-green-600" />)}
-          {renderTable('Balance Sheet', balanceSheetFields, <PieChart className="w-5 h-5 mr-2 text-blue-600" />)}
-          {renderTable('Cash Flow Statement', cashFlowStatementFields, <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />)}
+          {renderTable('Profit & Loss Statement', profitAndLossFields, <TrendingUp className="w-5 h-5 mr-2 text-green-600" />, pnlScrollRef)}
+          {renderTable('Balance Sheet', balanceSheetFields, <PieChart className="w-5 h-5 mr-2 text-blue-600" />, balanceSheetScrollRef)}
+          {renderTable('Cash Flow Statement', cashFlowStatementFields, <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />, cashFlowScrollRef)}
 
           {/* Key Financial Metrics & Ratios - Moved to Bottom */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">

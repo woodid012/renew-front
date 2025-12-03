@@ -387,6 +387,30 @@ export default function AssetDefaultsPage() {
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                DSCR - Contracted
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={currentAsset.costAssumptions.targetDSCRContract || 1.4}
+                                                onChange={(e) => updateCostAssumption(activeTab, 'targetDSCRContract', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                DSCR - Merchant
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={currentAsset.costAssumptions.targetDSCRMerchant || 1.8}
+                                                onChange={(e) => updateCostAssumption(activeTab, 'targetDSCRMerchant', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>

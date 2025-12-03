@@ -1,14 +1,34 @@
 // app/api/dashboard/asset-output-summary/route.js
 import { NextResponse } from 'next/server'
 import clientPromise from '../../../../lib/mongodb'
+import { getPortfolioAssetIds } from '../../utils/portfolio-helper'
 
-export async function GET() {
+export async function GET(request) {
   try {
     const client = await clientPromise
     const db = client.db(process.env.MONGODB_DB)
     
+    // Get portfolio parameter from query string
+    const { searchParams } = new URL(request.url);
+    const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+    
+    // Get asset IDs for this portfolio
+    const portfolioAssetIds = await getPortfolioAssetIds(db, portfolio);
+    console.log(`Asset output summary - Portfolio: ${portfolio}, Asset IDs: [${portfolioAssetIds.join(', ')}]`);
+    
     const collection = db.collection('ASSET_Output_Summary')
-    const assets = await collection.find({}).toArray()
+    
+    // Filter assets by portfolio asset IDs
+    let assets;
+    if (portfolioAssetIds.length > 0) {
+      assets = await collection.find({ 
+        asset_id: { $in: portfolioAssetIds } 
+      }).toArray();
+    } else {
+      // If no assets found for portfolio, return empty
+      console.warn(`Asset output summary - No asset IDs found for portfolio: ${portfolio}`);
+      assets = [];
+    }
     
     if (assets.length === 0) {
       return NextResponse.json({

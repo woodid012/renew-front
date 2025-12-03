@@ -8,12 +8,17 @@ export async function GET(request) {
     const assetId = searchParams.get('assetId');
     const variablesStr = searchParams.get('variables');
     const granularity = searchParams.get('granularity');
+    const collectionName = searchParams.get('collection') === 'sensitivity' ? 'SENS_Asset_Outputs' : 'ASSET_cash_flows';
+    const scenarioId = searchParams.get('scenario_id');
 
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB);
-    const cashFlowCollection = db.collection('ASSET_cash_flows');
+    const cashFlowCollection = db.collection(collectionName);
 
     let query = {};
+    if (scenarioId) {
+      query.scenario_id = scenarioId;
+    }
     if (assetId) {
       try {
         const assetIdInt = parseInt(assetId);

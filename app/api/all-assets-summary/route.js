@@ -1,6 +1,7 @@
 // app/api/all-assets-summary/route.js
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
+import { getPortfolioAssetIds } from '../utils/portfolio-helper';
 
 export async function GET(request) {
   try {
@@ -11,9 +12,59 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period');
     const field = searchParams.get('field');
+    const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+    
+    // Get asset IDs for this portfolio
+    const portfolioAssetIds = await getPortfolioAssetIds(db, portfolio);
+    console.log(`All assets summary - Portfolio: ${portfolio}, Asset IDs: [${portfolioAssetIds.join(', ')}]`);
 
     if (!period || !field) {
       return NextResponse.json({ error: 'Missing period or field parameter' }, { status: 400 });
+    }
+    
+    if (portfolioAssetIds.length === 0) {
+      console.warn(`All assets summary - No asset IDs found for portfolio: ${portfolio}`);
+      return NextResponse.json({ data: {} });
+    }
+
+    // Get verified asset IDs from ASSET_Output_Summary by matching both asset_id and asset_name
+    // This ensures we only get asset_ids that actually belong to this portfolio
+    const configCollection = db.collection('CONFIG_Inputs');
+    let portfolioConfig = await configCollection.findOne({ PlatformName: portfolio.trim() });
+    if (!portfolioConfig) {
+      const allPortfolios = await configCollection.find({}).toArray();
+      portfolioConfig = allPortfolios.find(p => 
+        p.PlatformName && p.PlatformName.toLowerCase() === portfolio.trim().toLowerCase()
+      );
+    }
+    
+    const portfolioAssetNames = portfolioConfig && portfolioConfig.asset_inputs 
+      ? portfolioConfig.asset_inputs.map(a => a.name).filter(Boolean)
+      : [];
+    
+    // Get verified asset IDs from ASSET_Output_Summary that match both ID and name
+    let verifiedAssetIds = portfolioAssetIds;
+    if (portfolioAssetNames.length > 0) {
+      const outputSummaryCollection = db.collection('ASSET_Output_Summary');
+      const normalizedPortfolioNames = portfolioAssetNames.map(n => n.trim().toLowerCase());
+      
+      const verifiedAssets = await outputSummaryCollection.find({
+        asset_id: { $in: portfolioAssetIds }
+      }).toArray();
+      
+      // Filter by name to get only assets that belong to this portfolio
+      const verifiedAssetsFiltered = verifiedAssets.filter(asset => {
+        const normalizedAssetName = (asset.asset_name || '').trim().toLowerCase();
+        return normalizedPortfolioNames.includes(normalizedAssetName);
+      });
+      
+      verifiedAssetIds = verifiedAssetsFiltered.map(a => a.asset_id);
+      console.log(`All assets summary - Verified ${verifiedAssetIds.length} asset IDs for portfolio ${portfolio}: [${verifiedAssetIds.join(', ')}]`);
+      
+      if (verifiedAssetIds.length === 0) {
+        console.warn(`All assets summary - No verified asset IDs found for portfolio ${portfolio}. Asset IDs from config don't match assets in ASSET_Output_Summary.`);
+        return NextResponse.json({ data: {} });
+      }
     }
 
     const numericalFields = [
@@ -109,6 +160,12 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Invalid period parameter' }, { status: 400 });
     }
 
+    // Always filter by VERIFIED portfolio asset IDs - if empty array, will return no results (correct behavior)
+    // Never skip the filter as it would return ALL assets from all portfolios
+    pipeline.unshift({
+      $match: { asset_id: { $in: verifiedAssetIds } }
+    });
+
     pipeline.push({
       $group: {
         _id: { ...groupStageId, asset_id: '$asset_id' },
@@ -119,6 +176,7 @@ export async function GET(request) {
     pipeline.push({ $sort: sortStage });
 
     const data = await collection.aggregate(pipeline).toArray();
+    console.log(`All assets summary - Found ${data.length} records for portfolio ${portfolio}, field ${field}, period ${period}`);
 
     // Transform data for easier consumption by frontend (group by period, then by asset)
     const transformedData = {};
@@ -138,6 +196,11 @@ export async function GET(request) {
         transformedData[periodKey] = {};
       }
       transformedData[periodKey][item._id.asset_id] = item.totalValue;
+    });
+
+    console.log(`All assets summary - Transformed data for portfolio ${portfolio}:`, {
+      periods: Object.keys(transformedData).length,
+      assetIds: [...new Set(Object.values(transformedData).flatMap(p => Object.keys(p)))]
     });
 
     return NextResponse.json({ data: transformedData });

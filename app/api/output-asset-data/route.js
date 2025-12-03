@@ -59,9 +59,12 @@ export async function GET(request) {
     if (assetId) {
       let pipeline = [];
       
-      // Check if this is a hybrid asset by looking at config
+      // Get portfolio from query params
+      const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+      
+      // Check if this is a hybrid asset by looking at config for the specific portfolio
       const configCollection = db.collection('CONFIG_Inputs');
-      const configData = await configCollection.findOne({});
+      const configData = await configCollection.findOne({ PlatformName: portfolio.trim() });
       let hybridGroup = null;
       let isHybrid = false;
       let componentAssetIds = [parseInt(assetId)];
@@ -244,11 +247,26 @@ export async function GET(request) {
       const data = await collection.aggregate(pipeline).toArray();
       return NextResponse.json({ data });
     } else {
-      // If no asset_id, return all unique asset_ids and names
-      const uniqueAssetIdsFromCashFlows = await collection.distinct('asset_id');
-
+      // Get portfolio from query params
+      const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+      
+      // If no asset_id, return all unique asset_ids and names for this portfolio
       const configCollection = db.collection('CONFIG_Inputs');
+      
+      // First, get asset IDs from the portfolio's CONFIG_Inputs
+      const portfolioConfig = await configCollection.findOne({ PlatformName: portfolio.trim() });
+      const portfolioAssetIds = portfolioConfig && portfolioConfig.asset_inputs 
+        ? portfolioConfig.asset_inputs.map(a => parseInt(a.id)).filter(id => !isNaN(id))
+        : [];
+      
+      // Get unique asset IDs from cash flows that match this portfolio
+      // Always filter by portfolio - if empty, will return empty array (correct behavior)
+      const uniqueAssetIdsFromCashFlows = portfolioAssetIds.length > 0
+        ? await collection.distinct('asset_id', { asset_id: { $in: portfolioAssetIds } })
+        : []; // Return empty array instead of all asset IDs
+
       const assetData = await configCollection.aggregate([
+        { $match: { PlatformName: portfolio.trim() } },
         { $unwind: '$asset_inputs' },
         { $match: { 'asset_inputs.id': { $in: uniqueAssetIdsFromCashFlows } } },
         { $project: { 

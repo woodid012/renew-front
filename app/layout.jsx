@@ -19,9 +19,13 @@ import {
   Save,
   AlertCircle,
   CheckCircle,
-  Loader2
+  Loader2,
+  ChevronDown,
+  Plus,
+  Play
 } from 'lucide-react'
 import { RunModelProvider } from './context/RunModelContext'
+import { PortfolioProvider } from './context/PortfolioContext'
 
 // Navigation items with sections
 const navigationItems = [
@@ -77,11 +81,11 @@ const navigationItems = [
     section: 'analysis'
   },
   {
-    section: 'Export',
+    section: 'WIP',
     isSection: true
   },
   {
-    name: 'WIP',
+    name: 'Export',
     href: '/pages/wip',
     icon: TrendingUp, // You can choose a more appropriate icon if you have one
     section: 'export'
@@ -123,11 +127,97 @@ const navigationItems = [
 function LayoutContent({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const [selectedPortfolio, setSelectedPortfolio] = useState('ZEBRE')
+  const [portfolios, setPortfolios] = useState(['ZEBRE', 'xxx'])
+  const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false)
+  const [showAddPortfolioModal, setShowAddPortfolioModal] = useState(false)
+  const [newPortfolioName, setNewPortfolioName] = useState('')
 
   const getCurrentPageName = () => {
     const currentItem = navigationItems.find(item => !item.isSection && item.href === pathname)
     return currentItem?.name || 'Dashboard'
   }
+
+  const handlePortfolioChange = async (portfolioName) => {
+    if (portfolioName === 'add') {
+      setShowAddPortfolioModal(true)
+      return
+    }
+    
+    setSelectedPortfolio(portfolioName)
+    setShowPortfolioDropdown(false)
+    
+    // Store selected portfolio in localStorage
+    localStorage.setItem('selectedPortfolio', portfolioName)
+    
+    // Trigger a page reload or refresh data if needed
+    // You can add API calls here to load portfolio data
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('portfolioChanged', { detail: { portfolio: portfolioName } }))
+    }
+  }
+
+  const handleAddPortfolio = async () => {
+    if (!newPortfolioName.trim()) {
+      alert('Please enter a portfolio name')
+      return
+    }
+    
+    const portfolioName = newPortfolioName.trim()
+    
+    try {
+      // Create portfolio in MongoDB immediately
+      const response = await fetch('/api/create-portfolio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ portfolio: portfolioName }),
+      });
+      
+      const result = await response.json();
+      
+      if (!result.success && !result.message?.includes('already exists')) {
+        throw new Error(result.error || 'Failed to create portfolio');
+      }
+      
+      // Add new portfolio to the list
+      setPortfolios([...portfolios, portfolioName])
+      setSelectedPortfolio(portfolioName)
+      setNewPortfolioName('')
+      setShowAddPortfolioModal(false)
+      setShowPortfolioDropdown(false)
+      
+      // Store in localStorage
+      localStorage.setItem('selectedPortfolio', portfolioName)
+      const storedPortfolios = JSON.parse(localStorage.getItem('portfolios') || '[]')
+      if (!storedPortfolios.includes(portfolioName)) {
+        localStorage.setItem('portfolios', JSON.stringify([...storedPortfolios, portfolioName]))
+      }
+      
+      // Trigger portfolio change event
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('portfolioChanged', { detail: { portfolio: portfolioName } }))
+      }
+    } catch (error) {
+      console.error('Error creating portfolio:', error);
+      alert('Failed to create portfolio: ' + error.message);
+    }
+  }
+
+  useEffect(() => {
+    // Load selected portfolio from localStorage on mount
+    const stored = localStorage.getItem('selectedPortfolio')
+    if (stored) {
+      setSelectedPortfolio(stored)
+    }
+    
+    // Load portfolios list from localStorage
+    const storedPortfolios = JSON.parse(localStorage.getItem('portfolios') || '[]')
+    if (storedPortfolios.length > 0) {
+      setPortfolios(['ZEBRE', 'xxx', ...storedPortfolios])
+    }
+  }, [])
 
   return (
     <div className="min-h-screen flex">
@@ -239,9 +329,95 @@ function LayoutContent({ children }) {
                 <span className="text-sm text-gray-700">Placeholder User</span>
                 <span className="text-sm text-gray-400">|</span>
                 <Briefcase className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-700">ZEBRE</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowPortfolioDropdown(!showPortfolioDropdown)}
+                    className="flex items-center space-x-1 text-sm text-gray-700 hover:text-gray-900 focus:outline-none"
+                  >
+                    <span>{selectedPortfolio}</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                  
+                  {showPortfolioDropdown && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setShowPortfolioDropdown(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200">
+                        <div className="py-1">
+                          {portfolios.map((portfolio) => (
+                            <button
+                              key={portfolio}
+                              onClick={() => handlePortfolioChange(portfolio)}
+                              className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
+                                selectedPortfolio === portfolio ? 'bg-green-50 text-green-700' : 'text-gray-700'
+                              }`}
+                            >
+                              {portfolio}
+                            </button>
+                          ))}
+                          <div className="border-t border-gray-200 my-1" />
+                          <button
+                            onClick={() => handlePortfolioChange('add')}
+                            className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center space-x-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Add+ Portfolio</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
+              <Link
+                href="/pages/run-model"
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                <span>RUN</span>
+              </Link>
             </div>
+            
+            {/* Add Portfolio Modal */}
+            {showAddPortfolioModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h3 className="text-lg font-semibold mb-4">Add New Portfolio</h3>
+                  <input
+                    type="text"
+                    value={newPortfolioName}
+                    onChange={(e) => setNewPortfolioName(e.target.value)}
+                    placeholder="Enter portfolio name"
+                    className="w-full p-2 border border-gray-300 rounded-md mb-4"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddPortfolio()
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowAddPortfolioModal(false)
+                        setNewPortfolioName('')
+                      }}
+                      className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddPortfolio}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    >
+                      Add Portfolio
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -266,9 +442,11 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <RunModelProvider>
-          <LayoutContent>
-            {children}
-          </LayoutContent>
+          <PortfolioProvider>
+            <LayoutContent>
+              {children}
+            </LayoutContent>
+          </PortfolioProvider>
         </RunModelProvider>
       </body>
     </html>

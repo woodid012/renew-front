@@ -10,17 +10,24 @@ import {
   Wind,
   Battery,
   BatteryFull,
-  Plus
+  Plus,
+  Save,
+  X,
+  Zap
 } from 'lucide-react';
 
 const AssetCards = ({ 
   assets, 
   constants,
+  setConstants,
+  setHasUnsavedChanges,
   onEdit, 
   onDelete, 
   onDuplicate,
   onAddNew
 }) => {
+  const [editingCost, setEditingCost] = useState(null);
+  const [editValue, setEditValue] = useState('');
   const getAssetIcon = (type) => {
     switch (type) {
       case 'solar': return <Sun className="w-5 h-5 text-yellow-500" />;
@@ -36,6 +43,82 @@ const AssetCards = ({
 
   const calculateTotalValue = () => {
     return Object.values(constants.assetCosts || {}).reduce((sum, costs) => sum + (costs.capex || 0), 0);
+  };
+
+  const handleCostEdit = (assetName, field, value) => {
+    setConstants(prev => ({
+      ...prev,
+      assetCosts: {
+        ...prev.assetCosts,
+        [assetName]: {
+          ...prev.assetCosts[assetName],
+          [field]: parseFloat(value) || 0
+        }
+      }
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const startCostEdit = (assetName, field, currentValue) => {
+    setEditingCost(`${assetName}-${field}`);
+    setEditValue(currentValue || '');
+  };
+
+  const saveCostEdit = (assetName, field) => {
+    handleCostEdit(assetName, field, editValue);
+    setEditingCost(null);
+    setEditValue('');
+  };
+
+  const cancelCostEdit = () => {
+    setEditingCost(null);
+    setEditValue('');
+  };
+
+  const renderEditableCostField = (assetName, field, value, displayValue, suffix = '') => {
+    const cellKey = `${assetName}-${field}`;
+    const isEditing = editingCost === cellKey;
+
+    if (isEditing) {
+      return (
+        <div className="flex items-center space-x-1">
+          <input
+            type="number"
+            step="0.01"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="w-full p-1 text-xs border border-gray-300 rounded"
+            autoFocus
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') saveCostEdit(assetName, field);
+              if (e.key === 'Escape') cancelCostEdit();
+            }}
+          />
+          <button 
+            onClick={() => saveCostEdit(assetName, field)} 
+            className="text-green-600 hover:text-green-800"
+          >
+            <Save className="w-3 h-3" />
+          </button>
+          <button 
+            onClick={cancelCostEdit} 
+            className="text-red-600 hover:text-red-800"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        className="cursor-pointer hover:bg-gray-100 p-1 rounded text-xs"
+        onClick={() => startCostEdit(assetName, field, value)}
+        title="Click to edit"
+      >
+        {displayValue || '-'}{suffix}
+      </div>
+    );
   };
 
   if (Object.keys(assets).length === 0) {
@@ -144,13 +227,96 @@ const AssetCards = ({
                   <span className="text-gray-600">Contracts:</span>
                   <span className="font-medium">{asset.contracts?.length || 0}</span>
                 </div>
-                {constants.assetCosts?.[asset.name] && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">CAPEX:</span>
-                    <span className="font-medium">${constants.assetCosts[asset.name].capex}M</span>
-                  </div>
-                )}
               </div>
+
+              {/* Editable Costs Box */}
+              {constants.assetCosts?.[asset.name] && (
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2">Costs & Finance</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">CAPEX:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'capex',
+                        constants.assetCosts[asset.name].capex,
+                        constants.assetCosts[asset.name].capex ? `$${constants.assetCosts[asset.name].capex}M` : '-',
+                        ''
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">OPEX:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'operatingCosts',
+                        constants.assetCosts[asset.name].operatingCosts,
+                        constants.assetCosts[asset.name].operatingCosts ? `$${constants.assetCosts[asset.name].operatingCosts}M` : '-',
+                        ''
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Max Gearing:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'maxGearing',
+                        constants.assetCosts[asset.name].maxGearing,
+                        constants.assetCosts[asset.name].maxGearing ? `${(constants.assetCosts[asset.name].maxGearing * 100).toFixed(0)}%` : '-',
+                        ''
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Interest Rate:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'interestRate',
+                        constants.assetCosts[asset.name].interestRate,
+                        constants.assetCosts[asset.name].interestRate ? `${(constants.assetCosts[asset.name].interestRate * 100).toFixed(1)}%` : '-',
+                        ''
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Tenor:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'tenorYears',
+                        constants.assetCosts[asset.name].tenorYears,
+                        constants.assetCosts[asset.name].tenorYears || '-',
+                        ' years'
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Terminal Value:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'terminalValue',
+                        constants.assetCosts[asset.name].terminalValue,
+                        constants.assetCosts[asset.name].terminalValue ? `$${constants.assetCosts[asset.name].terminalValue}M` : '-',
+                        ''
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">DSCR Contracted:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'targetDSCRContract',
+                        constants.assetCosts[asset.name].targetDSCRContract,
+                        constants.assetCosts[asset.name].targetDSCRContract ? `${constants.assetCosts[asset.name].targetDSCRContract}x` : '-',
+                        ''
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">DSCR Merchant:</span>
+                      {renderEditableCostField(
+                        asset.name,
+                        'targetDSCRMerchant',
+                        constants.assetCosts[asset.name].targetDSCRMerchant,
+                        constants.assetCosts[asset.name].targetDSCRMerchant ? `${constants.assetCosts[asset.name].targetDSCRMerchant}x` : '-',
+                        ''
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Contract summary */}
               {asset.contracts?.length > 0 && (

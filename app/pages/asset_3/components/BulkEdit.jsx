@@ -27,6 +27,20 @@ const BulkEdit = ({
     setHasUnsavedChanges(true);
   };
 
+  const handleCostEdit = (assetName, field, value) => {
+    setConstants(prev => ({
+      ...prev,
+      assetCosts: {
+        ...prev.assetCosts,
+        [assetName]: {
+          ...prev.assetCosts[assetName],
+          [field]: parseFloat(value) || 0
+        }
+      }
+    }));
+    setHasUnsavedChanges(true);
+  };
+
   const startEdit = (assetId, field, currentValue) => {
     setEditingCell(`${assetId}-${field}`);
     setEditValue(currentValue || '');
@@ -77,6 +91,59 @@ const BulkEdit = ({
         onClick={() => startEdit(asset.id, field, value)}
       >
         {value || '-'}
+      </div>
+    );
+  };
+
+  const renderEditableCostCell = (assetName, field, value, displayValue) => {
+    const cellKey = `cost-${assetName}-${field}`;
+    const isEditing = editingCell === cellKey;
+
+    if (isEditing) {
+      return (
+        <div className="flex items-center space-x-1">
+          <input
+            type="number"
+            step="0.1"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="w-full p-1 text-xs border border-gray-300 rounded"
+            autoFocus
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleCostEdit(assetName, field, editValue);
+                setEditingCell(null);
+                setEditValue('');
+              }
+              if (e.key === 'Escape') cancelEdit();
+            }}
+          />
+          <button 
+            onClick={() => {
+              handleCostEdit(assetName, field, editValue);
+              setEditingCell(null);
+              setEditValue('');
+            }} 
+            className="text-green-600 hover:text-green-800"
+          >
+            <Save className="w-3 h-3" />
+          </button>
+          <button onClick={cancelEdit} className="text-red-600 hover:text-red-800">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        className="cursor-pointer hover:bg-gray-100 p-1 rounded"
+        onClick={() => {
+          setEditingCell(cellKey);
+          setEditValue(value || '');
+        }}
+      >
+        {displayValue || '-'}
       </div>
     );
   };
@@ -170,6 +237,8 @@ const BulkEdit = ({
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Interest Rate</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenor (years)</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Terminal Value</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DSCR - Contracted</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DSCR - Merchant</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -178,12 +247,30 @@ const BulkEdit = ({
                 return (
                   <tr key={`costs-${asset.id}`} className="hover:bg-gray-50">
                     <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">{asset.name}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm">{costs.capex || '-'}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm">{costs.operatingCosts || '-'}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm">{costs.maxGearing ? (costs.maxGearing * 100).toFixed(0) + '%' : '-'}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm">{costs.interestRate ? (costs.interestRate * 100).toFixed(1) + '%' : '-'}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm">{costs.tenorYears || '-'}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm">{costs.terminalValue || '-'}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'capex', costs.capex, costs.capex || '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'operatingCosts', costs.operatingCosts, costs.operatingCosts || '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'maxGearing', costs.maxGearing, costs.maxGearing ? (costs.maxGearing * 100).toFixed(0) + '%' : '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'interestRate', costs.interestRate, costs.interestRate ? (costs.interestRate * 100).toFixed(1) + '%' : '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'tenorYears', costs.tenorYears, costs.tenorYears || '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'terminalValue', costs.terminalValue, costs.terminalValue || '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'targetDSCRContract', costs.targetDSCRContract, costs.targetDSCRContract ? `${costs.targetDSCRContract}x` : '-')}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      {renderEditableCostCell(asset.name, 'targetDSCRMerchant', costs.targetDSCRMerchant, costs.targetDSCRMerchant ? `${costs.targetDSCRMerchant}x` : '-')}
+                    </td>
                   </tr>
                 );
               })}

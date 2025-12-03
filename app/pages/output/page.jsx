@@ -20,6 +20,7 @@ import {
     LayoutDashboard,
     FileText
 } from 'lucide-react';
+import { usePortfolio } from '../../context/PortfolioContext';
 
 Chart.register(...registerables);
 
@@ -82,6 +83,7 @@ const formatMetricValue = (value, field) => {
 // --- Sub-Components ---
 
 const AssetView = ({ assetIds, assetIdToNameMap }) => {
+    const { selectedPortfolio } = usePortfolio();
     const [selectedAssetId, setSelectedAssetId] = useState(assetIds.length > 0 ? assetIds[0].id : '');
     const [assetData, setAssetData] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -101,7 +103,8 @@ const AssetView = ({ assetIds, assetIdToNameMap }) => {
                 setLoading(true);
                 setAssetData([]);
                 try {
-                    const url = `/api/output-asset-data?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}`;
+                    const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+                    const url = `/api/output-asset-data?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}&portfolio=${encodeURIComponent(portfolio)}`;
                     const response = await fetch(url);
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.json();
@@ -114,7 +117,7 @@ const AssetView = ({ assetIds, assetIdToNameMap }) => {
             }
         };
         fetchAssetData();
-    }, [selectedAssetId, selectedPeriod]);
+    }, [selectedAssetId, selectedPeriod, selectedPortfolio]);
 
     const handleExportCsv = () => {
         if (!assetData || assetData.length === 0) {
@@ -291,6 +294,7 @@ const AssetView = ({ assetIds, assetIdToNameMap }) => {
 };
 
 const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
+    const { selectedPortfolio } = usePortfolio();
     const [selectedField, setSelectedField] = useState('revenue');
     const [selectedPeriod, setSelectedPeriod] = useState('yearly');
     const [chartType, setChartType] = useState('stacked');
@@ -302,7 +306,8 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const url = `/api/all-assets-summary?period=${selectedPeriod}&field=${selectedField}`;
+                const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+                const url = `/api/all-assets-summary?period=${selectedPeriod}&field=${selectedField}&portfolio=${encodeURIComponent(portfolio)}`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 const data = await res.json();
@@ -314,7 +319,7 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
             }
         };
         fetchData();
-    }, [selectedField, selectedPeriod]);
+    }, [selectedField, selectedPeriod, selectedPortfolio]);
 
     const handleExportCsv = () => {
         if (!summaryData) return;
@@ -480,6 +485,7 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
 // --- Main Page Component ---
 
 export default function OutputPage() {
+    const { selectedPortfolio } = usePortfolio();
     const [viewMode, setViewMode] = useState('portfolio'); // 'portfolio' | 'asset'
     const [assetIds, setAssetIds] = useState([]);
     const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
@@ -488,7 +494,8 @@ export default function OutputPage() {
     useEffect(() => {
         const fetchAssets = async () => {
             try {
-                const response = await fetch('/api/output-asset-data');
+                const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+                const response = await fetch(`/api/output-asset-data?portfolio=${encodeURIComponent(portfolio)}`);
                 if (!response.ok) throw new Error('Failed to fetch assets');
                 const data = await response.json();
                 setAssetIds(data.uniqueAssetIds.map(a => ({ id: a._id, name: a.name })));
@@ -502,7 +509,14 @@ export default function OutputPage() {
             }
         };
         fetchAssets();
-    }, []);
+        
+        // Listen for portfolio changes
+        const handlePortfolioChange = () => {
+            fetchAssets();
+        };
+        window.addEventListener('portfolioChanged', handlePortfolioChange);
+        return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
+    }, [selectedPortfolio]);
 
     if (loading) {
         return (

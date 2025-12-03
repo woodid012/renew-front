@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
+import { getPortfolioAssetIds } from '../utils/portfolio-helper';
 
 export async function GET(request) {
   try {
@@ -12,6 +13,10 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const assetId = searchParams.get('asset_id');
     const period = searchParams.get('period');
+    const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+    
+    // Get asset IDs for this portfolio
+    const portfolioAssetIds = await getPortfolioAssetIds(db, portfolio);
 
     // Enhanced fields for comprehensive 3-way financials
     const profitLossFields = [
@@ -45,8 +50,14 @@ export async function GET(request) {
     if (assetId) {
       let pipeline = [];
 
-      // Match by asset_id
-      pipeline.push({ $match: { asset_id: parseInt(assetId) } });
+      // Verify asset belongs to portfolio and match by asset_id
+      const assetIdInt = parseInt(assetId);
+      if (portfolioAssetIds.length > 0 && !portfolioAssetIds.includes(assetIdInt)) {
+        // Asset doesn't belong to this portfolio
+        return NextResponse.json({ data: [] });
+      }
+      
+      pipeline.push({ $match: { asset_id: assetIdInt } });
 
       // Add aggregation stages based on period
       if (period === 'monthly') {
@@ -146,11 +157,14 @@ export async function GET(request) {
       const data = await collection.aggregate(pipeline).toArray();
       return NextResponse.json({ data });
     } else {
-      // Return unique asset IDs and names
-      const uniqueAssetIdsFromCashFlows = await collection.distinct('asset_id');
+      // Return unique asset IDs and names for this portfolio
+      const uniqueAssetIdsFromCashFlows = portfolioAssetIds.length > 0
+        ? await collection.distinct('asset_id', { asset_id: { $in: portfolioAssetIds } })
+        : [];
 
       const configCollection = db.collection('CONFIG_Inputs');
       const assetNames = await configCollection.aggregate([
+        { $match: { PlatformName: portfolio.trim() } },
         { $unwind: '$asset_inputs' },
         { $match: { 'asset_inputs.id': { $in: uniqueAssetIdsFromCashFlows } } },
         { $project: { _id: '$asset_inputs.id', name: '$asset_inputs.name' } }

@@ -18,34 +18,50 @@ import {
   Target,
   Table as TableIcon
 } from 'lucide-react';
+import { usePortfolio } from '../../context/PortfolioContext';
 
 Chart.register(...registerables);
 
 const SensitivityOutputPage = () => {
+  const { selectedPortfolio } = usePortfolio();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedAsset, setSelectedAsset] = useState('Portfolio');
   const [availableAssets, setAvailableAssets] = useState(['Portfolio']);
   const [activeTab, setActiveTab] = useState('tornado');
+  const [assetNames, setAssetNames] = useState({});
 
 
   useEffect(() => {
     fetchSensitivityData();
-  }, []);
+    
+    // Listen for portfolio changes
+    const handlePortfolioChange = () => {
+      fetchSensitivityData();
+    };
+    window.addEventListener('portfolioChanged', handlePortfolioChange);
+    return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
+  }, [selectedPortfolio]);
 
   const fetchSensitivityData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/get-sensitivity-output');
+      const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+      const response = await fetch(`/api/get-sensitivity-output?portfolio=${encodeURIComponent(portfolio)}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const result = await response.json();
       setData(result.data || []);
+      
+      // Store asset names mapping
+      if (result.assetNames) {
+        setAssetNames(result.assetNames);
+      }
       
       if (result.data && result.data.length > 0) {
         const assetNumbers = new Set();
@@ -58,9 +74,13 @@ const SensitivityOutputPage = () => {
           });
         });
         
+        // Use asset names if available, otherwise fall back to "Asset {num}"
         const assetOptions = Array.from(assetNumbers)
           .sort((a, b) => a - b)
-          .map(num => `Asset ${num}`);
+          .map(num => {
+            const assetName = result.assetNames?.[num] || `Asset ${num}`;
+            return assetName;
+          });
         
         setAvailableAssets(['Portfolio', ...assetOptions]);
       }
@@ -94,10 +114,23 @@ const SensitivityOutputPage = () => {
       if (selectedAsset === 'Portfolio') {
         metricDiff = item.portfolio_irr_diff_bps || 0;
       } else {
-        const assetMatch = selectedAsset.match(/(\d+)/);
-        if (assetMatch) {
-          const assetNum = assetMatch[1];
-          metricDiff = item[`asset_${assetNum}_irr_diff_bps`] || 0;
+        // Find asset ID from asset name
+        let assetId = null;
+        for (const [id, name] of Object.entries(assetNames)) {
+          if (name === selectedAsset) {
+            assetId = parseInt(id) || id;
+            break;
+          }
+        }
+        // Fallback: try to extract number from "Asset X" format
+        if (!assetId) {
+          const assetMatch = selectedAsset.match(/(\d+)/);
+          if (assetMatch) {
+            assetId = parseInt(assetMatch[1]);
+          }
+        }
+        if (assetId) {
+          metricDiff = item[`asset_${assetId}_irr_diff_bps`] || 0;
         }
       }
       
@@ -106,7 +139,24 @@ const SensitivityOutputPage = () => {
         parameter_value: item.input_value,
         parameter_units: item.parameter_units || '',
         metric_diff: metricDiff / 100, // Convert bps to percentage points for IRR
-        raw_value: selectedAsset === 'Portfolio' ? item.portfolio_irr_pct : item[`asset_${selectedAsset.match(/(\d+)/)?.[1]}_irr_pct`]
+        raw_value: selectedAsset === 'Portfolio' ? item.portfolio_irr_pct : (() => {
+          // Find asset ID from asset name
+          let assetId = null;
+          for (const [id, name] of Object.entries(assetNames)) {
+            if (name === selectedAsset) {
+              assetId = parseInt(id) || id;
+              break;
+            }
+          }
+          // Fallback: try to extract number from "Asset X" format
+          if (!assetId) {
+            const assetMatch = selectedAsset.match(/(\d+)/);
+            if (assetMatch) {
+              assetId = parseInt(assetMatch[1]);
+            }
+          }
+          return assetId ? item[`asset_${assetId}_irr_pct`] : null;
+        })()
       });
     });
 

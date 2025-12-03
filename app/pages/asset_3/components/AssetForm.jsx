@@ -2,8 +2,8 @@
 'use client'
 
 import { useState } from 'react';
-import { 
-  Save, 
+import {
+  Save,
   X,
   Plus,
   FileText,
@@ -13,14 +13,15 @@ import {
   Settings
 } from 'lucide-react';
 
-const AssetForm = ({ 
+const AssetForm = ({
   showForm,
   editingAsset,
   formData,
   setFormData,
   onSubmit,
   onCancel,
-  getDefaultAssetCosts
+  getDefaultAssetCosts,
+  assetDefaults
 }) => {
   const [activeTab, setActiveTab] = useState('basic');
 
@@ -30,15 +31,50 @@ const AssetForm = ({
     return String(value);
   };
 
+  // Calculate volume metrics for performance tab
+  const calculateVolumeMetrics = () => {
+    const capacity = parseFloat(formData.capacity) || 0;
+    const hoursPerQuarter = {
+      q1: 2160, // 90 days (Jan 31 + Feb 28 + Mar 31)
+      q2: 2184, // 91 days (Apr 30 + May 31 + Jun 30)
+      q3: 2208, // 92 days (Jul 31 + Aug 31 + Sep 30)
+      q4: 2208  // 92 days (Oct 31 + Nov 30 + Dec 31)
+    };
+
+    const quarters = ['q1', 'q2', 'q3', 'q4'];
+    const capacityFactors = quarters.map(q => {
+      const cf = parseFloat(formData[`qtrCapacityFactor_${q}`]) || 0;
+      return cf / 100; // Convert percentage to decimal
+    });
+
+    const volumes = quarters.map((q, idx) => {
+      const cf = capacityFactors[idx];
+      return capacity * cf * hoursPerQuarter[q];
+    });
+
+    const annualAvgCapacityFactor = capacityFactors.reduce((sum, cf) => sum + cf, 0) / 4;
+    const totalVolume = volumes.reduce((sum, vol) => sum + vol, 0);
+
+    return {
+      capacity,
+      hoursPerQuarter,
+      quarters,
+      capacityFactors,
+      volumes,
+      annualAvgCapacityFactor,
+      totalVolume
+    };
+  };
+
   const handleInputChange = (field, value) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
-      
+
       // Auto-calculate durationHours for storage assets when volume or capacity changes
       if (prev.type === 'storage' && (field === 'volume' || field === 'capacity')) {
         const volume = field === 'volume' ? parseFloat(value) || 0 : parseFloat(prev.volume) || 0;
         const capacity = field === 'capacity' ? parseFloat(value) || 0 : parseFloat(prev.capacity) || 0;
-        
+
         // Only auto-calculate if both values are present and durationHours wasn't manually set
         if (volume > 0 && capacity > 0) {
           const calculatedDuration = volume / capacity;
@@ -51,7 +87,97 @@ const AssetForm = ({
           updated.durationHours = '';
         }
       }
-      
+
+      // Handle date calculations and start-of-month enforcement
+      if (field === 'constructionStartDate' || field === 'constructionDuration') {
+        const startDate = field === 'constructionStartDate' ? value : prev.constructionStartDate;
+        const duration = field === 'constructionDuration' ? parseInt(value) || 0 : parseInt(prev.constructionDuration) || 0;
+
+        if (startDate) {
+          // Force construction start to 1st of month
+          const start = new Date(startDate);
+          start.setDate(1);
+          const formattedStart = start.toISOString().split('T')[0];
+
+          if (field === 'constructionStartDate') {
+            updated.constructionStartDate = formattedStart;
+          }
+
+          // Calculate operations start date
+          if (duration > 0) {
+            const opsDate = new Date(start);
+            opsDate.setMonth(opsDate.getMonth() + duration);
+            updated.OperatingStartDate = opsDate.toISOString().split('T')[0];
+          }
+        }
+      }
+
+      // Apply asset defaults when type or region changes
+      if (assetDefaults && assetDefaults.assetDefaults) {
+        const currentType = field === 'type' ? value : prev.type;
+        const currentRegion = field === 'region' ? value : prev.region;
+
+        // If type changed, update general defaults
+        if (field === 'type') {
+          const typeDefaults = assetDefaults.assetDefaults[currentType];
+          if (typeDefaults) {
+            updated.assetLife = typeDefaults.assetLife;
+            updated.volumeLossAdjustment = typeDefaults.volumeLossAdjustment;
+            updated.annualDegradation = typeDefaults.annualDegradation;
+            updated.constructionDuration = typeDefaults.constructionDuration;
+
+            // Recalculate dates with new default duration if start date exists
+            if (updated.constructionStartDate && typeDefaults.constructionDuration) {
+              const start = new Date(updated.constructionStartDate);
+              const opsDate = new Date(start);
+              opsDate.setMonth(opsDate.getMonth() + typeDefaults.constructionDuration);
+              updated.OperatingStartDate = opsDate.toISOString().split('T')[0];
+            }
+            // Prepopulate cost defaults for new type
+            const defaults = getDefaultAssetCosts(currentType, parseFloat(updated.capacity) || 0);
+            updated.capex = defaults.capex;
+            updated.operatingCosts = defaults.operatingCosts;
+            updated.operatingCostEscalation = defaults.operatingCostEscalation;
+            updated.terminalValue = defaults.terminalValue;
+            updated.maxGearing = defaults.maxGearing;
+            updated.targetDSCRContract = defaults.targetDSCRContract;
+            updated.targetDSCRMerchant = defaults.targetDSCRMerchant;
+            updated.interestRate = defaults.interestRate;
+            updated.tenorYears = defaults.tenorYears;
+            updated.debtStructure = defaults.debtStructure;
+          }
+        }
+
+        // If type or region changed, update capacity factors (only for solar/wind)
+        if ((field === 'type' || field === 'region') && currentType !== 'storage') {
+          const typeDefaults = assetDefaults.assetDefaults[currentType];
+          if (typeDefaults && typeDefaults.capacityFactors) {
+            const regionFactors = typeDefaults.capacityFactors[currentRegion];
+            if (regionFactors) {
+              updated.qtrCapacityFactor_q1 = regionFactors.q1;
+              updated.qtrCapacityFactor_q2 = regionFactors.q2;
+              updated.qtrCapacityFactor_q3 = regionFactors.q3;
+              updated.qtrCapacityFactor_q4 = regionFactors.q4;
+            }
+          }
+        }
+        // If capacity changes, also refresh cost defaults (keep user edits if they already changed a cost field)
+        if (field === 'capacity') {
+          const defaults = getDefaultAssetCosts(currentType, parseFloat(value) || 0);
+          // Only set if the cost fields are currently empty (i.e., not manually edited)
+          if (!prev.capex) updated.capex = defaults.capex;
+          if (!prev.operatingCosts) updated.operatingCosts = defaults.operatingCosts;
+          if (!prev.operatingCostEscalation) updated.operatingCostEscalation = defaults.operatingCostEscalation;
+          if (!prev.terminalValue) updated.terminalValue = defaults.terminalValue;
+          if (!prev.maxGearing) updated.maxGearing = defaults.maxGearing;
+          if (!prev.targetDSCRContract) updated.targetDSCRContract = defaults.targetDSCRContract;
+          if (!prev.targetDSCRMerchant) updated.targetDSCRMerchant = defaults.targetDSCRMerchant;
+          if (!prev.interestRate) updated.interestRate = defaults.interestRate;
+          if (!prev.tenorYears) updated.tenorYears = defaults.tenorYears;
+          if (!prev.debtStructure) updated.debtStructure = defaults.debtStructure;
+        }
+      }
+
       return updated;
     });
   };
@@ -59,7 +185,7 @@ const AssetForm = ({
   const handleContractChange = (contractIndex, field, value) => {
     setFormData(prev => ({
       ...prev,
-      contracts: prev.contracts.map((contract, index) => 
+      contracts: prev.contracts.map((contract, index) =>
         index === contractIndex ? { ...contract, [field]: value } : contract
       )
     }));
@@ -132,11 +258,10 @@ const AssetForm = ({
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`py-4 border-b-2 font-medium text-sm ${
-                      activeTab === tab.id
-                        ? 'border-green-500 text-green-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
+                    className={`py-4 border-b-2 font-medium text-sm ${activeTab === tab.id
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
                   >
                     <Icon className="w-4 h-4 inline mr-2" />
                     {tab.label}
@@ -243,53 +368,215 @@ const AssetForm = ({
             {/* Performance Tab */}
             {activeTab === 'performance' && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Volume Loss Adjustment (%)</label>
-                    <input
-                      type="number"
-                      value={safeValue(formData.volumeLossAdjustment)}
-                      onChange={(e) => handleInputChange('volumeLossAdjustment', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded-md"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Annual Degradation (%)</label>
-                    <input
-                      type="number"
-                      value={safeValue(formData.annualDegradation)}
-                      onChange={(e) => handleInputChange('annualDegradation', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded-md"
-                      step="0.1"
-                    />
-                  </div>
-                </div>
-
-                {formData.type !== 'storage' && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">Quarterly Capacity Factors (%)</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {['q1', 'q2', 'q3', 'q4'].map(quarter => (
-                        <div key={quarter}>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {quarter.toUpperCase()}
-                          </label>
-                          <input
-                            type="number"
-                            value={safeValue(formData[`qtrCapacityFactor_${quarter}`])}
-                            onChange={(e) => handleInputChange(`qtrCapacityFactor_${quarter}`, e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-md"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                          />
+                {formData.type === 'storage' && (
+                  <>
+                    {/* BESS Capacity and Volume Display */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-4">BESS Configuration</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-500 mb-1">BESS Capacity</div>
+                          <div className="text-lg font-semibold text-gray-900">
+                            {parseFloat(formData.capacity) || 0} MW
+                          </div>
                         </div>
-                      ))}
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-500 mb-1">BESS Volume</div>
+                          <div className="text-lg font-semibold text-gray-900">
+                            {parseFloat(formData.volume) || 0} MWh
+                          </div>
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-500 mb-1">Duration</div>
+                          <div className="text-lg font-semibold text-gray-900">
+                            {formData.volume && formData.capacity && parseFloat(formData.volume) > 0 && parseFloat(formData.capacity) > 0
+                              ? `${(parseFloat(formData.volume) / parseFloat(formData.capacity)).toFixed(2)}h`
+                              : 'N/A'}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Annual Cycle Volume Calculation */}
+                    {(() => {
+                      const volume = parseFloat(formData.volume) || 0;
+                      const cyclesPerDay = 1; // Fixed at 1 cycle per day
+                      const annualCycleVolume = volume * 365 * cyclesPerDay;
+
+                      if (volume <= 0) return null;
+
+                      return (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="text-xs text-blue-600 mb-2">Annual Cycle Volume (for 1 Cycle per Day)</div>
+                          <div className="text-sm text-blue-800 font-mono">
+                            {volume.toLocaleString(undefined, { maximumFractionDigits: 0 })} MWh × 365 days × 1 cycle/day = {annualCycleVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })} MWh
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Volume Loss Adjustment and Annual Degradation */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Volume Loss Adjustment (%)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.volumeLossAdjustment)}
+                          onChange={(e) => handleInputChange('volumeLossAdjustment', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Annual Degradation (%)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.annualDegradation)}
+                          onChange={(e) => handleInputChange('annualDegradation', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+                {formData.type !== 'storage' && (
+                  <>
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Quarterly Capacity Factors (%)</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {['q1', 'q2', 'q3', 'q4'].map(quarter => (
+                          <div key={quarter}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {quarter.toUpperCase()}
+                            </label>
+                            <input
+                              type="number"
+                              value={safeValue(formData[`qtrCapacityFactor_${quarter}`])}
+                              onChange={(e) => handleInputChange(`qtrCapacityFactor_${quarter}`, e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Volume and Summary Calculations */}
+                    {(() => {
+                      const metrics = calculateVolumeMetrics();
+                      if (metrics.capacity <= 0) return null;
+
+                      return (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <h4 className="text-sm font-medium text-gray-700 mb-4">Volume Calculations & Summary</h4>
+                          
+                          {/* Quarterly Volume Table */}
+                          <div className="mb-4">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-gray-300">
+                                    <th className="text-left py-2 px-3 font-medium text-gray-700">Quarter</th>
+                                    <th className="text-right py-2 px-3 font-medium text-gray-700">Capacity Factor (%)</th>
+                                    <th className="text-right py-2 px-3 font-medium text-gray-700">Hours</th>
+                                    <th className="text-right py-2 px-3 font-medium text-gray-700">Volume (MWh)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {metrics.quarters.map((q, idx) => (
+                                    <tr key={q} className="border-b border-gray-200">
+                                      <td className="py-2 px-3 font-medium text-gray-700">{q.toUpperCase()}</td>
+                                      <td className="py-2 px-3 text-right text-gray-600">
+                                        {(metrics.capacityFactors[idx] * 100).toFixed(2)}%
+                                      </td>
+                                      <td className="py-2 px-3 text-right text-gray-600">
+                                        {metrics.hoursPerQuarter[q].toLocaleString()}
+                                      </td>
+                                      <td className="py-2 px-3 text-right font-medium text-gray-900">
+                                        {metrics.volumes[idx].toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Annual Summary */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-300">
+                            <div className="bg-white rounded p-3">
+                              <div className="text-xs text-gray-500 mb-1">Annual Average Capacity Factor</div>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {(metrics.annualAvgCapacityFactor * 100).toFixed(2)}%
+                              </div>
+                            </div>
+                            <div className="bg-white rounded p-3">
+                              <div className="text-xs text-gray-500 mb-1">Total Annual Volume</div>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {metrics.totalVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })} MWh
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Volume Loss Adjustment and Annual Degradation */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Volume Loss Adjustment (%)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.volumeLossAdjustment)}
+                          onChange={(e) => handleInputChange('volumeLossAdjustment', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Annual Degradation (%)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.annualDegradation)}
+                          onChange={(e) => handleInputChange('annualDegradation', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Post-Adjustment Volume Summary */}
+                    {(() => {
+                      const metrics = calculateVolumeMetrics();
+                      if (metrics.capacity <= 0) return null;
+                      
+                      const volumeLossAdjustment = parseFloat(formData.volumeLossAdjustment) || 100;
+                      const multiplier = volumeLossAdjustment / 100;
+                      const postAdjustmentVolume = metrics.totalVolume * multiplier;
+
+                      return (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="text-xs text-blue-600 mb-2">Total Annual Volume (Loss Adjusted)</div>
+                          {volumeLossAdjustment < 100 ? (
+                            <div className="text-sm text-blue-800 font-mono">
+                              {metrics.totalVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })} MWh × {volumeLossAdjustment.toFixed(1)}% = {postAdjustmentVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })} MWh
+                            </div>
+                          ) : (
+                            <div className="text-xl font-semibold text-blue-900">
+                              {metrics.totalVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })} MWh
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             )}
@@ -464,6 +751,32 @@ const AssetForm = ({
                         </>
                       )}
 
+                      {/* Cap options */}
+                      <div className="col-span-2">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <input
+                            type="checkbox"
+                            id={`hasCap-${index}`}
+                            checked={contract.hasCap || false}
+                            onChange={(e) => handleContractChange(index, 'hasCap', e.target.checked)}
+                            className="w-4 h-4 text-green-600 border-gray-300 rounded"
+                          />
+                          <label htmlFor={`hasCap-${index}`} className="text-sm font-medium text-gray-700">
+                            Has Cap Price
+                          </label>
+                        </div>
+                        {contract.hasCap && (
+                          <input
+                            type="number"
+                            placeholder="Cap Value"
+                            value={safeValue(contract.capValue)}
+                            onChange={(e) => handleContractChange(index, 'capValue', e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.01"
+                          />
+                        )}
+                      </div>
+
                       {/* Floor options */}
                       <div className="col-span-2">
                         <div className="flex items-center space-x-2 mb-2">
@@ -494,8 +807,8 @@ const AssetForm = ({
                     {/* Contract Summary */}
                     <div className="mt-4 p-3 bg-gray-50 rounded">
                       <div className="text-sm text-gray-600">
-                        <strong>Contract Summary:</strong> {contract.counterparty || 'TBD'} • 
-                        {contract.type} • {contract.buyersPercentage}% • 
+                        <strong>Contract Summary:</strong> {contract.counterparty || 'TBD'} •
+                        {contract.type} • {contract.buyersPercentage}% •
                         ${contract.strikePrice || '0'}/MWh
                         {contract.startDate && contract.endDate && (
                           <span> • {Math.round((new Date(contract.endDate) - new Date(contract.startDate)) / (365.25 * 24 * 60 * 60 * 1000))} years</span>
@@ -520,7 +833,7 @@ const AssetForm = ({
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h4 className="font-medium text-blue-900 mb-2">Cost Configuration</h4>
                   <p className="text-sm text-blue-700">
-                    Asset costs are automatically calculated based on capacity and technology type. 
+                    Asset costs are automatically calculated based on capacity and technology type.
                     You can adjust these in the Bulk Edit tab after saving the asset.
                   </p>
                 </div>

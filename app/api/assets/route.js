@@ -1,18 +1,43 @@
 // app/api/assets/route.js
 import { NextResponse } from 'next/server'
 import clientPromise from '../../../lib/mongodb'
+import { getPortfolioAssetIds } from '../utils/portfolio-helper'
 
-export async function GET() {
+export async function GET(request) {
   try {
     const client = await clientPromise
     const db = client.db(process.env.MONGODB_DB)
+    
+    // Get portfolio parameter from query string
+    const { searchParams } = new URL(request.url);
+    const portfolio = searchParams.get('portfolio') || 'ZEBRE';
+    
+    // Get asset IDs for this portfolio
+    const portfolioAssetIds = await getPortfolioAssetIds(db, portfolio);
+    console.log(`Assets API - Portfolio: ${portfolio}, Asset IDs: [${portfolioAssetIds.join(', ')}]`);
     
     // Try to get assets from inputs summary first (preferred source)
     let assets = []
     
     try {
       const inputsCollection = db.collection('ASSET_inputs_summary')
-      const rawAssets = await inputsCollection.find({}).toArray()
+      
+      // Filter by portfolio asset IDs if available
+      let query = {};
+      if (portfolioAssetIds.length > 0) {
+        query = { asset_id: { $in: portfolioAssetIds } };
+      } else {
+        console.warn(`Assets API - No asset IDs found for portfolio: ${portfolio}`);
+        // Return empty if no assets for this portfolio
+        return NextResponse.json({
+          assets: [],
+          source: 'inputs_summary',
+          count: 0,
+          message: `No assets found for portfolio: ${portfolio}`
+        });
+      }
+      
+      const rawAssets = await inputsCollection.find(query).toArray()
       
       console.log(`Found ${rawAssets.length} assets in inputs summary collection`)
       
@@ -59,8 +84,21 @@ export async function GET() {
     try {
       const cashFlowCollection = db.collection('ASSET_cash_flows')
       
+      // Filter by portfolio asset IDs
+      if (portfolioAssetIds.length === 0) {
+        return NextResponse.json({
+          assets: [],
+          source: 'cash_flows_aggregated',
+          count: 0,
+          message: `No assets found for portfolio: ${portfolio}`
+        });
+      }
+      
       // Aggregate unique asset information from cash flows
       const assetsPipeline = [
+        {
+          $match: { asset_id: { $in: portfolioAssetIds } }
+        },
         {
           $group: {
             _id: '$asset_id',
