@@ -36,11 +36,11 @@ export const RunModelProvider = ({ children }) => {
 
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev, { 
-      id: Date.now() + Math.random(), 
-      message, 
-      type, 
-      timestamp 
+    setLogs(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      message,
+      type,
+      timestamp
     }]);
   };
 
@@ -55,7 +55,7 @@ export const RunModelProvider = ({ children }) => {
   useEffect(() => {
     // Use Next.js API route for local development, direct URL for production
     const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-    const url = isDevelopment 
+    const url = isDevelopment
       ? '' // Use relative path to Next.js API route
       : (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com');
     setBackendUrl(url);
@@ -100,40 +100,44 @@ export const RunModelProvider = ({ children }) => {
     setStatus('running');
     setStartTime(new Date());
     setEndTime(null);
-    
+
     addLog('Starting base model run...', 'info');
-    
+
     try {
       // Use Next.js API route (which proxies to local backend) or direct backend URL
-      const apiEndpoint = backendUrl 
-        ? `${backendUrl}/api/run-model` 
+      const apiEndpoint = backendUrl
+        ? `${backendUrl}/api/run-model`
         : '/api/run-model';
-      
+
       // Check backend status if using direct URL
       if (backendUrl) {
         addLog('Checking backend status...', 'info');
-        
+
         const statusResponse = await fetch(`${backendUrl}/`);
         if (!statusResponse.ok) {
           throw new Error(`Backend is not accessible (HTTP ${statusResponse.status})`);
         }
-        
+
         const statusData = await statusResponse.json();
         addLog(`Backend status: ${statusData.status}`, 'success');
         addLog(`Connected to database: ${statusData.mongo_db}`, 'info');
-        
+
         // Check import status
         const imports = statusData.imports || {};
-        addLog(`Model imports available: ${Object.entries(imports).map(([k,v]) => `${k}:${v}`).join(', ')}`, 'info');
-        
+        addLog(`Model imports available: ${Object.entries(imports).map(([k, v]) => `${k}:${v}`).join(', ')}`, 'info');
+
         if (!imports.run_cashflow_model) {
           throw new Error('Backend model functionality not available - import failed');
         }
       } else {
         addLog('Using local backend via Next.js API route...', 'info');
       }
-      
+
       addLog('Sending request to run cash flow model (base case)...', 'info');
+
+      // Get selected portfolio
+      const selectedPortfolio = localStorage.getItem('selectedPortfolio') || 'ZEBRE';
+      addLog(`Selected portfolio: ${selectedPortfolio}`, 'info');
 
       // Make API call to run the model (via Next.js API route or direct)
       const response = await fetch(apiEndpoint, {
@@ -141,7 +145,9 @@ export const RunModelProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}), // Empty payload for base case
+        body: JSON.stringify({
+          portfolio: selectedPortfolio
+        }), // Include portfolio in payload
       });
 
       addLog(`Model API response status: ${response.status}`, 'info');
@@ -162,7 +168,7 @@ export const RunModelProvider = ({ children }) => {
 
       const result = await response.json();
       addLog(`Model API response: ${JSON.stringify(result)}`, 'info');
-      
+
       if (result.status === 'success') {
         addLog('✅ Base model run completed successfully!', 'success');
         addLog(`Result: ${result.message}`, 'success');
@@ -172,7 +178,7 @@ export const RunModelProvider = ({ children }) => {
         addLog(`❌ Base model run failed: ${result.message}`, 'error');
         setStatus('error');
       }
-      
+
       setEndTime(new Date());
 
     } catch (error) {
@@ -196,12 +202,12 @@ export const RunModelProvider = ({ children }) => {
 
     try {
       // Use Next.js API route (which proxies to local backend) or direct backend URL
-      const apiEndpoint = backendUrl 
-        ? `${backendUrl}/api/sensitivity` 
+      const apiEndpoint = backendUrl
+        ? `${backendUrl}/api/sensitivity`
         : '/api/run-sensitivity';
-      
+
       addLog('Sending request to run sensitivity analysis...', 'info');
-      
+
       const sensitivityResponse = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {

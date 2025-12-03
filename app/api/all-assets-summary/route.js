@@ -13,7 +13,7 @@ export async function GET(request) {
     const period = searchParams.get('period');
     const field = searchParams.get('field');
     const portfolio = searchParams.get('portfolio') || 'ZEBRE';
-    
+
     // Get asset IDs for this portfolio
     const portfolioAssetIds = await getPortfolioAssetIds(db, portfolio);
     console.log(`All assets summary - Portfolio: ${portfolio}, Asset IDs: [${portfolioAssetIds.join(', ')}]`);
@@ -21,7 +21,7 @@ export async function GET(request) {
     if (!period || !field) {
       return NextResponse.json({ error: 'Missing period or field parameter' }, { status: 400 });
     }
-    
+
     if (portfolioAssetIds.length === 0) {
       console.warn(`All assets summary - No asset IDs found for portfolio: ${portfolio}`);
       return NextResponse.json({ data: {} });
@@ -33,34 +33,34 @@ export async function GET(request) {
     let portfolioConfig = await configCollection.findOne({ PlatformName: portfolio.trim() });
     if (!portfolioConfig) {
       const allPortfolios = await configCollection.find({}).toArray();
-      portfolioConfig = allPortfolios.find(p => 
+      portfolioConfig = allPortfolios.find(p =>
         p.PlatformName && p.PlatformName.toLowerCase() === portfolio.trim().toLowerCase()
       );
     }
-    
-    const portfolioAssetNames = portfolioConfig && portfolioConfig.asset_inputs 
+
+    const portfolioAssetNames = portfolioConfig && portfolioConfig.asset_inputs
       ? portfolioConfig.asset_inputs.map(a => a.name).filter(Boolean)
       : [];
-    
+
     // Get verified asset IDs from ASSET_Output_Summary that match both ID and name
     let verifiedAssetIds = portfolioAssetIds;
     if (portfolioAssetNames.length > 0) {
       const outputSummaryCollection = db.collection('ASSET_Output_Summary');
       const normalizedPortfolioNames = portfolioAssetNames.map(n => n.trim().toLowerCase());
-      
+
       const verifiedAssets = await outputSummaryCollection.find({
         asset_id: { $in: portfolioAssetIds }
       }).toArray();
-      
+
       // Filter by name to get only assets that belong to this portfolio
       const verifiedAssetsFiltered = verifiedAssets.filter(asset => {
         const normalizedAssetName = (asset.asset_name || '').trim().toLowerCase();
         return normalizedPortfolioNames.includes(normalizedAssetName);
       });
-      
+
       verifiedAssetIds = verifiedAssetsFiltered.map(a => a.asset_id);
       console.log(`All assets summary - Verified ${verifiedAssetIds.length} asset IDs for portfolio ${portfolio}: [${verifiedAssetIds.join(', ')}]`);
-      
+
       if (verifiedAssetIds.length === 0) {
         console.warn(`All assets summary - No verified asset IDs found for portfolio ${portfolio}. Asset IDs from config don't match assets in ASSET_Output_Summary.`);
         return NextResponse.json({ data: {} });
@@ -112,7 +112,7 @@ export async function GET(request) {
     ];
 
     if (!numericalFields.includes(field)) {
-        return NextResponse.json({ error: 'Invalid field for aggregation' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid field for aggregation' }, { status: 400 });
     }
 
     let pipeline = [];
@@ -139,23 +139,23 @@ export async function GET(request) {
       };
       sortStage = { '_id.year': 1 };
     } else if (period === 'fiscal_yearly') {
-        // First add the fiscal year field
-        pipeline.push({
-            $addFields: {
-                fiscalYear: {
-                    $cond: {
-                        if: { $lt: [{ $month: '$date' }, fiscalYearStartMonth] },
-                        then: { $subtract: [{ $year: '$date' }, 1] },
-                        else: { $year: '$date' },
-                    },
-                },
+      // First add the fiscal year field
+      pipeline.push({
+        $addFields: {
+          fiscalYear: {
+            $cond: {
+              if: { $lt: [{ $month: '$date' }, fiscalYearStartMonth] },
+              then: { $subtract: [{ $year: '$date' }, 1] },
+              else: { $year: '$date' },
             },
-        });
-        
-        groupStageId = {
-            fiscalYear: '$fiscalYear',
-        };
-        sortStage = { '_id.fiscalYear': 1 };
+          },
+        },
+      });
+
+      groupStageId = {
+        fiscalYear: '$fiscalYear',
+      };
+      sortStage = { '_id.fiscalYear': 1 };
     } else {
       return NextResponse.json({ error: 'Invalid period parameter' }, { status: 400 });
     }
@@ -163,7 +163,10 @@ export async function GET(request) {
     // Always filter by VERIFIED portfolio asset IDs - if empty array, will return no results (correct behavior)
     // Never skip the filter as it would return ALL assets from all portfolios
     pipeline.unshift({
-      $match: { asset_id: { $in: verifiedAssetIds } }
+      $match: {
+        asset_id: { $in: verifiedAssetIds },
+        portfolio: portfolio
+      }
     });
 
     pipeline.push({

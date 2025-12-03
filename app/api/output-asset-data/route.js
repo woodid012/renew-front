@@ -58,17 +58,17 @@ export async function GET(request) {
 
     if (assetId) {
       let pipeline = [];
-      
+
       // Get portfolio from query params
       const portfolio = searchParams.get('portfolio') || 'ZEBRE';
-      
+
       // Check if this is a hybrid asset by looking at config for the specific portfolio
       const configCollection = db.collection('CONFIG_Inputs');
       const configData = await configCollection.findOne({ PlatformName: portfolio.trim() });
       let hybridGroup = null;
       let isHybrid = false;
       let componentAssetIds = [parseInt(assetId)];
-      
+
       if (configData && configData.asset_inputs) {
         const asset = configData.asset_inputs.find(a => parseInt(a.id) === parseInt(assetId));
         if (asset && asset.hybridGroup) {
@@ -85,43 +85,47 @@ export async function GET(request) {
       // If it's a hybrid asset, try to get the combined data first
       if (isHybrid && hybridGroup) {
         // Check if combined hybrid data exists (from backend processing)
-        const hybridDataExists = await collection.findOne({ 
+        const hybridDataExists = await collection.findOne({
           hybrid_group: hybridGroup,
-          asset_id: parseInt(assetId)
+          asset_id: parseInt(assetId),
+          portfolio: portfolio
         });
-        
+
         if (hybridDataExists) {
           // Use the pre-combined hybrid asset data
-          pipeline.push({ $match: { 
-            hybrid_group: hybridGroup,
-            asset_id: parseInt(assetId)
-          } });
+          pipeline.push({
+            $match: {
+              hybrid_group: hybridGroup,
+              asset_id: parseInt(assetId),
+              portfolio: portfolio
+            }
+          });
         } else {
           // Combine on the fly by matching all component assets
           // We'll combine them in the period grouping stage
-          pipeline.push({ $match: { asset_id: { $in: componentAssetIds } } });
+          pipeline.push({ $match: { asset_id: { $in: componentAssetIds }, portfolio: portfolio } });
         }
       } else {
-        // Regular asset - match by asset_id
-        pipeline.push({ $match: { asset_id: parseInt(assetId) } });
+        // Regular asset - match by asset_id and portfolio
+        pipeline.push({ $match: { asset_id: parseInt(assetId), portfolio: portfolio } });
       }
-      
+
       // Track if we need to combine hybrid assets on the fly
       const needsOnFlyCombination = isHybrid && hybridGroup && !hybridDataExists && componentAssetIds.length > 1;
-      
+
       if (period === 'monthly') {
         // For hybrid assets combining on the fly, group by date only (not asset_id)
         const groupId = needsOnFlyCombination
           ? {
-              year: { $year: '$date' },
-              month: { $month: '$date' },
-            }
+            year: { $year: '$date' },
+            month: { $month: '$date' },
+          }
           : {
-              asset_id: '$asset_id',
-              year: { $year: '$date' },
-              month: { $month: '$date' },
-            };
-        
+            asset_id: '$asset_id',
+            year: { $year: '$date' },
+            month: { $month: '$date' },
+          };
+
         pipeline.push({
           $group: {
             _id: groupId,
@@ -129,7 +133,7 @@ export async function GET(request) {
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
-        
+
         // Add asset_id back for hybrid assets combining on the fly
         if (needsOnFlyCombination) {
           pipeline.push({
@@ -138,20 +142,20 @@ export async function GET(request) {
             }
           });
         }
-        
+
         pipeline.push({ $sort: { '_id.year': 1, '_id.month': 1 } });
       } else if (period === 'quarterly') {
         const groupId = needsOnFlyCombination
           ? {
-              year: { $year: '$date' },
-              quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
-            }
+            year: { $year: '$date' },
+            quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
+          }
           : {
-              asset_id: '$asset_id',
-              year: { $year: '$date' },
-              quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
-            };
-        
+            asset_id: '$asset_id',
+            year: { $year: '$date' },
+            quarter: { $ceil: { $divide: [{ $month: '$date' }, 3] } },
+          };
+
         pipeline.push({
           $group: {
             _id: groupId,
@@ -159,7 +163,7 @@ export async function GET(request) {
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
-        
+
         if (needsOnFlyCombination) {
           pipeline.push({
             $addFields: {
@@ -167,18 +171,18 @@ export async function GET(request) {
             }
           });
         }
-        
+
         pipeline.push({ $sort: { '_id.year': 1, '_id.quarter': 1 } });
       } else if (period === 'yearly') {
         const groupId = needsOnFlyCombination
           ? {
-              year: { $year: '$date' },
-            }
+            year: { $year: '$date' },
+          }
           : {
-              asset_id: '$asset_id',
-              year: { $year: '$date' },
-            };
-        
+            asset_id: '$asset_id',
+            year: { $year: '$date' },
+          };
+
         pipeline.push({
           $group: {
             _id: groupId,
@@ -186,7 +190,7 @@ export async function GET(request) {
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
-        
+
         if (needsOnFlyCombination) {
           pipeline.push({
             $addFields: {
@@ -194,7 +198,7 @@ export async function GET(request) {
             }
           });
         }
-        
+
         pipeline.push({ $sort: { '_id.year': 1 } });
       } else if (period === 'fiscal_yearly') {
         const fiscalYearStartMonth = 7; // July as the start month for fiscal year
@@ -215,13 +219,13 @@ export async function GET(request) {
         // Then group by fiscal year
         const groupId = needsOnFlyCombination
           ? {
-              fiscalYear: '$fiscalYear',
-            }
+            fiscalYear: '$fiscalYear',
+          }
           : {
-              asset_id: '$asset_id',
-              fiscalYear: '$fiscalYear',
-            };
-        
+            asset_id: '$asset_id',
+            fiscalYear: '$fiscalYear',
+          };
+
         pipeline.push({
           $group: {
             _id: groupId,
@@ -229,7 +233,7 @@ export async function GET(request) {
             ...numericalFields.reduce((acc, field) => ({ ...acc, [field]: { $sum: `$${field}` } }), {}),
           },
         });
-        
+
         if (needsOnFlyCombination) {
           pipeline.push({
             $addFields: {
@@ -237,7 +241,7 @@ export async function GET(request) {
             }
           });
         }
-        
+
         pipeline.push({ $sort: { '_id.fiscalYear': 1 } });
       } else {
         // Default: return all documents sorted by date if no period or invalid period
@@ -249,16 +253,16 @@ export async function GET(request) {
     } else {
       // Get portfolio from query params
       const portfolio = searchParams.get('portfolio') || 'ZEBRE';
-      
+
       // If no asset_id, return all unique asset_ids and names for this portfolio
       const configCollection = db.collection('CONFIG_Inputs');
-      
+
       // First, get asset IDs from the portfolio's CONFIG_Inputs
       const portfolioConfig = await configCollection.findOne({ PlatformName: portfolio.trim() });
-      const portfolioAssetIds = portfolioConfig && portfolioConfig.asset_inputs 
+      const portfolioAssetIds = portfolioConfig && portfolioConfig.asset_inputs
         ? portfolioConfig.asset_inputs.map(a => parseInt(a.id)).filter(id => !isNaN(id))
         : [];
-      
+
       // Get unique asset IDs from cash flows that match this portfolio
       // Always filter by portfolio - if empty, will return empty array (correct behavior)
       const uniqueAssetIdsFromCashFlows = portfolioAssetIds.length > 0
@@ -269,20 +273,22 @@ export async function GET(request) {
         { $match: { PlatformName: portfolio.trim() } },
         { $unwind: '$asset_inputs' },
         { $match: { 'asset_inputs.id': { $in: uniqueAssetIdsFromCashFlows } } },
-        { $project: { 
-          _id: '$asset_inputs.id', 
-          name: '$asset_inputs.name',
-          hybridGroup: '$asset_inputs.hybridGroup' 
-        } }
+        {
+          $project: {
+            _id: '$asset_inputs.id',
+            name: '$asset_inputs.name',
+            hybridGroup: '$asset_inputs.hybridGroup'
+          }
+        }
       ]).toArray();
 
       // Check for hybrid groups in cashflow data (pre-combined hybrid assets)
       const hybridGroupsInCashflow = await collection.distinct('hybrid_group', { hybrid_group: { $exists: true, $ne: null } });
-      
+
       // Build hybrid group mapping and identify which assets are in groups
       const hybridGroupMap = {};
       const assetsInHybridGroups = new Set();
-      
+
       assetData.forEach(asset => {
         if (asset.hybridGroup) {
           if (!hybridGroupMap[asset.hybridGroup]) {
@@ -300,7 +306,7 @@ export async function GET(request) {
       // By default, show hybrid groups instead of individual components
       const displayAssets = [];
       const processedHybridGroups = new Set();
-      
+
       assetData.forEach(asset => {
         if (asset.hybridGroup && hybridGroupMap[asset.hybridGroup] && !processedHybridGroups.has(asset.hybridGroup)) {
           // Add the hybrid group as a combined asset (use first asset ID as primary)
@@ -326,7 +332,7 @@ export async function GET(request) {
         }
       });
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         uniqueAssetIds: displayAssets,
         hybridGroups: hybridGroupMap,
         allAssets: assetData // Include all individual assets for reference
