@@ -1,10 +1,12 @@
 {
   "functions": {
-    "api/run-model/route.js": {
-      "maxDuration": 300
+    "app/api/run-model/route.js": {
+      "maxDuration": 300,
+      "memory": 1024
     },
-    "api/run-sensitivity/route.js": {
-      "maxDuration": 300
+    "app/api/run-sensitivity/route.js": {
+      "maxDuration": 300,
+      "memory": 1024
     }
   },
   "rewrites": [
