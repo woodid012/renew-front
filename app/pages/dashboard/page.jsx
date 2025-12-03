@@ -31,11 +31,14 @@ import {
   Activity
 } from 'lucide-react'
 import { usePortfolio } from '../../context/PortfolioContext'
+import { useDisplaySettings } from '../../context/DisplaySettingsContext'
+import { formatCurrencyFromMillions } from '../../utils/currencyFormatter'
 
 Chart.register(...registerables)
 
 export default function DashboardPage() {
   const { selectedPortfolio } = usePortfolio()
+  const { currencyUnit } = useDisplaySettings()
   const [dashboardData, setDashboardData] = useState(null)
   const [assetInputsData, setAssetInputsData] = useState(null)
   const [portfolioData, setPortfolioData] = useState(null)
@@ -180,7 +183,7 @@ export default function DashboardPage() {
 
   const formatCurrencyShort = (value) => {
     if (!value && value !== 0) return 'N/A'
-    return `$${value.toFixed(1)}M`
+    return formatCurrencyFromMillions(value, currencyUnit)
   }
 
   const formatPercentage = (value) => {
@@ -196,6 +199,14 @@ export default function DashboardPage() {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-AU')
+  }
+
+  // Format number to 2 significant figures
+  const formatToTwoSigFigs = (value) => {
+    if (value === 0) return '0'
+    // Use toPrecision to get 2 significant figures, then remove trailing zeros after decimal
+    const formatted = parseFloat(value.toPrecision(2)).toString()
+    return formatted.replace(/\.0+$/, '')
   }
 
   // Generate portfolio chart data
@@ -301,7 +312,7 @@ export default function DashboardPage() {
         },
         ticks: {
           callback: function (value) {
-            return `$${value.toFixed(0)}M`
+            return `$${formatToTwoSigFigs(value)}M`
           }
         }
       }

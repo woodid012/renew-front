@@ -6,7 +6,19 @@ import clientPromise from '@/lib/mongodb'
 
 export async function GET() {
   try {
-    const client = await clientPromise
+    let client;
+    try {
+      client = await clientPromise;
+    } catch (mongoError) {
+      console.error('MongoDB connection error:', mongoError);
+      // Return default portfolios if MongoDB is not available
+      return NextResponse.json({ 
+        success: true,
+        portfolios: ['ZEBRE', 'xxx'],
+        warning: 'MongoDB connection failed, returning default portfolios'
+      });
+    }
+    
     const db = client.db('renew_assets')
     
     // Get all portfolios from CONFIG_Inputs

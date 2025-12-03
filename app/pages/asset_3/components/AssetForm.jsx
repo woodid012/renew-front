@@ -12,6 +12,8 @@ import {
   DollarSign,
   Settings
 } from 'lucide-react';
+import { useDisplaySettings } from '@/app/context/DisplaySettingsContext';
+import { formatCurrencyFromMillions } from '@/app/utils/currencyFormatter';
 
 const AssetForm = ({
   showForm,
@@ -23,6 +25,7 @@ const AssetForm = ({
   getDefaultAssetCosts,
   assetDefaults
 }) => {
+  const { currencyUnit } = useDisplaySettings();
   const [activeTab, setActiveTab] = useState('basic');
 
   // Safe helper to get string values
@@ -848,15 +851,15 @@ const AssetForm = ({
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-600">CAPEX:</span>
-                              <span className="font-medium">${defaultCosts.capex}M</span>
+                              <span className="font-medium">{formatCurrencyFromMillions(defaultCosts.capex, currencyUnit)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Annual OPEX:</span>
-                              <span className="font-medium">${defaultCosts.operatingCosts}M</span>
+                              <span className="font-medium">{formatCurrencyFromMillions(defaultCosts.operatingCosts, currencyUnit)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Terminal Value:</span>
-                              <span className="font-medium">${defaultCosts.terminalValue}M</span>
+                              <span className="font-medium">{formatCurrencyFromMillions(defaultCosts.terminalValue, currencyUnit)}</span>
                             </div>
                           </div>
                         );

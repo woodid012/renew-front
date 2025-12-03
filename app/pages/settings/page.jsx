@@ -13,6 +13,13 @@ export default function SettingsPage() {
       color: 'green'
     },
     {
+      title: 'Display Settings',
+      description: 'Configure currency display format and other display preferences',
+      href: '/pages/settings/display',
+      icon: DollarSign,
+      color: 'purple'
+    },
+    {
       title: 'Administrator',
       description: 'Manage accounts and user access controls',
       href: '/pages/settings/administrator',

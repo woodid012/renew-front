@@ -7,7 +7,18 @@ import { ObjectId } from 'mongodb'
 
 export async function POST(request) {
   try {
-    const client = await clientPromise
+    let client;
+    try {
+      client = await clientPromise;
+    } catch (mongoError) {
+      console.error('MongoDB connection error:', mongoError);
+      return NextResponse.json({ 
+        error: 'MongoDB connection failed', 
+        details: mongoError.message,
+        hint: 'Please check your MONGODB_URI environment variable in .env.local'
+      }, { status: 500 });
+    }
+    
     const db = client.db('renew_assets')
     const configDoc = await request.json();
     const { _id, ...updateFields } = configDoc; // Extract _id and other fields

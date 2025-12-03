@@ -2,6 +2,9 @@
 'use client'
 
 import { useState, useEffect } from 'react';
+import { usePortfolio } from '../../context/PortfolioContext';
+import { useDisplaySettings } from '../../context/DisplaySettingsContext';
+import { formatCurrencyFromMillions } from '../../utils/currencyFormatter';
 import AssetCards from './components/AssetCards';
 import BulkEdit from './components/BulkEdit';
 import ImportExport from './components/ImportExport';
@@ -19,6 +22,9 @@ import {
 } from 'lucide-react';
 
 const Asset3Page = () => {
+  const { selectedPortfolio } = usePortfolio();
+  const { currencyUnit } = useDisplaySettings();
+  
   // Original data from database
   const [originalAssets, setOriginalAssets] = useState({});
   const [originalConstants, setOriginalConstants] = useState({});
@@ -66,13 +72,13 @@ const Asset3Page = () => {
     return String(value);
   };
 
-  // Load asset data on component mount
+  // Load asset data on component mount and when portfolio changes
   useEffect(() => {
     loadAssetData();
     loadDefaults();
-  }, []);
+  }, [selectedPortfolio]);
 
-  // Listen for portfolio changes
+  // Listen for portfolio changes (backup for custom events)
   useEffect(() => {
     const handlePortfolioChange = (event) => {
       const newPortfolio = event.detail.portfolio;
@@ -108,18 +114,18 @@ const Asset3Page = () => {
   const loadAssetData = async (portfolio = null) => {
     setLoading(true);
     try {
-      // Get portfolio from localStorage if not provided
-      const selectedPortfolio = portfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
-      const response = await fetch(`/api/get-asset-data?portfolio=${encodeURIComponent(selectedPortfolio)}`);
+      // Use portfolio from context or parameter
+      const portfolioToUse = portfolio || selectedPortfolio || 'ZEBRE';
+      const response = await fetch(`/api/get-asset-data?portfolio=${encodeURIComponent(portfolioToUse)}`);
       if (!response.ok) {
         throw new Error('Failed to fetch asset data');
       }
       const data = await response.json();
-      console.log(`Loaded data for portfolio: ${data.PlatformName}, requested: ${selectedPortfolio}, assets count: ${data.asset_inputs?.length || 0}`);
+      console.log(`Loaded data for portfolio: ${data.PlatformName}, requested: ${portfolioToUse}, assets count: ${data.asset_inputs?.length || 0}`);
 
       // Verify the returned data matches the requested portfolio
-      if (data.PlatformName !== selectedPortfolio) {
-        console.warn(`Portfolio mismatch! Requested: ${selectedPortfolio}, Got: ${data.PlatformName}`);
+      if (data.PlatformName !== portfolioToUse) {
+        console.warn(`Portfolio mismatch! Requested: ${portfolioToUse}, Got: ${data.PlatformName}`);
       }
 
       // Convert array to object format with asset.id as key
@@ -541,7 +547,7 @@ const Asset3Page = () => {
           </div>
           <p className="text-gray-600">
             {Object.keys(assets).length} assets • {calculateTotalCapacity().toFixed(1)} MW •
-            ${calculateTotalValue().toFixed(1)}M CAPEX
+            {formatCurrencyFromMillions(calculateTotalValue(), currencyUnit)} CAPEX
           </p>
           <p className="text-sm text-gray-500">
             Platform ID: {platformID} • MongoDB Asset Management

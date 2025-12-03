@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { RunModelProvider } from './context/RunModelContext'
 import { PortfolioProvider } from './context/PortfolioContext'
+import { DisplaySettingsProvider } from './context/DisplaySettingsContext'
 
 // Navigation items with sections
 const navigationItems = [
@@ -441,13 +442,15 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
-        <RunModelProvider>
-          <PortfolioProvider>
-            <LayoutContent>
-              {children}
-            </LayoutContent>
-          </PortfolioProvider>
-        </RunModelProvider>
+        <DisplaySettingsProvider>
+          <RunModelProvider>
+            <PortfolioProvider>
+              <LayoutContent>
+                {children}
+              </LayoutContent>
+            </PortfolioProvider>
+          </RunModelProvider>
+        </DisplaySettingsProvider>
       </body>
     </html>
   )

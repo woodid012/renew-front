@@ -3,8 +3,24 @@ import clientPromise from '../../../lib/mongodb';
 
 export async function GET() {
   try {
-    const client = await clientPromise;
-    const db = client.db(process.env.MONGODB_DB);
+    let client;
+    try {
+      client = await clientPromise;
+    } catch (mongoError) {
+      console.error('MongoDB connection error:', mongoError);
+      return NextResponse.json(
+        { 
+          status: 'Error', 
+          message: 'Failed to connect to MongoDB', 
+          error: mongoError.message,
+          hint: 'Please check your MONGODB_URI environment variable in .env.local'
+        },
+        { status: 500 }
+      );
+    }
+    
+    const dbName = process.env.MONGODB_DB || 'renew_assets';
+    const db = client.db(dbName);
 
     const collections = await db.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);

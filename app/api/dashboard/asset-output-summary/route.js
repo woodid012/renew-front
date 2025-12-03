@@ -18,16 +18,24 @@ export async function GET(request) {
     
     const collection = db.collection('ASSET_Output_Summary')
     
-    // Filter assets by portfolio asset IDs
+    // Filter assets by portfolio name first, then by portfolio asset IDs
+    // This ensures we only get results for the specific portfolio
     let assets;
+    const query = {
+      portfolio: portfolio.trim()  // Filter by portfolio name
+    };
+    
+    // Also filter by asset IDs if available (for additional safety)
     if (portfolioAssetIds.length > 0) {
-      assets = await collection.find({ 
-        asset_id: { $in: portfolioAssetIds } 
-      }).toArray();
+      query.asset_id = { $in: portfolioAssetIds };
+    }
+    
+    assets = await collection.find(query).toArray();
+    
+    if (assets.length === 0) {
+      console.warn(`Asset output summary - No assets found for portfolio: ${portfolio} with query:`, query);
     } else {
-      // If no assets found for portfolio, return empty
-      console.warn(`Asset output summary - No asset IDs found for portfolio: ${portfolio}`);
-      assets = [];
+      console.log(`Asset output summary - Found ${assets.length} assets for portfolio: ${portfolio}`);
     }
     
     if (assets.length === 0) {

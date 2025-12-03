@@ -12,7 +12,18 @@ export async function GET(request) {
     // Normalize portfolio name (trim whitespace)
     portfolio = portfolio.trim();
     
-    const client = await clientPromise
+    let client;
+    try {
+      client = await clientPromise;
+    } catch (mongoError) {
+      console.error('MongoDB connection error:', mongoError);
+      return NextResponse.json({ 
+        error: 'MongoDB connection failed', 
+        details: mongoError.message,
+        hint: 'Please check your MONGODB_URI environment variable in .env.local'
+      }, { status: 500 });
+    }
+    
     const db = client.db('renew_assets')
     
     // Try to find config by PlatformName matching the portfolio exactly

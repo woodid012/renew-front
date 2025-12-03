@@ -15,6 +15,8 @@ import {
   X,
   Zap
 } from 'lucide-react';
+import { useDisplaySettings } from '@/app/context/DisplaySettingsContext';
+import { formatCurrencyFromMillions } from '@/app/utils/currencyFormatter';
 
 const AssetCards = ({ 
   assets, 
@@ -26,6 +28,7 @@ const AssetCards = ({
   onDuplicate,
   onAddNew
 }) => {
+  const { currencyUnit } = useDisplaySettings();
   const [editingCost, setEditingCost] = useState(null);
   const [editValue, setEditValue] = useState('');
   const getAssetIcon = (type) => {
@@ -163,7 +166,9 @@ const AssetCards = ({
             <div className="text-sm text-gray-600">Total Contracts</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-orange-600">${calculateTotalValue().toFixed(1)}M</div>
+            <div className="text-2xl font-bold text-orange-600">
+              {formatCurrencyFromMillions(calculateTotalValue(), currencyUnit)}
+            </div>
             <div className="text-sm text-gray-600">Total CAPEX</div>
           </div>
         </div>
@@ -240,7 +245,7 @@ const AssetCards = ({
                         asset.name,
                         'capex',
                         constants.assetCosts[asset.name].capex,
-                        constants.assetCosts[asset.name].capex ? `$${constants.assetCosts[asset.name].capex}M` : '-',
+                        constants.assetCosts[asset.name].capex ? formatCurrencyFromMillions(constants.assetCosts[asset.name].capex, currencyUnit) : '-',
                         ''
                       )}
                     </div>
@@ -250,7 +255,7 @@ const AssetCards = ({
                         asset.name,
                         'operatingCosts',
                         constants.assetCosts[asset.name].operatingCosts,
-                        constants.assetCosts[asset.name].operatingCosts ? `$${constants.assetCosts[asset.name].operatingCosts}M` : '-',
+                        constants.assetCosts[asset.name].operatingCosts ? formatCurrencyFromMillions(constants.assetCosts[asset.name].operatingCosts, currencyUnit) : '-',
                         ''
                       )}
                     </div>
@@ -290,7 +295,7 @@ const AssetCards = ({
                         asset.name,
                         'terminalValue',
                         constants.assetCosts[asset.name].terminalValue,
-                        constants.assetCosts[asset.name].terminalValue ? `$${constants.assetCosts[asset.name].terminalValue}M` : '-',
+                        constants.assetCosts[asset.name].terminalValue ? formatCurrencyFromMillions(constants.assetCosts[asset.name].terminalValue, currencyUnit) : '-',
                         ''
                       )}
                     </div>

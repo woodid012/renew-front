@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { usePortfolio } from '../../context/PortfolioContext'
 
 export default function Asset2Page() {
+  const { selectedPortfolio } = usePortfolio();
   const [assets, setAssets] = useState([]);
   const [originalAssets, setOriginalAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,8 @@ export default function Asset2Page() {
   useEffect(() => {
     const fetchAssetData = async () => {
       try {
-        const response = await fetch('/api/get-asset-data');
+        const portfolio = selectedPortfolio || 'ZEBRE';
+        const response = await fetch(`/api/get-asset-data?portfolio=${encodeURIComponent(portfolio)}`);
         if (!response.ok) {
           throw new Error('Failed to fetch asset data');
         }
@@ -33,7 +36,7 @@ export default function Asset2Page() {
       }
     };
     fetchAssetData();
-  }, []);
+  }, [selectedPortfolio]);
 
   const handleAssetInputChange = (e, index) => {
     const { name, value } = e.target;

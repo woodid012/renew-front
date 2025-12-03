@@ -48,7 +48,9 @@ export async function GET(request) {
       const outputSummaryCollection = db.collection('ASSET_Output_Summary');
       const normalizedPortfolioNames = portfolioAssetNames.map(n => n.trim().toLowerCase());
 
+      // Filter by both portfolio name and asset IDs
       const verifiedAssets = await outputSummaryCollection.find({
+        portfolio: portfolio.trim(),  // Filter by portfolio name first
         asset_id: { $in: portfolioAssetIds }
       }).toArray();
 

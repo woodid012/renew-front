@@ -3,6 +3,8 @@
 
 import { useState } from 'react';
 import { Table, Edit, Save, X } from 'lucide-react';
+import { useDisplaySettings } from '@/app/context/DisplaySettingsContext';
+import { formatCurrencyFromMillions } from '@/app/utils/currencyFormatter';
 
 const BulkEdit = ({ 
   assets, 
@@ -11,6 +13,7 @@ const BulkEdit = ({
   setConstants, 
   setHasUnsavedChanges 
 }) => {
+  const { currencyUnit } = useDisplaySettings();
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
 
@@ -231,8 +234,8 @@ const BulkEdit = ({
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CAPEX ($M)</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OPEX ($M)</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CAPEX ({currencyUnit})</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OPEX ({currencyUnit})</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Gearing</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Interest Rate</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenor (years)</th>
@@ -248,10 +251,10 @@ const BulkEdit = ({
                   <tr key={`costs-${asset.id}`} className="hover:bg-gray-50">
                     <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">{asset.name}</td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
-                      {renderEditableCostCell(asset.name, 'capex', costs.capex, costs.capex || '-')}
+                      {renderEditableCostCell(asset.name, 'capex', costs.capex, costs.capex ? formatCurrencyFromMillions(costs.capex, currencyUnit) : '-')}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
-                      {renderEditableCostCell(asset.name, 'operatingCosts', costs.operatingCosts, costs.operatingCosts || '-')}
+                      {renderEditableCostCell(asset.name, 'operatingCosts', costs.operatingCosts, costs.operatingCosts ? formatCurrencyFromMillions(costs.operatingCosts, currencyUnit) : '-')}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       {renderEditableCostCell(asset.name, 'maxGearing', costs.maxGearing, costs.maxGearing ? (costs.maxGearing * 100).toFixed(0) + '%' : '-')}
@@ -263,7 +266,7 @@ const BulkEdit = ({
                       {renderEditableCostCell(asset.name, 'tenorYears', costs.tenorYears, costs.tenorYears || '-')}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
-                      {renderEditableCostCell(asset.name, 'terminalValue', costs.terminalValue, costs.terminalValue || '-')}
+                      {renderEditableCostCell(asset.name, 'terminalValue', costs.terminalValue, costs.terminalValue ? formatCurrencyFromMillions(costs.terminalValue, currencyUnit) : '-')}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       {renderEditableCostCell(asset.name, 'targetDSCRContract', costs.targetDSCRContract, costs.targetDSCRContract ? `${costs.targetDSCRContract}x` : '-')}

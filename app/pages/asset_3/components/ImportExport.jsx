@@ -10,6 +10,8 @@ import {
   CheckCircle,
   Database
 } from 'lucide-react';
+import { useDisplaySettings } from '@/app/context/DisplaySettingsContext';
+import { formatCurrencyFromMillions } from '@/app/utils/currencyFormatter';
 
 const ImportExport = ({ 
   assets, 
@@ -20,6 +22,7 @@ const ImportExport = ({
   setPlatformName,
   setHasUnsavedChanges 
 }) => {
+  const { currencyUnit } = useDisplaySettings();
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
 
@@ -181,7 +184,9 @@ const ImportExport = ({
             <div className="text-sm text-gray-600">Total Contracts</div>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-gray-900">${stats.totalValue.toFixed(1)}M</div>
+            <div className="text-2xl font-bold text-gray-900">
+              {formatCurrencyFromMillions(stats.totalValue, currencyUnit)}
+            </div>
             <div className="text-sm text-gray-600">Total CAPEX</div>
           </div>
         </div>
