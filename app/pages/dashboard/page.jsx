@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [expandedAsset, setExpandedAsset] = useState(null)
   const [hasInitialFetch, setHasInitialFetch] = useState(false)
+  const [sensitivityData, setSensitivityData] = useState([])
 
   // Initial fetch - read directly from localStorage to avoid race condition with context initialization
   useEffect(() => {
@@ -107,8 +108,8 @@ export default function DashboardPage() {
 
       console.log('Dashboard - Fetching data for portfolio:', portfolioToUse)
 
-      // Fetch asset output summary data and portfolio revenue/net income data
-      const [assetOutputResponse, revenueResponse, netIncomeResponse] = await Promise.all([
+      // Fetch asset output summary data, portfolio revenue/net income data, and sensitivity data
+      const [assetOutputResponse, revenueResponse, netIncomeResponse, sensitivityResponse] = await Promise.all([
         fetch(`/api/dashboard/asset-output-summary?portfolio=${encodeURIComponent(portfolioToUse)}`),
         fetch(`/api/all-assets-summary?period=yearly&field=revenue&portfolio=${encodeURIComponent(portfolioToUse)}`).catch(err => {
           console.warn('Revenue data API not available:', err)
@@ -116,6 +117,10 @@ export default function DashboardPage() {
         }),
         fetch(`/api/all-assets-summary?period=yearly&field=net_income&portfolio=${encodeURIComponent(portfolioToUse)}`).catch(err => {
           console.warn('Net income data API not available:', err)
+          return { ok: false, status: 404 }
+        }),
+        fetch(`/api/get-sensitivity-output?portfolio=${encodeURIComponent(portfolioToUse)}`).catch(err => {
+          console.warn('Sensitivity data API not available:', err)
           return { ok: false, status: 404 }
         })
       ])
@@ -160,6 +165,20 @@ export default function DashboardPage() {
       }
 
       setPortfolioData(portfolioChartData)
+
+      // Handle sensitivity data response
+      if (sensitivityResponse.ok) {
+        const sensitivityResult = await sensitivityResponse.json()
+        setSensitivityData(sensitivityResult.data || [])
+        console.log('Dashboard - Sensitivity data:', {
+          hasData: !!sensitivityResult.data,
+          rowCount: sensitivityResult.data?.length || 0
+        })
+      } else {
+        console.warn('Dashboard - Sensitivity response not OK:', sensitivityResponse.status)
+        setSensitivityData([])
+      }
+
       setLastUpdated(new Date())
       setError(null)
 
@@ -321,6 +340,184 @@ export default function DashboardPage() {
 
   const revenueChartData = generateChartData(portfolioData?.revenue, assetInputsData, 'revenue')
   const netIncomeChartData = generateChartData(portfolioData?.netIncome, assetInputsData, 'net_income')
+
+  // Process tornado chart data for Platform (Portfolio level)
+  const processPlatformTornadoData = () => {
+    if (!sensitivityData.length) return { labels: [], datasets: [], processedData: [] }
+
+    const parameterGroups = {}
+    
+    sensitivityData.forEach(item => {
+      const paramName = item.parameter_name || item.parameter || 'Unknown Parameter'
+      
+      if (!parameterGroups[paramName]) {
+        parameterGroups[paramName] = {
+          scenarios: [],
+          parameter: paramName,
+          parameter_units: item.parameter_units || ''
+        }
+      }
+      
+      // Use portfolio-level IRR difference for Platform
+      const metricDiff = item.portfolio_irr_diff_bps || 0
+      
+      parameterGroups[paramName].scenarios.push({
+        scenario_id: item.scenario_id,
+        parameter_value: item.input_value,
+        parameter_units: item.parameter_units || '',
+        metric_diff: metricDiff / 100, // Convert bps to percentage points for IRR
+        raw_value: item.portfolio_irr_pct
+      })
+    })
+
+    const processedData = Object.entries(parameterGroups).map(([param, group]) => {
+      const impacts = group.scenarios.map(s => s.metric_diff)
+      
+      const maxImpact = Math.max(...impacts)
+      const minImpact = Math.min(...impacts)
+      const totalRange = Math.abs(maxImpact) + Math.abs(minImpact)
+      
+      const maxIndex = impacts.indexOf(maxImpact)
+      const minIndex = impacts.indexOf(minImpact)
+      const maxScenario = group.scenarios[maxIndex]
+      const minScenario = group.scenarios[minIndex]
+      
+      return {
+        parameter: param,
+        upside: Math.max(maxImpact, 0),
+        downside: Math.min(minImpact, 0),
+        totalRange: totalRange,
+        scenarios: group.scenarios,
+        impacts: impacts,
+        units: group.parameter_units,
+        maxScenario: maxScenario,
+        minScenario: minScenario,
+        maxInputValue: maxScenario?.parameter_value,
+        minInputValue: minScenario?.parameter_value
+      }
+    })
+
+    const filteredData = processedData
+      .filter(item => item.totalRange > 0)
+      .sort((a, b) => b.totalRange - a.totalRange)
+
+    const labels = filteredData.map(item => {
+      const maxVal = item.maxInputValue
+      const minVal = item.minInputValue
+      const units = item.units || ''
+      
+      if (maxVal !== undefined && minVal !== undefined) {
+        return `${item.parameter}\n(${minVal}${units} to ${maxVal}${units})`
+      }
+      return item.parameter
+    })
+
+    const upsideData = filteredData.map(item => item.upside)
+    const downsideData = filteredData.map(item => item.downside)
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Upside Impact (%)',
+          data: upsideData,
+          backgroundColor: 'rgba(34, 197, 94, 0.8)',
+          borderColor: 'rgba(34, 197, 94, 1)',
+          borderWidth: 1,
+        },
+        {
+          label: 'Downside Impact (%)',
+          data: downsideData,
+          backgroundColor: 'rgba(239, 68, 68, 0.8)',
+          borderColor: 'rgba(239, 68, 68, 1)',
+          borderWidth: 1,
+        }
+      ],
+      processedData: filteredData
+    }
+  }
+
+  const platformTornadoData = processPlatformTornadoData()
+
+  const tornadoChartOptions = {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: 'Platform Sensitivity Analysis - Equity IRR',
+        font: {
+          size: 14,
+          weight: 'bold'
+        }
+      },
+      tooltip: {
+        callbacks: {
+          title: function(context) {
+            const fullLabel = context[0].label
+            return fullLabel.split('\n')[0]
+          },
+          afterTitle: function(context) {
+            const dataIndex = context[0].dataIndex
+            const item = platformTornadoData.processedData[dataIndex]
+            if (item && item.maxInputValue !== undefined && item.minInputValue !== undefined) {
+              const units = item.units || ''
+              return `Range: ${item.minInputValue}${units} to ${item.maxInputValue}${units}`
+            }
+            return ''
+          },
+          label: function(context) {
+            const value = Math.abs(context.parsed.x)
+            const dataIndex = context.dataIndex
+            const item = platformTornadoData.processedData[dataIndex]
+            
+            if (!item) return `${context.dataset.label}: ${value.toFixed(2)}%`
+            
+            const isUpside = context.dataset.label.includes('Upside')
+            const inputValue = isUpside ? item.maxInputValue : item.minInputValue
+            const units = item.units || ''
+            
+            const impactText = `${value.toFixed(2)}%`
+            
+            return `${context.dataset.label}: ${impactText} (at ${inputValue}${units})`
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        title: {
+          display: true,
+          text: 'Impact on Equity IRR (%)',
+          font: {
+            size: 12,
+            weight: 'bold'
+          }
+        },
+        ticks: {
+          callback: function(value) {
+            return Math.abs(value).toFixed(1) + '%'
+          }
+        }
+      },
+      y: {
+        stacked: true,
+        title: {
+          display: true,
+          text: 'Sensitivity Parameters',
+          font: {
+            size: 12,
+            weight: 'bold'
+          }
+        }
+      }
+    },
+  }
 
   if (loading) {
     return (
@@ -604,18 +801,34 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Placeholder Section */}
+        {/* Platform Sensitivity Tornado Chart */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-center h-full min-h-[400px]">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <Settings className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Placeholder</h3>
-              <p className="text-gray-600 max-w-sm">
-                This space is reserved for additional portfolio insights and analytics.
-              </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Platform Sensitivity Analysis</h3>
+              <p className="text-sm text-gray-600 mt-1">Tornado chart showing parameter sensitivity for Portfolio IRR</p>
             </div>
+            <div className="flex items-center space-x-2 text-sm text-gray-500">
+              <Activity className="w-4 h-4" />
+              <span>Equity IRR</span>
+            </div>
+          </div>
+          <div style={{ width: '100%', height: '400px' }}>
+            {platformTornadoData.labels && platformTornadoData.labels.length > 0 ? (
+              <Bar data={platformTornadoData} options={tornadoChartOptions} />
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Sensitivity Data Available</h3>
+                  <p className="text-gray-600 text-sm">
+                    {loading 
+                      ? 'Loading sensitivity data...'
+                      : 'Run sensitivity analysis to view Platform sensitivity tornado chart'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

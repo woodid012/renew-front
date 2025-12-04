@@ -57,7 +57,8 @@ export async function GET(request) {
         return NextResponse.json({ data: [] });
       }
       
-      pipeline.push({ $match: { asset_id: assetIdInt } });
+      // Filter by both asset_id AND portfolio to ensure we get the correct data
+      pipeline.push({ $match: { asset_id: assetIdInt, portfolio: portfolio.trim() } });
 
       // Add aggregation stages based on period
       if (period === 'monthly') {
@@ -159,7 +160,10 @@ export async function GET(request) {
     } else {
       // Return unique asset IDs and names for this portfolio
       const uniqueAssetIdsFromCashFlows = portfolioAssetIds.length > 0
-        ? await collection.distinct('asset_id', { asset_id: { $in: portfolioAssetIds } })
+        ? await collection.distinct('asset_id', { 
+            asset_id: { $in: portfolioAssetIds },
+            portfolio: portfolio.trim()
+          })
         : [];
 
       const configCollection = db.collection('CONFIG_Inputs');
