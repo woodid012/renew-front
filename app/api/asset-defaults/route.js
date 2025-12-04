@@ -1,19 +1,51 @@
 // app/api/asset-defaults/route.js
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import clientPromise from '@/lib/mongodb';
 
-const CONFIG_PATH = path.join(process.cwd(), '..', 'backend-renew', 'config', 'asset_defaults.json');
+const COLLECTION_NAME = 'CONFIG_Asset_Defaults';
 
 export async function GET() {
     try {
-        const fileContent = fs.readFileSync(CONFIG_PATH, 'utf8');
-        const defaults = JSON.parse(fileContent);
-        return NextResponse.json(defaults);
+        let client;
+        try {
+            client = await clientPromise;
+        } catch (mongoError) {
+            console.error('MongoDB connection error:', mongoError);
+            return NextResponse.json(
+                { 
+                    error: 'MongoDB connection failed',
+                    hint: 'Please check your MONGODB_URI environment variable in .env.local'
+                },
+                { status: 500 }
+            );
+        }
+
+        const dbName = process.env.MONGODB_DB || 'renew_assets';
+        const db = client.db(dbName);
+        const collection = db.collection(COLLECTION_NAME);
+
+        // Get the defaults document (should be a single document)
+        const defaults = await collection.findOne({});
+
+        if (!defaults) {
+            // If no document exists, return error suggesting initialization
+            return NextResponse.json(
+                { 
+                    error: 'Asset defaults not found in MongoDB. Please run initialization script.',
+                    needsInitialization: true,
+                    hint: 'Run: python scripts/initialize_asset_defaults_mongo.py'
+                },
+                { status: 404 }
+            );
+        }
+
+        // Remove MongoDB _id field before returning
+        const { _id, ...defaultsWithoutId } = defaults;
+        return NextResponse.json(defaultsWithoutId);
     } catch (error) {
-        console.error('Error reading asset defaults:', error);
+        console.error('Error reading asset defaults from MongoDB:', error);
         return NextResponse.json(
-            { error: 'Failed to read asset defaults' },
+            { error: 'Failed to read asset defaults from MongoDB', details: error.message },
             { status: 500 }
         );
     }
@@ -34,18 +66,50 @@ export async function POST(request) {
         // Update metadata
         defaults.metadata = {
             ...defaults.metadata,
-            lastUpdated: new Date().toISOString().split('T')[0],
+            lastUpdated: new Date().toISOString(),
             version: defaults.metadata?.version || '1.0.0'
         };
 
-        // Write to file
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaults, null, 2), 'utf8');
+        let client;
+        try {
+            client = await clientPromise;
+        } catch (mongoError) {
+            console.error('MongoDB connection error:', mongoError);
+            return NextResponse.json(
+                { 
+                    error: 'MongoDB connection failed',
+                    hint: 'Please check your MONGODB_URI environment variable in .env.local'
+                },
+                { status: 500 }
+            );
+        }
 
-        return NextResponse.json({ success: true, message: 'Defaults saved successfully' });
+        const dbName = process.env.MONGODB_DB || 'renew_assets';
+        const db = client.db(dbName);
+        const collection = db.collection(COLLECTION_NAME);
+
+        // Check if document exists
+        const existing = await collection.findOne({});
+
+        if (existing) {
+            // Update existing document
+            await collection.updateOne(
+                { _id: existing._id },
+                { $set: defaults }
+            );
+        } else {
+            // Insert new document
+            await collection.insertOne(defaults);
+        }
+
+        return NextResponse.json({ 
+            success: true, 
+            message: 'Defaults saved successfully to MongoDB' 
+        });
     } catch (error) {
-        console.error('Error saving asset defaults:', error);
+        console.error('Error saving asset defaults to MongoDB:', error);
         return NextResponse.json(
-            { error: 'Failed to save asset defaults' },
+            { error: 'Failed to save asset defaults to MongoDB', details: error.message },
             { status: 500 }
         );
     }
