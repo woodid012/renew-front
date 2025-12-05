@@ -1,7 +1,7 @@
 // app/pages/three-way-forecast/page.jsx
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Calendar,
   Building2,
@@ -35,6 +35,8 @@ import {
   ComposedChart
 } from 'recharts';
 import { usePortfolio } from '../../context/PortfolioContext';
+import { useDisplaySettings } from '../../context/DisplaySettingsContext';
+import { formatCurrency as formatCurrencyUtil, formatCurrencyFromMillions } from '../../utils/currencyFormatter';
 
 const CHART_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -43,6 +45,7 @@ const CHART_COLORS = [
 
 const ThreeWayForecastPage = () => {
   const { selectedPortfolio } = usePortfolio();
+  const { currencyUnit } = useDisplaySettings();
   const [assetIds, setAssetIds] = useState([]);
   const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
   const [selectedAssetId, setSelectedAssetId] = useState('');
@@ -344,7 +347,7 @@ const ThreeWayForecastPage = () => {
     };
   }, [forecastData, selectedPeriod]);
 
-  const formatCurrency = (value, fieldKey = '') => {
+  const formatCurrency = useCallback((value, fieldKey = '') => {
     if (value === undefined || value === null || value === 0) return { display: '-', isNegative: false };
 
     // Fields that should be displayed as negative (expenses/outflows) even if stored as positive
@@ -361,15 +364,14 @@ const ThreeWayForecastPage = () => {
     }
 
     const isNegative = displayValue < 0;
-    const formattedValue = Math.abs(displayValue).toLocaleString(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    });
+    // Values in 3-way forecast are stored in millions ($M)
+    // Use formatCurrencyFromMillions which expects values already in millions
+    const formattedValue = formatCurrencyFromMillions(Math.abs(displayValue), currencyUnit, { decimals: 0 });
 
-    const display = isNegative ? `(${formattedValue})` : formattedValue;
+    const display = isNegative ? `(${formattedValue.replace(/^\$/, '')})` : formattedValue;
 
     return { display, isNegative };
-  };
+  }, [currencyUnit]);
 
   const formatPercent = (value) => {
     if (value === undefined || value === null || isNaN(value)) return '-';
@@ -382,14 +384,14 @@ const ThreeWayForecastPage = () => {
   };
 
   const renderTable = (title, fields, icon, scrollRef) => (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6" key={`${title}-${currencyUnit}`}>
       <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
         {icon}
         {title}
       </h3>
       {forecastData.length > 0 ? (
         <div className="overflow-x-auto" ref={scrollRef}>
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200" key={currencyUnit}>
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
@@ -711,18 +713,17 @@ const ThreeWayForecastPage = () => {
                   Profitability Trends
                 </h3>
                 <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={chartData}>
+                  <LineChart key={currencyUnit} data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="period" />
                     <YAxis
                       tickFormatter={(value) => {
                         if (value === 0) return '$0';
-                        if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-                        if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}k`;
-                        return `$${value}`;
+                        // Values are in millions, use formatCurrencyFromMillions
+                        return formatCurrencyFromMillions(value, currencyUnit);
                       }}
                     />
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                    <Tooltip formatter={(value) => formatCurrencyFromMillions(value, currencyUnit)} />
                     <Legend />
                     <Line type="monotone" dataKey="revenue" stroke={CHART_COLORS[0]} strokeWidth={2} name="Revenue" />
                     <Line type="monotone" dataKey="ebitda" stroke={CHART_COLORS[1]} strokeWidth={2} name="EBITDA" />
@@ -738,18 +739,17 @@ const ThreeWayForecastPage = () => {
                   Cash Flow Analysis
                 </h3>
                 <ResponsiveContainer width="100%" height={400}>
-                  <ComposedChart data={chartData}>
+                  <ComposedChart key={currencyUnit} data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="period" />
                     <YAxis
                       tickFormatter={(value) => {
                         if (value === 0) return '$0';
-                        if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-                        if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}k`;
-                        return `$${value}`;
+                        // Values are in millions, use formatCurrencyFromMillions
+                        return formatCurrencyFromMillions(value, currencyUnit);
                       }}
                     />
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                    <Tooltip formatter={(value) => formatCurrencyFromMillions(value, currencyUnit)} />
                     <Legend />
                     <Bar dataKey="operatingCashFlow" fill={CHART_COLORS[0]} name="Operating CF" />
                     <Bar dataKey="equityCashFlow" fill={CHART_COLORS[1]} name="Equity CF" />

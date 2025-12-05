@@ -53,10 +53,14 @@ export function formatCurrency(value, unit = CURRENCY_UNITS.MILLIONS, options = 
     formattedValue = parseFloat(formattedValue).toString();
   }
 
+  // Add thousand separators (commas)
+  const parts = formattedValue.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
   const sign = isNegative ? (showSign ? '-' : '(') : '';
   const closingParen = isNegative && !showSign ? ')' : '';
 
-  return `${sign}$${formattedValue}${suffix}${closingParen}`;
+  return `${sign}$${parts.join('.')}${suffix}${closingParen}`;
 }
 
 /**
@@ -131,8 +135,12 @@ export function formatCurrencyFromMillions(valueInMillions, unit = CURRENCY_UNIT
     formattedValue = parseFloat(formattedValue).toString();
   }
 
+  // Add thousand separators (commas)
+  const parts = formattedValue.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
   const sign = isNegative ? '-' : '';
-  return `${sign}$${formattedValue}${suffix}`;
+  return `${sign}$${parts.join('.')}${suffix}`;
 }
 
 /**

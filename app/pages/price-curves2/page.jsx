@@ -29,6 +29,8 @@ import {
   X,
   Search
 } from 'lucide-react'
+import { useDisplaySettings } from '../../context/DisplaySettingsContext'
+import { formatCurrency } from '../../utils/currencyFormatter'
 
 // Constants
 const CHART_COLORS = [
@@ -44,6 +46,7 @@ const PERIOD_OPTIONS = [
 ]
 
 export default function PriceCurves2Page() {
+  const { currencyUnit } = useDisplaySettings()
   const [priceCurves, setPriceCurves] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -318,14 +321,10 @@ export default function PriceCurves2Page() {
     document.body.removeChild(link)
   }, [chartData, seriesKeys, selectedPeriod])
 
-  const formatCurrency = useCallback((value) => {
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value)
-  }, [])
+  const formatCurrencyValue = useCallback((value) => {
+    // Price values are in dollars per MWh, use currency formatter
+    return formatCurrency(value, currencyUnit, { decimals: 2 })
+  }, [currencyUnit])
 
   const getLineColor = useCallback((index) => {
     return CHART_COLORS[index % CHART_COLORS.length]
@@ -610,12 +609,12 @@ export default function PriceCurves2Page() {
                   height={80}
                 />
                 <YAxis 
-                  tickFormatter={formatCurrency}
+                  tickFormatter={formatCurrencyValue}
                   tick={{ fontSize: 12, fill: '#6b7280' }}
-                  label={{ value: 'Price (AUD)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#374151' } }}
+                  label={{ value: `Price (${currencyUnit})`, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#374151' } }}
                 />
                 <Tooltip 
-                  formatter={(value, name) => [formatCurrency(value), name.replace(/_/g, ' ')]}
+                  formatter={(value, name) => [formatCurrencyValue(value), name.replace(/_/g, ' ')]}
                   labelFormatter={(label) => `Period: ${label}`}
                   contentStyle={{ 
                     backgroundColor: 'rgba(255, 255, 255, 0.95)', 
@@ -706,7 +705,7 @@ export default function PriceCurves2Page() {
                   <span className="text-sm font-medium text-gray-700">Average Price</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(summaryStats.avg)}
+                  {formatCurrencyValue(summaryStats.avg)}
                 </p>
               </div>
 
@@ -716,7 +715,7 @@ export default function PriceCurves2Page() {
                   <span className="text-sm font-medium text-gray-700">Price Range</span>
                 </div>
                 <p className="text-lg font-bold text-gray-900">
-                  {formatCurrency(summaryStats.min)} - {formatCurrency(summaryStats.max)}
+                  {formatCurrencyValue(summaryStats.min)} - {formatCurrencyValue(summaryStats.max)}
                 </p>
               </div>
             </>

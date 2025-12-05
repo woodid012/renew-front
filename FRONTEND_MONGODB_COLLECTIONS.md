@@ -225,3 +225,4 @@ This document maps each frontend chart, component, and page to the MongoDB colle
 4. **Hybrid Assets**: Special handling in `ASSET_cash_flows` for hybrid asset groups
 5. **Sensitivity Data**: Separate collections (`SENS_*`) for sensitivity analysis results
 
+

@@ -205,14 +205,6 @@ This document provides a complete mapping of:
 
 ---
 
-#### `/api/test-connection`
-**Collections Used:**
-- Tests connection to any collection (dynamic)
-
-**Purpose:** Test MongoDB connection
-
----
-
 #### `/api/check-base-results`
 **Collections Used:**
 - `ASSET_cash_flows` (check if base case results exist)
@@ -406,10 +398,6 @@ This document provides a complete mapping of:
 2. **Sensitivity Data**
    - **API:** `/api/get-sensitivity-output`
    - **Data Source:** `SENS_Summary_Main`
-
-3. **Time-Series Data**
-   - **API:** `/api/wip-timeseries`
-   - **Data Source:** `ASSET_cash_flows`
 
 ---
 

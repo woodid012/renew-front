@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   BarChart3,
-  Wifi,
   User,
   Briefcase,
   Save,
@@ -100,28 +99,6 @@ const navigationItems = [
     href: '/pages/settings',
     icon: Settings,
     section: 'settings'
-  },
-  {
-    name: 'WIP Notes',
-    href: '/pages/wip-notes',
-    icon: Home,
-    section: 'settings'
-  },
-  {
-    section: 'TESTING',
-    isSection: true
-  },
-  {
-    name: 'WIP Timeseries',
-    href: '/pages/wip/timeseries',
-    icon: BarChart3,
-    section: 'testing'
-  },
-  {
-    name: 'Test Connection',
-    href: '/pages/test-connection',
-    icon: Wifi,
-    section: 'testing'
   },
 ]
 

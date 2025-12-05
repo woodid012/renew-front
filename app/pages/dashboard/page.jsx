@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Bar } from 'react-chartjs-2'
 import { Chart, registerables } from 'chart.js'
 import {
@@ -190,16 +190,6 @@ export default function DashboardPage() {
     }
   }
 
-  const formatCurrency = (value) => {
-    if (!value && value !== 0) return 'N/A'
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value * 1000000) // Convert from millions to actual dollars
-  }
-
   const formatCurrencyShort = (value) => {
     if (!value && value !== 0) return 'N/A'
     return formatCurrencyFromMillions(value, currencyUnit)
@@ -291,7 +281,7 @@ export default function DashboardPage() {
     }
   }
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -308,7 +298,8 @@ export default function DashboardPage() {
           label: function (context) {
             const value = context.parsed.y
             const assetName = context.dataset.label
-            return `${assetName}: $${value.toFixed(1)}M`
+            // Value is in millions, format using display settings
+            return `${assetName}: ${formatCurrencyFromMillions(value, currencyUnit)}`
           }
         }
       }
@@ -326,17 +317,18 @@ export default function DashboardPage() {
         stacked: true,
         title: {
           display: true,
-          text: 'Amount ($M)',
+          text: `Amount (${currencyUnit})`,
           font: { size: 12, weight: 'bold' }
         },
         ticks: {
           callback: function (value) {
-            return `$${formatToTwoSigFigs(value)}M`
+            // Value is in millions, format using display settings
+            return formatCurrencyFromMillions(value, currencyUnit)
           }
         }
       }
     }
-  }
+  }), [currencyUnit])
 
   const revenueChartData = generateChartData(portfolioData?.revenue, assetInputsData, 'revenue')
   const netIncomeChartData = generateChartData(portfolioData?.netIncome, assetInputsData, 'net_income')
@@ -659,7 +651,7 @@ export default function DashboardPage() {
           <div style={{ width: '100%', height: '300px' }}>
             {revenueChartData ? (
               revenueChartData.datasets.some(ds => ds.data.some(v => v !== 0)) ? (
-                <Bar data={revenueChartData} options={chartOptions} />
+                <Bar key={currencyUnit} data={revenueChartData} options={chartOptions} />
               ) : (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
@@ -701,7 +693,7 @@ export default function DashboardPage() {
           <div style={{ width: '100%', height: '300px' }}>
             {netIncomeChartData ? (
               netIncomeChartData.datasets.some(ds => ds.data.some(v => v !== 0)) ? (
-                <Bar data={netIncomeChartData} options={chartOptions} />
+                <Bar key={currencyUnit} data={netIncomeChartData} options={chartOptions} />
               ) : (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
@@ -749,9 +741,9 @@ export default function DashboardPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Name</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CAPEX ($M)</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Debt ($M)</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Equity ($M)</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CAPEX ({currencyUnit})</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Debt ({currencyUnit})</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Equity ({currencyUnit})</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gearing (%)</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IRR (%)</th>
                   </tr>
@@ -768,13 +760,13 @@ export default function DashboardPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
-                        {asset.total_capex ? asset.total_capex.toFixed(1) : 'N/A'}
+                        {asset.total_capex ? formatCurrencyFromMillions(asset.total_capex, currencyUnit) : 'N/A'}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {asset.total_debt ? asset.total_debt.toFixed(1) : 'N/A'}
+                        {asset.total_debt ? formatCurrencyFromMillions(asset.total_debt, currencyUnit) : 'N/A'}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {asset.total_equity ? asset.total_equity.toFixed(1) : 'N/A'}
+                        {asset.total_equity ? formatCurrencyFromMillions(asset.total_equity, currencyUnit) : 'N/A'}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
                         {asset.gearing ? (asset.gearing * 100).toFixed(1) : 'N/A'}

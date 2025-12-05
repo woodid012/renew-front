@@ -21,9 +21,10 @@ export default function AssetDefaultsPage() {
     const [originalDefaults, setOriginalDefaults] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [status, setStatus] = useState({ type: '', message: '' });
+    const [status, setStatus] = useState({ type: '', message: '', hint: '' });
     const [activeTab, setActiveTab] = useState('solar');
     const [hasChanges, setHasChanges] = useState(false);
+    const [initializing, setInitializing] = useState(false);
 
     useEffect(() => {
         loadDefaults();
@@ -38,18 +39,60 @@ export default function AssetDefaultsPage() {
 
     const loadDefaults = async () => {
         setLoading(true);
+        setStatus({ type: '', message: '', hint: '' });
         try {
             const response = await fetch('/api/asset-defaults');
-            if (response.ok) {
-                const data = await response.json();
+            
+            // Check if response is ok before trying to parse JSON
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                console.error('Error parsing JSON response:', parseError);
+                setStatus({ 
+                    type: 'error', 
+                    message: 'Invalid response from server', 
+                    hint: 'The server returned an invalid response. Please check the server logs.' 
+                });
+                setDefaults(null);
+                setLoading(false);
+                return;
+            }
+
+            if (response.ok && data && data.assetDefaults && data.platformDefaults) {
                 setDefaults(data);
                 setOriginalDefaults(JSON.parse(JSON.stringify(data)));
+                setStatus({ type: '', message: '', hint: '' });
+            } else if (response.ok && data) {
+                // Status 200 but invalid structure - log what we got
+                console.error('Invalid data structure received:', {
+                    hasAssetDefaults: !!data.assetDefaults,
+                    hasPlatformDefaults: !!data.platformDefaults,
+                    keys: Object.keys(data),
+                    data: data
+                });
+                setStatus({ 
+                    type: 'error', 
+                    message: 'Invalid data structure received from server',
+                    hint: 'The server returned data but it is missing required fields (assetDefaults or platformDefaults). Please check the MongoDB document structure.'
+                });
+                setDefaults(null);
             } else {
-                setStatus({ type: 'error', message: 'Failed to load defaults' });
+                // More detailed error handling
+                const errorMessage = data?.error || `Failed to load defaults (Status: ${response.status})`;
+                const hint = data?.hint || data?.details || 'Please check your MongoDB connection and try initializing defaults.';
+                console.error('API Error:', { status: response.status, statusText: response.statusText, data });
+                setStatus({ type: 'error', message: errorMessage, hint });
+                setDefaults(null);
             }
         } catch (error) {
             console.error('Error loading defaults:', error);
-            setStatus({ type: 'error', message: 'Error loading defaults' });
+            setStatus({ 
+                type: 'error', 
+                message: `Error loading defaults: ${error.message}`, 
+                hint: 'Please check your network connection and MongoDB configuration.' 
+            });
+            setDefaults(null);
         } finally {
             setLoading(false);
         }
@@ -84,7 +127,57 @@ export default function AssetDefaultsPage() {
     const handleReset = () => {
         if (confirm('Reset all changes to last saved values?')) {
             setDefaults(JSON.parse(JSON.stringify(originalDefaults)));
-            setStatus({ type: '', message: '' });
+            setStatus({ type: '', message: '', hint: '' });
+        }
+    };
+
+    const handleInitialize = async () => {
+        if (!confirm('Initialize default asset defaults? This will create default values in MongoDB.')) {
+            return;
+        }
+
+        setInitializing(true);
+        setStatus({ type: '', message: '', hint: '' });
+        
+        try {
+            const response = await fetch('/api/asset-defaults', {
+                method: 'PUT',
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                setStatus({ type: 'success', message: data.message || 'Defaults initialized successfully!', hint: '' });
+                // Reload defaults after initialization
+                setTimeout(() => {
+                    loadDefaults();
+                }, 1000);
+            } else if (response.status === 409) {
+                // Defaults already exist - just reload them
+                setStatus({ 
+                    type: 'info', 
+                    message: 'Defaults already exist in MongoDB',
+                    hint: 'Loading existing defaults...'
+                });
+                // Reload defaults immediately
+                setTimeout(() => {
+                    loadDefaults();
+                }, 500);
+            } else {
+                setStatus({ 
+                    type: 'error', 
+                    message: data.error || 'Failed to initialize defaults',
+                    hint: data.hint || ''
+                });
+            }
+        } catch (error) {
+            console.error('Error initializing defaults:', error);
+            setStatus({ 
+                type: 'error', 
+                message: 'Error initializing defaults',
+                hint: 'Please check your network connection and try again.'
+            });
+        } finally {
+            setInitializing(false);
         }
     };
 
@@ -159,10 +252,67 @@ export default function AssetDefaultsPage() {
 
     if (!defaults) {
         return (
-            <div className="flex items-center justify-center h-screen">
-                <div className="text-center">
+            <div className="flex items-center justify-center h-screen bg-gray-50">
+                <div className="text-center max-w-2xl mx-auto px-4">
                     <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                    <p className="text-gray-600">Failed to load asset defaults</p>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Failed to Load Asset Defaults</h2>
+                    <p className="text-gray-600 mb-4">{status.message || 'Unable to load asset defaults from the database.'}</p>
+                    {status.hint && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-left">
+                            <p className="text-sm font-semibold text-yellow-900 mb-1">💡 Hint:</p>
+                            <p className="text-sm text-yellow-800 whitespace-pre-wrap">{status.hint}</p>
+                        </div>
+                    )}
+                    {process.env.NODE_ENV === 'development' && (
+                        <details className="mt-4 text-left">
+                            <summary className="text-sm text-gray-600 cursor-pointer hover:text-gray-800">
+                                Debug Information
+                            </summary>
+                            <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-auto max-h-40">
+                                {JSON.stringify({ message: status.message, hint: status.hint }, null, 2)}
+                            </pre>
+                        </details>
+                    )}
+                    {status.type === 'success' && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-green-800 font-semibold">{status.message}</p>
+                        </div>
+                    )}
+                    {status.type === 'info' && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-blue-800 font-semibold">{status.message}</p>
+                            {status.hint && <p className="text-sm text-blue-700 mt-1">{status.hint}</p>}
+                        </div>
+                    )}
+                    <div className="flex space-x-3 justify-center mt-4">
+                        <button
+                            onClick={loadDefaults}
+                            disabled={initializing}
+                            className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Retry</span>
+                        </button>
+                        {status.type !== 'success' && (
+                            <button
+                                onClick={handleInitialize}
+                                disabled={initializing}
+                                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {initializing ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                        <span>Initializing...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Settings className="w-4 h-4" />
+                                        <span>Initialize Defaults</span>
+                                    </>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -174,7 +324,37 @@ export default function AssetDefaultsPage() {
         { id: 'storage', name: 'Storage', icon: Battery, color: 'green' }
     ];
 
-    const currentAsset = defaults.assetDefaults[activeTab];
+    // Safety check: ensure data structure is valid
+    if (activeTab === 'platform') {
+        // For platform tab, check platformDefaults
+        if (!defaults?.platformDefaults) {
+            return (
+                <div className="flex items-center justify-center h-screen">
+                    <div className="text-center">
+                        <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                        <p className="text-gray-600">Asset defaults data is not properly structured</p>
+                        <p className="text-sm text-gray-500 mt-2">Missing platformDefaults configuration</p>
+                    </div>
+                </div>
+            );
+        }
+    } else {
+        // For asset tabs, check assetDefaults and the specific asset type
+        if (!defaults?.assetDefaults || !defaults.assetDefaults[activeTab]) {
+            return (
+                <div className="flex items-center justify-center h-screen">
+                    <div className="text-center">
+                        <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                        <p className="text-gray-600">Asset defaults data is not properly structured</p>
+                        <p className="text-sm text-gray-500 mt-2">Missing assetDefaults or {activeTab} configuration</p>
+                    </div>
+                </div>
+            );
+        }
+    }
+
+    // Only set currentAsset for asset tabs, not platform
+    const currentAsset = activeTab !== 'platform' ? defaults.assetDefaults[activeTab] : null;
 
     return (
         <div className="min-h-screen bg-gray-50">

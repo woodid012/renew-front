@@ -1,9 +1,104 @@
 'use client'
 
 import Link from 'next/link';
-import { Settings, Sliders, DollarSign, FileText, Users, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Settings, Sliders, DollarSign, FileText, Users, Shield, Play, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function SettingsPage() {
+  const [isRunningAll, setIsRunningAll] = useState(false);
+  const [runStatus, setRunStatus] = useState({});
+  const [portfolios, setPortfolios] = useState([]);
+  const [currentPortfolio, setCurrentPortfolio] = useState(null);
+
+  useEffect(() => {
+    // Fetch portfolios on mount
+    const fetchPortfolios = async () => {
+      try {
+        const response = await fetch('/api/list-portfolios');
+        const data = await response.json();
+        if (data.success && Array.isArray(data.portfolios)) {
+          setPortfolios(data.portfolios);
+        }
+      } catch (error) {
+        console.error('Failed to fetch portfolios:', error);
+      }
+    };
+    fetchPortfolios();
+  }, []);
+
+  const runModelForPortfolio = async (portfolioName) => {
+    try {
+      // Determine backend URL
+      const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+      const backendUrl = isDevelopment 
+        ? process.env.NEXT_PUBLIC_LOCAL_BACKEND_URL || 'http://localhost:10000'
+        : process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com';
+      
+      const apiEndpoint = backendUrl
+        ? `${backendUrl}/api/run-model`
+        : '/api/run-model';
+
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          portfolio: portfolioName
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const runAllPortfolios = async () => {
+    if (isRunningAll) return;
+
+    setIsRunningAll(true);
+    setCurrentPortfolio(null);
+    const status = {};
+
+    // Initialize status for all portfolios
+    portfolios.forEach(portfolio => {
+      status[portfolio] = { status: 'pending', message: 'Waiting...' };
+    });
+    setRunStatus(status);
+
+    try {
+      for (const portfolio of portfolios) {
+        setCurrentPortfolio(portfolio);
+        status[portfolio] = { status: 'running', message: 'Running...' };
+        setRunStatus({ ...status });
+
+        try {
+          const result = await runModelForPortfolio(portfolio);
+          if (result.status === 'success') {
+            status[portfolio] = { status: 'success', message: result.message || 'Completed successfully' };
+          } else {
+            status[portfolio] = { status: 'error', message: result.message || 'Failed' };
+          }
+        } catch (error) {
+          status[portfolio] = { status: 'error', message: error.message || 'Error occurred' };
+        }
+        setRunStatus({ ...status });
+      }
+    } catch (error) {
+      console.error('Error running all portfolios:', error);
+    } finally {
+      setIsRunningAll(false);
+      setCurrentPortfolio(null);
+    }
+  };
+
   const settingsSections = [
     {
       title: 'Asset Defaults',
@@ -66,6 +161,106 @@ export default function SettingsPage() {
               </Link>
             );
           })}
+        </div>
+
+        {/* Run All Portfolios Section */}
+        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Run Model for All Portfolios</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Execute the cash flow model for all available portfolios sequentially
+              </p>
+            </div>
+            <button
+              onClick={runAllPortfolios}
+              disabled={isRunningAll || portfolios.length === 0}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunningAll ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Running...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  <span>Run All Portfolios</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {portfolios.length > 0 && (
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600 mb-2">
+                Portfolios: {portfolios.join(', ')}
+              </div>
+              
+              {currentPortfolio && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                    <span className="text-sm font-medium text-blue-900">
+                      Currently running: {currentPortfolio}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {portfolios.map((portfolio) => {
+                  const status = runStatus[portfolio] || { status: 'pending', message: 'Not started' };
+                  const getStatusIcon = () => {
+                    switch (status.status) {
+                      case 'running':
+                        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+                      case 'success':
+                        return <CheckCircle className="w-4 h-4 text-green-500" />;
+                      case 'error':
+                        return <AlertCircle className="w-4 h-4 text-red-500" />;
+                      default:
+                        return <div className="w-4 h-4 rounded-full border-2 border-gray-300" />;
+                    }
+                  };
+                  
+                  const getStatusColor = () => {
+                    switch (status.status) {
+                      case 'running':
+                        return 'bg-blue-50 border-blue-200';
+                      case 'success':
+                        return 'bg-green-50 border-green-200';
+                      case 'error':
+                        return 'bg-red-50 border-red-200';
+                      default:
+                        return 'bg-gray-50 border-gray-200';
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={portfolio}
+                      className={`p-3 rounded-md border ${getStatusColor()} transition-colors`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          {getStatusIcon()}
+                          <span className="font-medium text-gray-900">{portfolio}</span>
+                        </div>
+                        <span className="text-sm text-gray-600">{status.message}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {portfolios.length === 0 && !isRunningAll && (
+            <div className="text-sm text-gray-500 text-center py-4">
+              No portfolios found. Please ensure portfolios are configured.
+            </div>
+          )}
         </div>
       </div>
     </div>

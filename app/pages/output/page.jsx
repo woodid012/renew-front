@@ -21,6 +21,8 @@ import {
     FileText
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
+import { useDisplaySettings } from '../../context/DisplaySettingsContext';
+import { formatCurrencyFromMillions, formatCurrency } from '../../utils/currencyFormatter';
 
 Chart.register(...registerables);
 
@@ -40,6 +42,7 @@ const FIELDS_TO_PLOT = [
     { key: 'debt_capex', label: 'Debt CAPEX', category: 'Finance', color: '#6366f1' },
     { key: 'cfads', label: 'CFADS', category: 'Cash Flow', color: '#10b981' },
     { key: 'debt_service', label: 'Debt Service', category: 'Finance', color: '#ef4444' },
+    { key: 'ending_balance', label: 'Closing Debt Balance', category: 'Finance', color: '#a855f7' },
     { key: 'equity_cash_flow', label: 'Equity Cash Flow', category: 'Cash Flow', color: '#8b5cf6' },
     { key: 'net_income', label: 'Net Income', category: 'Profitability', color: '#059669' }
 ];
@@ -70,13 +73,17 @@ const generateColors = (count) => {
     return colors;
 };
 
-const formatMetricValue = (value, field) => {
+// This function will be defined inside components that have access to currencyUnit
+// For now, we'll create a factory function
+const createFormatMetricValue = (currencyUnit) => (value, field) => {
     if (field.includes('Price')) {
-        return `$${value.toLocaleString()}`;
+        // Price is in dollars per MWh, use currency formatter
+        return formatCurrency(value, currencyUnit);
     } else if (field.includes('Generation')) {
         return `${(value / 1000).toFixed(1)}k MWh`;
     } else {
-        return `$${value.toFixed(2)}M`;
+        // Most financial fields are in millions
+        return formatCurrencyFromMillions(value, currencyUnit);
     }
 };
 
@@ -84,6 +91,8 @@ const formatMetricValue = (value, field) => {
 
 const AssetView = ({ assetIds, assetIdToNameMap }) => {
     const { selectedPortfolio } = usePortfolio();
+    const { currencyUnit } = useDisplaySettings();
+    const formatMetricValue = createFormatMetricValue(currencyUnit);
     const [selectedAssetId, setSelectedAssetId] = useState(assetIds.length > 0 ? assetIds[0].id : '');
     const [assetData, setAssetData] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -201,8 +210,9 @@ const AssetView = ({ assetIds, assetIdToNameMap }) => {
                     color: '#6b7280',
                     callback: (value) => {
                         if (selectedField.includes('Generation')) return `${(value / 1000).toFixed(0)}k`;
-                        if (selectedField.includes('Price')) return `$${value}`;
-                        return `$${value}M`;
+                        if (selectedField.includes('Price')) return formatCurrency(value, currencyUnit);
+                        // Most financial fields are in millions
+                        return formatCurrencyFromMillions(value, currencyUnit);
                     }
                 }
             }
@@ -295,6 +305,8 @@ const AssetView = ({ assetIds, assetIdToNameMap }) => {
 
 const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
     const { selectedPortfolio } = usePortfolio();
+    const { currencyUnit } = useDisplaySettings();
+    const formatMetricValue = createFormatMetricValue(currencyUnit);
     const [selectedField, setSelectedField] = useState('revenue');
     const [selectedPeriod, setSelectedPeriod] = useState('yearly');
     const [chartType, setChartType] = useState('stacked');
@@ -388,8 +400,9 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
                 ticks: {
                     callback: (value) => {
                         if (selectedField.includes('Generation')) return `${(value / 1000).toFixed(0)}k`;
-                        if (selectedField.includes('Price')) return `$${value}`;
-                        return `$${value}M`;
+                        if (selectedField.includes('Price')) return formatCurrency(value, currencyUnit);
+                        // Most financial fields are in millions
+                        return formatCurrencyFromMillions(value, currencyUnit);
                     }
                 }
             }
