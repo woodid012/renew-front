@@ -1,10 +1,10 @@
-// app/pages/asset_3/page.jsx
+// app/pages/asset-inputs/detail/page.jsx
 'use client'
 
 import { useState, useEffect } from 'react';
-import { usePortfolio } from '../../context/PortfolioContext';
-import { useDisplaySettings } from '../../context/DisplaySettingsContext';
-import { formatCurrencyFromMillions } from '../../utils/currencyFormatter';
+import { usePortfolio } from '../../../context/PortfolioContext';
+import { useDisplaySettings } from '../../../context/DisplaySettingsContext';
+import { formatCurrencyFromMillions } from '../../../utils/currencyFormatter';
 import AssetCards from './components/AssetCards';
 import BulkEdit from './components/BulkEdit';
 import ImportExport from './components/ImportExport';
@@ -13,7 +13,6 @@ import {
   Plus,
   Save,
   X,
-  Zap,
   AlertCircle,
   CheckCircle,
   Grid3X3,
@@ -21,7 +20,7 @@ import {
   Download
 } from 'lucide-react';
 
-const Asset3Page = () => {
+const AssetsDetailPage = () => {
   const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio();
   const { currencyUnit } = useDisplaySettings();
   
@@ -118,7 +117,7 @@ const Asset3Page = () => {
       const portfolioToUse = portfolio || selectedPortfolio || 'ZEBRE';
       const uniqueId = getPortfolioUniqueId(portfolioToUse);
       if (!uniqueId) {
-        console.error('Asset 3 page - No unique_id found for portfolio:', portfolioToUse);
+        console.error('Assets detail page - No unique_id found for portfolio:', portfolioToUse);
         setLoading(false);
         return;
       }
@@ -719,7 +718,7 @@ const Asset3Page = () => {
         </div>
         {hasUnsavedChanges && (
           <div className="mt-2 text-sm text-orange-700">
-            Changes are kept locally until you save. Use the "Save Changes" button to persist your updates to MongoDB.
+            Changes are kept locally until you save. Use the &quot;Save Changes&quot; button to persist your updates to MongoDB.
           </div>
         )}
       </div>
@@ -727,4 +726,6 @@ const Asset3Page = () => {
   );
 };
 
-export default Asset3Page;
+export default AssetsDetailPage;
+
+

@@ -1,4 +1,4 @@
-// app/pages/asset_3/components/AssetForm.jsx
+// app/pages/asset-inputs/detail/components/AssetForm.jsx
 'use client'
 
 import { useState, useEffect } from 'react';
@@ -1232,3 +1232,5 @@ const AssetForm = ({
 };
 
 export default AssetForm;
+
+

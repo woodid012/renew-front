@@ -318,7 +318,7 @@ This document provides a complete mapping of:
 
 ---
 
-### Asset Inputs Page (`/pages/asset_3/page.jsx`)
+### Asset Inputs Detail Page (`/pages/asset-inputs/detail/page.jsx`)
 
 #### Components:
 1. **Asset Form** (Input forms for asset parameters)
@@ -336,27 +336,6 @@ This document provides a complete mapping of:
 4. **Asset Defaults**
    - **API:** `/api/asset-defaults` (GET/POST)
    - **Data Source:** `CONFIG_Asset_Inputs`
-
----
-
-### Export Data Page (`/pages/export-data/page.jsx`)
-
-#### Components:
-1. **Asset Data Export**
-   - **API:** `/api/output-asset-data?portfolio={portfolio}`
-   - **Data Source:** `ASSET_cash_flows`
-
-2. **Portfolio Export**
-   - **API:** `/api/all-assets-summary?period={period}&field={field}&portfolio={portfolio}`
-   - **Data Source:** `ASSET_cash_flows`
-
-3. **Sensitivity Export**
-   - **API:** `/api/get-sensitivity-output?portfolio={portfolio}`
-   - **Data Source:** `SENS_Summary_Main`
-
-4. **Export to Excel/CSV**
-   - **API:** `/api/export-data?collection={collection}&granularity={granularity}`
-   - **Data Source:** `ASSET_cash_flows` or `SENS_Asset_Outputs`
 
 ---
 
@@ -379,11 +358,6 @@ This document provides a complete mapping of:
 ---
 
 ### Other Pages
-
-#### Upload ZEBRE Data (`/pages/upload-zebre/page.jsx`)
-1. **Upload Configuration**
-   - **API:** `/api/upload-zebre-data` (POST)
-   - **Data Source:** `CONFIG_Inputs` (write)
 
 #### Price Curves (`/pages/price-curves2/page.jsx`)
 1. **Price Curve Visualization**

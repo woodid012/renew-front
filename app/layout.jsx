@@ -50,7 +50,7 @@ const navigationItems = [
   },
   {
     name: 'Assets',
-    href: '/pages/asset_3',
+    href: '/pages/asset-inputs/detail',
     icon: Building2,
     section: 'inputs'
   },

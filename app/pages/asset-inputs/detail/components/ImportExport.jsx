@@ -1,4 +1,4 @@
-// app/pages/asset_3/components/ImportExport.jsx
+// app/pages/asset-inputs/detail/components/ImportExport.jsx
 'use client'
 
 import { useState } from 'react';
@@ -336,3 +336,5 @@ const ImportExport = ({
 };
 
 export default ImportExport;
+
+

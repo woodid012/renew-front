@@ -1,8 +1,8 @@
-// app/pages/asset_3/components/BulkEdit.jsx
+// app/pages/asset-inputs/detail/components/BulkEdit.jsx
 'use client'
 
 import { useState } from 'react';
-import { Table, Edit, Save, X, RotateCcw } from 'lucide-react';
+import { Table, Save, X, RotateCcw } from 'lucide-react';
 import { useDisplaySettings } from '@/app/context/DisplaySettingsContext';
 import { formatCurrencyFromMillions } from '@/app/utils/currencyFormatter';
 
@@ -231,7 +231,7 @@ const BulkEdit = ({
         <h3 className="font-medium text-blue-900 mb-2">Bulk Edit Mode</h3>
         <p className="text-sm text-blue-700">
           Click on any cell to edit values directly. Changes are saved automatically to your local working copy.
-          Remember to use the "Save Changes" button to persist to the database.
+          Remember to use the &quot;Save Changes&quot; button to persist to the database.
         </p>
       </div>
 
@@ -362,3 +362,5 @@ const BulkEdit = ({
 };
 
 export default BulkEdit;
+
+

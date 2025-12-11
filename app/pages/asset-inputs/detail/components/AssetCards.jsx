@@ -1,4 +1,4 @@
-// app/pages/asset_3/components/AssetCards.jsx
+// app/pages/asset-inputs/detail/components/AssetCards.jsx
 'use client'
 
 import { useState } from 'react';
@@ -8,7 +8,6 @@ import {
   Copy,
   Sun,
   Wind,
-  Battery,
   BatteryFull,
   Plus,
   Save,
@@ -68,7 +67,7 @@ const AssetCards = ({
     setHasUnsavedChanges(true);
   };
 
-  const startCostEdit = (assetName, field, currentValue, rawValue) => {
+  const startCostEdit = (assetName, field, value, rawValue) => {
     setEditingCost(`${assetName}-${field}`);
     // For percentage fields, show the percentage value for editing
     if (field === 'maxGearing' || field === 'interestRate') {
@@ -384,3 +383,5 @@ const AssetCards = ({
 };
 
 export default AssetCards;
+
+
