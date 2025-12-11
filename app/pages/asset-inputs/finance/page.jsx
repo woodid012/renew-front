@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { Save, Loader2, CheckCircle, AlertCircle, DollarSign } from 'lucide-react';
+import { usePortfolio } from '../../../context/PortfolioContext';
 
 export default function FinancePage() {
+  const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio();
   const [financeSettings, setFinanceSettings] = useState({
     defaultCapexFundingType: 'equity_first',
-    defaultDebtRepaymentFrequency: 'quarterly',
-    defaultDebtGracePeriod: 'full_period',
+    debtRepaymentDscrFrequency: 'quarterly',
+    defaultDebtGracePeriod: 'prorate',
     defaultDebtSizingMethod: 'dscr',
-    dscrCalculationFrequency: 'quarterly',
     defaultInterestRate: 0.06,
     defaultDebtTermYears: 18,
     targetDSCRContract: 1.4,
@@ -23,10 +24,13 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: null, message: '' });
+  const [assets, setAssets] = useState([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
 
   useEffect(() => {
     fetchFinanceSettings();
-  }, []);
+    fetchAssets();
+  }, [selectedPortfolio]);
 
   const fetchFinanceSettings = async () => {
     setLoading(true);
@@ -35,13 +39,21 @@ export default function FinancePage() {
       if (response.ok) {
         const data = await response.json();
         if (data.settings) {
+          // Handle backward compatibility: map old fields to new combined field
+          let debtRepaymentDscrFrequency = data.settings.debtRepaymentDscrFrequency;
+          if (!debtRepaymentDscrFrequency) {
+            // If new field doesn't exist, use old fields (prefer dscrCalculationFrequency, fallback to defaultDebtRepaymentFrequency)
+            debtRepaymentDscrFrequency = data.settings.dscrCalculationFrequency || 
+                                        data.settings.defaultDebtRepaymentFrequency || 
+                                        'quarterly';
+          }
+          
           setFinanceSettings(prev => ({
             ...prev,
             defaultCapexFundingType: data.settings.defaultCapexFundingType || prev.defaultCapexFundingType,
-            defaultDebtRepaymentFrequency: data.settings.defaultDebtRepaymentFrequency || prev.defaultDebtRepaymentFrequency,
+            debtRepaymentDscrFrequency: debtRepaymentDscrFrequency || prev.debtRepaymentDscrFrequency,
             defaultDebtGracePeriod: data.settings.defaultDebtGracePeriod || prev.defaultDebtGracePeriod,
             defaultDebtSizingMethod: data.settings.defaultDebtSizingMethod || prev.defaultDebtSizingMethod,
-            dscrCalculationFrequency: data.settings.dscrCalculationFrequency || prev.dscrCalculationFrequency,
             defaultInterestRate: data.settings.defaultInterestRate ?? prev.defaultInterestRate,
             defaultDebtTermYears: data.settings.defaultDebtTermYears ?? prev.defaultDebtTermYears,
             targetDSCRContract: data.settings.targetDSCRContract ?? prev.targetDSCRContract,
@@ -62,6 +74,34 @@ export default function FinancePage() {
       setStatus({ type: 'error', message: 'Failed to load settings. Using defaults.' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAssets = async () => {
+    setAssetsLoading(true);
+    try {
+      const portfolioToUse = selectedPortfolio || 'ZEBRE';
+      const uniqueId = getPortfolioUniqueId(portfolioToUse);
+      if (!uniqueId) {
+        console.error('Finance page - No unique_id found for portfolio:', portfolioToUse);
+        setAssets([]);
+        setAssetsLoading(false);
+        return;
+      }
+
+      const response = await fetch(`/api/assets?unique_id=${encodeURIComponent(uniqueId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAssets(data.assets || []);
+      } else {
+        console.error('Failed to fetch assets');
+        setAssets([]);
+      }
+    } catch (error) {
+      console.error('Error fetching assets:', error);
+      setAssets([]);
+    } finally {
+      setAssetsLoading(false);
     }
   };
 
@@ -213,35 +253,6 @@ export default function FinancePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Debt Repayment Frequency
-                </label>
-                <select
-                  value={financeSettings.defaultDebtRepaymentFrequency}
-                  onChange={(e) => handleInputChange('defaultDebtRepaymentFrequency', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Debt Grace Period
-                </label>
-                <select
-                  value={financeSettings.defaultDebtGracePeriod}
-                  onChange={(e) => handleInputChange('defaultDebtGracePeriod', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="none">None (immediate payment)</option>
-                  <option value="full_period">Full Period (after first full period)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Debt Sizing Method
                 </label>
                 <select
@@ -255,135 +266,127 @@ export default function FinancePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  DSCR Calculation Frequency
+                  Debt Repayment / DSCR Frequency
                 </label>
                 <select
-                  value={financeSettings.dscrCalculationFrequency}
-                  onChange={(e) => handleInputChange('dscrCalculationFrequency', e.target.value)}
+                  value={financeSettings.debtRepaymentDscrFrequency}
+                  onChange={(e) => handleInputChange('debtRepaymentDscrFrequency', e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="monthly">Monthly</option>
                   <option value="quarterly">Quarterly</option>
                 </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Debt Terms & Rates */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Debt Terms & Rates</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Default Interest Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  max="100"
-                  value={financeSettings.defaultInterestRate * 100}
-                  onChange={(e) => handleInputChange('defaultInterestRate', parseFloat(e.target.value) / 100 || 0)}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                />
                 <p className="text-xs text-gray-500 mt-1">
-                  Default debt interest rate used for new assets (current: {(financeSettings.defaultInterestRate * 100).toFixed(2)}%)
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Default Debt Term (years)
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  min="1"
-                  max="30"
-                  value={financeSettings.defaultDebtTermYears}
-                  onChange={(e) => handleInputChange('defaultDebtTermYears', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Default debt repayment period in years
+                  Used for both DSCR calculation and debt repayment frequency
                 </p>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* DSCR Targets */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">DSCR Targets</h2>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600 mb-4">
-              Target Debt Service Coverage Ratios used for debt sizing. Higher DSCR targets result in lower debt capacity.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Target DSCR - Contracted Revenue
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="1.0"
-                  max="5.0"
-                  value={financeSettings.targetDSCRContract}
-                  onChange={(e) => handleInputChange('targetDSCRContract', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  DSCR target for contracted revenue periods (typically lower risk, e.g., 1.4)
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Target DSCR - Merchant Revenue
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="1.0"
-                  max="5.0"
-                  value={financeSettings.targetDSCRMerchant}
-                  onChange={(e) => handleInputChange('targetDSCRMerchant', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  DSCR target for merchant revenue periods (typically higher risk, e.g., 1.8)
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Debt Capacity Limits */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Debt Capacity Limits</h2>
-          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Maximum Gearing Ratio (%)
+                Debt Grace Period
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={financeSettings.maxGearing * 100}
-                onChange={(e) => handleInputChange('maxGearing', parseFloat(e.target.value) / 100 || 0)}
+              <select
+                value={financeSettings.defaultDebtGracePeriod}
+                onChange={(e) => handleInputChange('defaultDebtGracePeriod', e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-              />
+              >
+                <option value="prorate">Prorate (immediate prorated payment - default)</option>
+                <option value="none">None (immediate payment, prorated if partial period)</option>
+                <option value="full_period">Full Period (after first full period)</option>
+              </select>
               <p className="text-xs text-gray-500 mt-1">
-                Maximum debt as percentage of total project cost (current: {(financeSettings.maxGearing * 100).toFixed(0)}%)
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                This limits debt capacity even if DSCR constraints would allow higher debt
+                Determines when debt payments start if operations begin mid-period
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Asset-Level Debt Terms, DSCR, and Gearing */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Debt Terms, DSCR, and Gearing (Asset-Level)</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            These values are set on an asset-level basis and are read-only. To modify these values, edit the individual assets.
+          </p>
+          {assetsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 text-blue-600 animate-spin mr-2" />
+              <span className="text-gray-600">Loading assets...</span>
+            </div>
+          ) : assets.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No assets found for the current portfolio.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Asset Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Debt Term (years)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Interest Rate (%)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      DSCR Contract
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      DSCR Merchant
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Gearing (%)
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {assets.map((asset) => {
+                    // Get values from various possible field names and parse them
+                    const debtTermRaw = asset.cost_tenorYears || asset.tenorYears || asset.tenor || asset.debtTenor;
+                    const debtTerm = debtTermRaw != null && debtTermRaw !== '' ? parseFloat(debtTermRaw) : null;
+                    
+                    const interestRateRaw = asset.cost_interestRate || asset.interestRate || asset.interest_rate || asset.debtInterestRate;
+                    const interestRate = interestRateRaw != null && interestRateRaw !== '' ? parseFloat(interestRateRaw) : null;
+                    
+                    const dscrContractRaw = asset.cost_targetDSCRContract || asset.targetDSCRContract || asset.contractDSCR;
+                    const dscrContract = dscrContractRaw != null && dscrContractRaw !== '' ? parseFloat(dscrContractRaw) : null;
+                    
+                    const dscrMerchantRaw = asset.cost_targetDSCRMerchant || asset.targetDSCRMerchant || asset.merchantDSCR;
+                    const dscrMerchant = dscrMerchantRaw != null && dscrMerchantRaw !== '' ? parseFloat(dscrMerchantRaw) : null;
+                    
+                    const gearingRaw = asset.cost_maxGearing || asset.maxGearing || asset.max_gearing || asset.gearing;
+                    const gearing = gearingRaw != null && gearingRaw !== '' ? parseFloat(gearingRaw) : null;
+                    
+                    return (
+                      <tr key={asset.asset_id || asset._id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {asset.asset_name || asset.name || `Asset ${asset.asset_id || ''}`}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {debtTerm != null ? debtTerm : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {interestRate != null ? (interestRate * 100).toFixed(2) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {dscrContract != null ? dscrContract.toFixed(1) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {dscrMerchant != null ? dscrMerchant.toFixed(1) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {gearing != null ? (gearing * 100).toFixed(1) : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Depreciation */}

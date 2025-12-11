@@ -26,19 +26,20 @@ export async function GET(request) {
     try {
       const inputsCollection = db.collection('ASSET_inputs_summary')
       
-      // Filter by portfolio asset IDs if available
-      let query = {};
+      // Filter by unique_id (primary) and asset IDs (secondary) for accuracy
+      // IMPORTANT: Only show base case (scenario_id is null, missing, or empty)
+      let query = { 
+        unique_id: uniqueId,
+        $or: [
+          { scenario_id: { $exists: false } },
+          { scenario_id: null },
+          { scenario_id: '' }
+        ]
+      };
       if (portfolioAssetIds.length > 0) {
-        query = { asset_id: { $in: portfolioAssetIds } };
+        query.asset_id = { $in: portfolioAssetIds };
       } else {
-        console.warn(`Assets API - No asset IDs found for unique_id: ${uniqueId}`);
-        // Return empty if no assets for this portfolio
-        return NextResponse.json({
-          assets: [],
-          source: 'inputs_summary',
-          count: 0,
-          message: `No assets found for unique_id: ${uniqueId}`
-        });
+        console.warn(`Assets API - No asset IDs found for unique_id: ${uniqueId}, filtering by unique_id only`);
       }
       
       const rawAssets = await inputsCollection.find(query).toArray()
@@ -64,6 +65,8 @@ export async function GET(request) {
           cost_terminalValue: parseFloat(asset.cost_terminalValue) || 0,
           cost_operatingCosts: parseFloat(asset.cost_operatingCosts) || 0,
           cost_operatingCostEscalation: parseFloat(asset.cost_operatingCostEscalation) || 0,
+          cost_targetDSCRContract: parseFloat(asset.cost_targetDSCRContract) || 0,
+          cost_targetDSCRMerchant: parseFloat(asset.cost_targetDSCRMerchant) || 0,
           volumeLossAdjustment: parseFloat(asset.volumeLossAdjustment) || 95,
           annualDegradation: parseFloat(asset.annualDegradation) || 0.5,
           capacityFactor: parseFloat(asset.capacityFactor) || 25,
@@ -99,9 +102,19 @@ export async function GET(request) {
       }
       
       // Aggregate unique asset information from cash flows
+      // Filter by unique_id (primary) and asset IDs (secondary) for accuracy
+      // IMPORTANT: Only show base case (scenario_id is null, missing, or empty)
       const assetsPipeline = [
         {
-          $match: { asset_id: { $in: portfolioAssetIds } }
+          $match: { 
+            unique_id: uniqueId,
+            asset_id: { $in: portfolioAssetIds },
+            $or: [
+              { scenario_id: { $exists: false } },
+              { scenario_id: null },
+              { scenario_id: '' }
+            ]
+          }
         },
         {
           $group: {

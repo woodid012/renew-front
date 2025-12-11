@@ -48,6 +48,21 @@ export async function GET() {
     // Remove MongoDB _id field
     const { _id, ...settingsData } = settings;
 
+    // Backward compatibility: Convert old frequency fields to new combined field
+    if (!settingsData.debtRepaymentDscrFrequency) {
+      // If new field doesn't exist, create it from old fields
+      if (settingsData.dscrCalculationFrequency) {
+        settingsData.debtRepaymentDscrFrequency = settingsData.dscrCalculationFrequency;
+      } else if (settingsData.defaultDebtRepaymentFrequency) {
+        settingsData.debtRepaymentDscrFrequency = settingsData.defaultDebtRepaymentFrequency;
+      }
+    }
+
+    // Backward compatibility: Set default grace period if missing
+    if (!settingsData.defaultDebtGracePeriod) {
+      settingsData.defaultDebtGracePeriod = 'prorate';
+    }
+
     return NextResponse.json({ settings: settingsData });
   } catch (error) {
     console.error('Error fetching model settings:', error);

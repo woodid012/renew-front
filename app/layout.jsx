@@ -23,7 +23,8 @@ import {
   Plus,
   Play,
   Target,
-  DollarSign
+  DollarSign,
+  FileText
 } from 'lucide-react'
 import { RunModelProvider } from './context/RunModelContext'
 import { PortfolioProvider, usePortfolio } from './context/PortfolioContext'
@@ -111,6 +112,12 @@ const navigationItems = [
     name: 'Export',
     href: '/pages/wip',
     icon: TrendingUp, // You can choose a more appropriate icon if you have one
+    section: 'wip'
+  },
+  {
+    name: 'Build Excel',
+    href: '/pages/build-excel',
+    icon: FileText,
     section: 'wip'
   },
   {
