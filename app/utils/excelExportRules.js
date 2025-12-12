@@ -8,6 +8,10 @@ export const EXCEL_EXPORT_RULES = {
 
   // Column auto-fit rules
   autoFitColumns: true,
+  // Force fixed width from Column B onwards (B = 2nd column).
+  // This keeps labels readable in column A while keeping all value/period columns consistent.
+  fixedWidthFromColumnIndex: 1,
+  fixedWidthCharsFromColumnIndex: 14,
   minColumnWidthChars: 10,
   maxColumnWidthChars: 60,
   columnWidthPaddingChars: 2,
@@ -69,10 +73,24 @@ export function autoFitWorksheetColumns(XLSX, worksheet, rules = EXCEL_EXPORT_RU
   const minWch = rules.minColumnWidthChars ?? 10
   const maxWch = rules.maxColumnWidthChars ?? 60
   const pad = rules.columnWidthPaddingChars ?? 2
+  const fixedFrom = rules.fixedWidthFromColumnIndex ?? null
+  const fixedWch = rules.fixedWidthCharsFromColumnIndex ?? null
 
   const widths = new Array(colCount).fill(minWch)
 
   for (let c = range.s.c; c <= range.e.c; c++) {
+    const localColIndex = c - range.s.c
+    if (
+      fixedFrom !== null &&
+      fixedFrom !== undefined &&
+      fixedWch !== null &&
+      fixedWch !== undefined &&
+      localColIndex >= fixedFrom
+    ) {
+      widths[localColIndex] = fixedWch
+      continue
+    }
+
     let maxLen = 0
     for (let r = range.s.r; r <= range.e.r; r++) {
       const addr = XLSX.utils.encode_cell({ r, c })
@@ -84,7 +102,7 @@ export function autoFitWorksheetColumns(XLSX, worksheet, rules = EXCEL_EXPORT_RU
     }
 
     const wch = Math.min(maxWch, Math.max(minWch, maxLen + pad))
-    widths[c - range.s.c] = wch
+    widths[localColIndex] = wch
   }
 
   worksheet['!cols'] = widths.map((wch) => ({ wch }))
