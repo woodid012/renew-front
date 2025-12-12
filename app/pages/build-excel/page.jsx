@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react'
 import { FileSpreadsheet, Download, Loader2, AlertCircle, CheckCircle, Building2 } from 'lucide-react'
 import { usePortfolio } from '../../context/PortfolioContext'
+import {
+  EXCEL_EXPORT_RULES,
+  applyNumberFormatToWorksheet,
+  autoFitWorksheetColumns,
+  coerceISODateStringsToExcelDates,
+} from '../../utils/excelExportRules'
 
 export default function BuildExcelPage() {
   const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio()
@@ -105,46 +111,25 @@ export default function BuildExcelPage() {
       // Dynamically import xlsx to avoid SSR issues
       const XLSX = await import('xlsx')
       
-      // Helper function to apply number format to all numeric cells in a sheet
-      const applyNumberFormat = (worksheet, formatString) => {
-        if (!worksheet || !worksheet['!ref']) return
-        
-        // Get the range of the sheet
-        const range = XLSX.utils.decode_range(worksheet['!ref'])
-        
-        // Iterate through all cells
-        for (let row = range.s.r; row <= range.e.r; row++) {
-          for (let col = range.s.c; col <= range.e.c; col++) {
-            const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-            const cell = worksheet[cellAddress]
-            
-            // Skip if cell doesn't exist or is in the first column (label column)
-            if (!cell || col === 0) continue
-            
-            // Check if the cell contains a number
-            if (typeof cell.v === 'number' && !isNaN(cell.v)) {
-              // Apply the number format
-              cell.z = formatString
-            }
-          }
-        }
-      }
-      
       // Create workbook
       const workbook = XLSX.utils.book_new()
       
       // Add Inputs sheet
       const inputsWS = XLSX.utils.json_to_sheet(inputsSheetData)
+      coerceISODateStringsToExcelDates(XLSX, inputsWS, EXCEL_EXPORT_RULES)
+      if (EXCEL_EXPORT_RULES.autoFitColumns) autoFitWorksheetColumns(XLSX, inputsWS, EXCEL_EXPORT_RULES)
       XLSX.utils.book_append_sheet(workbook, inputsWS, 'Inputs')
       
       // Add Monthly Cashflows sheet (transposed)
       const cashflowsWS = XLSX.utils.json_to_sheet(cashflowsSheetData)
-      applyNumberFormat(cashflowsWS, '_-* #,##0.00_-;[Red]( #,##0.00)_-;_-* "-"??_-;_-@_-')
+      applyNumberFormatToWorksheet(XLSX, cashflowsWS, EXCEL_EXPORT_RULES.numberFormat)
+      if (EXCEL_EXPORT_RULES.autoFitColumns) autoFitWorksheetColumns(XLSX, cashflowsWS, EXCEL_EXPORT_RULES)
       XLSX.utils.book_append_sheet(workbook, cashflowsWS, 'Monthly Cashflows')
       
       // Add 3-Way Statement sheet (transposed)
       const threeWayWS = XLSX.utils.json_to_sheet(threeWaySheetData)
-      applyNumberFormat(threeWayWS, '_-* #,##0.00_-;[Red]( #,##0.00)_-;_-* "-"??_-;_-@_-')
+      applyNumberFormatToWorksheet(XLSX, threeWayWS, EXCEL_EXPORT_RULES.numberFormat)
+      if (EXCEL_EXPORT_RULES.autoFitColumns) autoFitWorksheetColumns(XLSX, threeWayWS, EXCEL_EXPORT_RULES)
       XLSX.utils.book_append_sheet(workbook, threeWayWS, '3-Way Statement')
 
       // Generate Excel file
@@ -152,7 +137,7 @@ export default function BuildExcelPage() {
       const assetName = selectedAsset.name || `Asset_${selectedAssetId}`
       const fileName = `${assetName}_Financial_Model_${new Date().toISOString().split('T')[0]}.xlsx`
       
-      XLSX.writeFile(workbook, fileName)
+      XLSX.writeFile(workbook, fileName, EXCEL_EXPORT_RULES.writeOptions)
       
       setStatus('Excel file generated successfully!')
       setTimeout(() => setStatus(''), 3000)
@@ -165,6 +150,90 @@ export default function BuildExcelPage() {
   }
 
   const prepareInputsSheet = (asset) => {
+    const stringifyValue = (v) => {
+      if (v === null || v === undefined) return ''
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v
+      try {
+        return JSON.stringify(v)
+      } catch {
+        return String(v)
+      }
+    }
+
+    const flattenAny = (value, prefix, out) => {
+      if (value === null || value === undefined) {
+        out[prefix] = ''
+        return
+      }
+
+      // Primitive
+      if (typeof value !== 'object' || value instanceof Date) {
+        out[prefix] = value
+        return
+      }
+
+      // Array
+      if (Array.isArray(value)) {
+        if (value.length === 0) {
+          out[prefix] = '[]'
+          return
+        }
+
+        // Array of primitives → join
+        const allPrimitive = value.every((x) => x === null || x === undefined || (typeof x !== 'object' || x instanceof Date))
+        if (allPrimitive) {
+          out[prefix] = value.map((x) => (x === null || x === undefined ? '' : String(x))).join(', ')
+          return
+        }
+
+        // Array of objects → index and recurse
+        value.forEach((item, idx) => {
+          const nextPrefix = `${prefix}[${idx + 1}]`
+          flattenAny(item, nextPrefix, out)
+        })
+        return
+      }
+
+      // Plain object
+      const keys = Object.keys(value)
+      if (keys.length === 0) {
+        out[prefix] = '{}'
+        return
+      }
+      keys.forEach((k) => {
+        const nextPrefix = prefix ? `${prefix}.${k}` : k
+        flattenAny(value[k], nextPrefix, out)
+      })
+    }
+
+    const findContractArrays = (obj) => {
+      const candidates = []
+      if (!obj || typeof obj !== 'object') return candidates
+
+      Object.entries(obj).forEach(([key, val]) => {
+        if (!val) return
+        const keyLower = key.toLowerCase()
+        if (!keyLower.includes('contract')) return
+
+        if (Array.isArray(val)) {
+          candidates.push({ key, value: val })
+        } else if (typeof val === 'object') {
+          // Some schemas store a single contract object
+          candidates.push({ key, value: [val] })
+        }
+      })
+
+      // Ensure the canonical field is included first if present
+      if (Array.isArray(obj.contracts) && !candidates.some((c) => c.key === 'contracts')) {
+        candidates.unshift({ key: 'contracts', value: obj.contracts })
+      }
+      if (obj.contracts && typeof obj.contracts === 'object' && !Array.isArray(obj.contracts) && !candidates.some((c) => c.key === 'contracts')) {
+        candidates.unshift({ key: 'contracts', value: [obj.contracts] })
+      }
+
+      return candidates
+    }
+
     // Flatten asset data into key-value pairs for the Inputs sheet
     const inputs = []
     
@@ -200,16 +269,34 @@ export default function BuildExcelPage() {
     inputs.push({ Parameter: 'Annual Degradation (%)', Value: asset.annualDegradation || '' })
     inputs.push({ Parameter: 'Volume Loss Adjustment (%)', Value: asset.volumeLossAdjustment || '' })
     
-    // Contracts
-    if (asset.contracts && asset.contracts.length > 0) {
+    // Contracts (export EVERYTHING saved so nothing goes missing; you can cull later)
+    const contractArrays = findContractArrays(asset)
+    if (contractArrays.length > 0) {
       inputs.push({ Parameter: '', Value: '' }) // Separator
-      inputs.push({ Parameter: 'Contracts', Value: '' })
-      asset.contracts.forEach((contract, index) => {
-        inputs.push({ Parameter: `Contract ${index + 1} - Type`, Value: contract.type || '' })
-        inputs.push({ Parameter: `Contract ${index + 1} - Start Date`, Value: contract.startDate || '' })
-        inputs.push({ Parameter: `Contract ${index + 1} - End Date`, Value: contract.endDate || '' })
-        inputs.push({ Parameter: `Contract ${index + 1} - Price ($/MWh)`, Value: contract.price || '' })
-        inputs.push({ Parameter: `Contract ${index + 1} - Volume (MWh)`, Value: contract.volume || '' })
+      inputs.push({ Parameter: 'Contracts (All Saved Inputs)', Value: '' })
+
+      contractArrays.forEach(({ key, value }) => {
+        inputs.push({ Parameter: '', Value: '' })
+        inputs.push({ Parameter: `Contracts Source: ${key}`, Value: '' })
+
+        value.forEach((contract, index) => {
+          inputs.push({ Parameter: `Contract ${index + 1} - Raw JSON`, Value: stringifyValue(contract) })
+
+          const flat = {}
+          // If a contract is a primitive (rare), still export it.
+          if (contract === null || contract === undefined || typeof contract !== 'object') {
+            flat.value = contract
+          } else {
+            flattenAny(contract, '', flat)
+          }
+
+          Object.entries(flat).forEach(([flatKey, flatVal]) => {
+            inputs.push({
+              Parameter: `Contract ${index + 1} - ${flatKey}`,
+              Value: stringifyValue(flatVal),
+            })
+          })
+        })
       })
     }
     

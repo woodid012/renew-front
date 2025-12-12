@@ -1,7 +1,7 @@
 'use client'
 
 import './globals.css'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -99,8 +99,24 @@ const navigationItems = [
     section: 'analysis'
   },
   {
+    section: 'Excel model',
+    isSection: true
+  },
+  {
+    name: 'Build Excel',
+    href: '/pages/build-excel',
+    icon: FileText,
+    section: 'excel-model'
+  },
+  {
     section: 'WIP',
     isSection: true
+  },
+  {
+    name: 'Costs',
+    href: '/pages/costs',
+    icon: DollarSign,
+    section: 'wip'
   },
   {
     name: 'Sensitivity Output',
@@ -112,12 +128,6 @@ const navigationItems = [
     name: 'Export',
     href: '/pages/wip',
     icon: TrendingUp, // You can choose a more appropriate icon if you have one
-    section: 'wip'
-  },
-  {
-    name: 'Build Excel',
-    href: '/pages/build-excel',
-    icon: FileText,
     section: 'wip'
   },
   {
@@ -139,6 +149,24 @@ function LayoutContent({ children }) {
   const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false)
   const [showAddPortfolioModal, setShowAddPortfolioModal] = useState(false)
   const [newPortfolioName, setNewPortfolioName] = useState('')
+
+  const selectedPortfolioMeta = useMemo(() => {
+    const p = portfolios.find((portfolio) => {
+      const obj =
+        typeof portfolio === 'string'
+          ? { name: portfolio, title: portfolio, unique_id: portfolio }
+          : portfolio
+      return (obj.unique_id || obj.name) === selectedPortfolio
+    })
+
+    const obj =
+      typeof p === 'string' ? { name: p, title: p, unique_id: p } : p
+
+    return {
+      platformName: obj?.name || obj?.title || selectedPortfolio || '',
+      uniqueId: selectedPortfolio || '',
+    }
+  }, [portfolios, selectedPortfolio])
 
   const getCurrentPageName = () => {
     const currentItem = navigationItems.find(item => !item.isSection && item.href === pathname)
@@ -287,13 +315,22 @@ function LayoutContent({ children }) {
                 <span className="text-sm text-gray-400">|</span>
                 <Briefcase className="w-4 h-4 text-gray-500" />
                 <div className="relative">
-                  <button
-                    onClick={() => setShowPortfolioDropdown(!showPortfolioDropdown)}
-                    className="flex items-center space-x-1 text-sm text-gray-700 hover:text-gray-900 focus:outline-none"
-                  >
-                    <span>{getPortfolioTitle(selectedPortfolio) || selectedPortfolio}</span>
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowPortfolioDropdown(!showPortfolioDropdown)}
+                      className="flex items-center space-x-1 text-sm text-gray-700 hover:text-gray-900 focus:outline-none"
+                      aria-label="Select portfolio"
+                    >
+                      <span>{selectedPortfolioMeta.platformName || getPortfolioTitle(selectedPortfolio) || selectedPortfolio}</span>
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <span
+                      className="text-xs text-gray-500 font-mono px-2 py-0.5 bg-white border border-gray-200 rounded"
+                      title="Portfolio unique_id (read-only)"
+                    >
+                      {selectedPortfolioMeta.uniqueId}
+                    </span>
+                  </div>
                   
                   {showPortfolioDropdown && (
                     <>
@@ -310,9 +347,7 @@ function LayoutContent({ children }) {
                             
                             const portfolioName = portfolioObj.name;
                             const uniqueId = portfolioObj.unique_id || portfolioObj.name;
-                            const displayName = uniqueId === portfolioName 
-                              ? portfolioName 
-                              : `${portfolioName} (${uniqueId})`;
+                            const displayName = portfolioObj.title || portfolioObj.name || uniqueId;
                             
                             return (
                               <button

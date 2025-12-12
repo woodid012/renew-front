@@ -729,3 +729,4 @@ const AssetsDetailPage = () => {
 export default AssetsDetailPage;
 
 
+
