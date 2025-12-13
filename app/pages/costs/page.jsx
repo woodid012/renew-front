@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { AlertCircle, CheckCircle, DollarSign, Loader2, Plus, Save, X, Trash2 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { useDisplaySettings } from '../../context/DisplaySettingsContext';
@@ -10,6 +10,93 @@ const DEFAULT_OPEX_ESCALATION_PCT = 2.5;
 
 function newId() {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+// Parse formula or percentage string to a number
+// Supports: "=1/10" -> 10, "10%" -> 10, "10" -> 10, "-" -> 0
+function parseFormulaOrPercent(input) {
+  if (!input || input === '' || input === '-') return 0;
+  const str = String(input).trim();
+  if (str === '-') return 0;
+  
+  // Handle formula: =1/10, =2/3, etc.
+  if (str.startsWith('=')) {
+    const formula = str.slice(1).trim();
+    const match = formula.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+    if (match) {
+      const numerator = parseFloat(match[1]);
+      const denominator = parseFloat(match[2]);
+      if (denominator !== 0) {
+        return (numerator / denominator) * 100;
+      }
+    }
+    // Try to evaluate as a simple expression (avoid eval for security)
+    // For now, only support division formulas like =1/10
+    return 0;
+  }
+  
+  // Handle percentage: "10%" -> 10
+  if (str.endsWith('%')) {
+    return parseFloat(str.slice(0, -1)) || 0;
+  }
+  
+  // Handle plain number
+  return parseFloat(str) || 0;
+}
+
+// Parse formula or value string to a number (for dollar values, not percentages)
+// Supports: "=1/10" -> 0.1, "=100/2" -> 50, "=10+5" -> 15, "=10-3" -> 7, "=10*2" -> 20, "10" -> 10, "-" -> 0
+function parseFormulaOrValue(input) {
+  if (!input || input === '' || input === '-') return 0;
+  const str = String(input).trim();
+  if (str === '-') return 0;
+  
+  // Handle formula: =1/10, =100/2, =10+5, =10-3, =10*2, etc.
+  if (str.startsWith('=')) {
+    const formula = str.slice(1).trim();
+    
+    // Division: =10/2
+    const divMatch = formula.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+    if (divMatch) {
+      const numerator = parseFloat(divMatch[1]);
+      const denominator = parseFloat(divMatch[2]);
+      if (denominator !== 0) {
+        return numerator / denominator;
+      }
+      return 0;
+    }
+    
+    // Multiplication: =10*2
+    const multMatch = formula.match(/^(\d+(?:\.\d+)?)\s*\*\s*(\d+(?:\.\d+)?)$/);
+    if (multMatch) {
+      return parseFloat(multMatch[1]) * parseFloat(multMatch[2]);
+    }
+    
+    // Addition: =10+5
+    const addMatch = formula.match(/^(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)$/);
+    if (addMatch) {
+      return parseFloat(addMatch[1]) + parseFloat(addMatch[2]);
+    }
+    
+    // Subtraction: =10-3
+    const subMatch = formula.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+    if (subMatch) {
+      return parseFloat(subMatch[1]) - parseFloat(subMatch[2]);
+    }
+    
+    // If no match, return 0
+    return 0;
+  }
+  
+  // Handle plain number
+  return parseFloat(str) || 0;
+}
+
+// Format number as percentage string for display
+function formatAsPercent(value) {
+  const num = parseFloat(value) || 0;
+  if (num === 0) return '-';
+  return num.toFixed(2);
 }
 
 function toDateInputValue(dateLike) {
@@ -30,6 +117,17 @@ function addYearsToDateInput(dateInput, years) {
   return toDateInputValue(d);
 }
 
+// Format date as DD/MM/YYYY for display
+function formatDateDDMMYYYY(dateLike) {
+  if (!dateLike) return '—';
+  const d = new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return '—';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function createEmptyAssetCosts(nowYear = new Date().getFullYear()) {
   return {
     capex: {
@@ -39,19 +137,19 @@ function createEmptyAssetCosts(nowYear = new Date().getFullYear()) {
           id: newId(),
           name: 'EPC',
           items: [
-            { id: newId(), label: 'Equipment', value: 0 },
-            { id: newId(), label: 'Installation', value: 0 },
+            { id: newId(), label: 'Equipment', value: 0, monthlyAllocations: [] },
+            { id: newId(), label: 'Installation', value: 0, monthlyAllocations: [] },
           ],
         },
         {
           id: newId(),
           name: "Owner's Costs",
-          items: [{ id: newId(), label: 'Development', value: 0 }],
+          items: [{ id: newId(), label: 'Development', value: 0, monthlyAllocations: [] }],
         },
         {
           id: newId(),
           name: 'Transaction Costs',
-          items: [{ id: newId(), label: 'Legal / Advisory', value: 0 }],
+          items: [{ id: newId(), label: 'Legal / Advisory', value: 0, monthlyAllocations: [] }],
         },
       ],
     },
@@ -66,8 +164,10 @@ function createEmptyAssetCosts(nowYear = new Date().getFullYear()) {
               id: newId(),
               label: 'Fixed O&M',
               value: 0,
-              referenceYear: nowYear,
+              units: 'AUD M p.a.',
+              escalationMethod: 'CPI',
               escalationPct: DEFAULT_OPEX_ESCALATION_PCT,
+              flexPct: 0,
               startDate: '',
               endDate: '',
             },
@@ -99,8 +199,12 @@ function normalizeGroup(group) {
       id: i.id || newId(),
       label: i.label || 'Item',
       value: parseFloat(i?.value) || 0,
-      referenceYear: i.referenceYear,
+      monthlyAllocations: Array.isArray(i?.monthlyAllocations) ? i.monthlyAllocations : [],
+      units: i.units || 'AUD M p.a.',
+      escalationMethod: i.escalationMethod || 'CPI',
       escalationPct: i.escalationPct,
+      flexPct: parseFloat(i?.flexPct) || 0,
+      referenceYear: i.referenceYear,
       startDate: i.startDate,
       endDate: i.endDate,
     };
@@ -145,9 +249,19 @@ export default function CostsPage() {
 
   const [assets, setAssets] = useState([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
+  const assetsLoadedRef = useRef(false); // Track if we've successfully loaded assets
 
   const [activeTab, setActiveTab] = useState('capex'); // capex | opex
   const [selectedAssetId, setSelectedAssetId] = useState('');
+  
+  // Track temporary input values for percentage fields (Excel-like behavior)
+  const [tempPctInputs, setTempPctInputs] = useState({});
+  
+  // Track temporary input values for dollar value fields (Excel-like behavior)
+  const [tempValueInputs, setTempValueInputs] = useState({});
+  
+  // Track which labels are being edited (double-click to edit)
+  const [editingLabel, setEditingLabel] = useState(null); // Format: 'group_${groupId}' or 'item_${groupId}_${itemId}'
 
   const [loadingCosts, setLoadingCosts] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -157,9 +271,15 @@ export default function CostsPage() {
   const [doc, setDoc] = useState(null);
 
   const uniqueId = useMemo(() => {
-    const uid = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE';
+    if (!selectedPortfolio) return 'ZEBRE';
+    const uid = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio;
     return uid;
-  }, [getPortfolioUniqueId, selectedPortfolio]);
+  }, [selectedPortfolio]); // Remove getPortfolioUniqueId from deps - it's stable
+
+  // Reset assets loaded flag when portfolio changes
+  useEffect(() => {
+    assetsLoadedRef.current = false;
+  }, [selectedPortfolio]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!originalDoc || !doc) return false;
@@ -167,19 +287,68 @@ export default function CostsPage() {
   }, [originalDoc, doc]);
 
   useEffect(() => {
+    if (!uniqueId) {
+      // Only clear if we haven't successfully loaded assets yet
+      if (!assetsLoadedRef.current) {
+        setAssets([]);
+      }
+      setAssetsLoading(false);
+      return;
+    }
+
     const fetchAssets = async () => {
-      setAssetsLoading(true);
+      // Don't show loading if we already have assets (prevents flickering)
+      if (!assetsLoadedRef.current) {
+        setAssetsLoading(true);
+      }
       try {
+        // Prefer the portfolio's own asset list (CONFIG_Inputs.asset_inputs) so the dropdown always matches the portfolio
+        const configRes = await fetch(`/api/get-asset-data?unique_id=${encodeURIComponent(uniqueId)}`);
+        if (configRes.ok) {
+          const config = await configRes.json();
+          const assetInputs = Array.isArray(config.asset_inputs) ? config.asset_inputs : [];
+          if (assetInputs.length > 0) {
+            const mapped = assetInputs.map((a) => ({
+              asset_id: a.id ? String(a.id) : String(a._id || Math.random()),
+              asset_name: a.name || `Asset ${a.id || a._id}`,
+              name: a.name || `Asset ${a.id || a._id}`,
+              OperatingStartDate: a.OperatingStartDate || a.assetStartDate || a.operatingStartDate,
+              assetLife: a.assetLife || a.assetLifeYears || 25,
+            }));
+            setAssets(mapped);
+            assetsLoadedRef.current = true; // Mark as successfully loaded
+            setAssetsLoading(false);
+            return;
+          }
+        } else if (configRes.status === 404) {
+          // Portfolio not found - don't clear existing assets, just log
+          console.warn('Portfolio not found:', uniqueId);
+          // Keep existing assets if we have them
+          setAssetsLoading(false);
+          return;
+        }
+
+        // Fallback to summary-based assets endpoint
         const response = await fetch(`/api/assets?unique_id=${encodeURIComponent(uniqueId)}`);
         if (response.ok) {
           const data = await response.json();
-          setAssets(Array.isArray(data.assets) ? data.assets : []);
-        } else {
+          const assetsArray = Array.isArray(data.assets) ? data.assets : [];
+          if (assetsArray.length > 0) {
+            setAssets(assetsArray);
+            assetsLoadedRef.current = true; // Mark as successfully loaded
+            setAssetsLoading(false);
+            return;
+          }
+        }
+        
+        // Only clear assets if we truly have no data AND we haven't successfully loaded before
+        if (!assetsLoadedRef.current) {
+          console.warn('No assets found for portfolio:', uniqueId);
           setAssets([]);
         }
       } catch (e) {
         console.error('Failed to fetch assets:', e);
-        setAssets([]);
+        // Don't clear assets on error - keep previous assets to prevent flickering
       } finally {
         setAssetsLoading(false);
       }
@@ -189,8 +358,15 @@ export default function CostsPage() {
   }, [uniqueId]);
 
   useEffect(() => {
-    if (!assetsLoading && assets.length > 0 && !selectedAssetId) {
-      setSelectedAssetId(String(assets[0].asset_id));
+    if (!assetsLoading && assets.length > 0) {
+      // Only set selectedAssetId if it's not already set or if the current selection is invalid
+      const currentAssetExists = selectedAssetId && assets.some(a => String(a.asset_id) === String(selectedAssetId));
+      if (!currentAssetExists) {
+        setSelectedAssetId(String(assets[0].asset_id));
+      }
+    } else if (!assetsLoading && assets.length === 0 && selectedAssetId) {
+      // Clear selection if no assets available
+      setSelectedAssetId('');
     }
   }, [assetsLoading, assets, selectedAssetId]);
 
@@ -355,13 +531,16 @@ export default function CostsPage() {
         if (g.id !== groupId) return g;
         const baseItem =
           activeTab === 'capex'
-            ? { id: newId(), label: 'New Item', value: 0 }
+            ? { id: newId(), label: 'New Item', value: 0, monthlyAllocations: [] }
             : {
                 id: newId(),
                 label: 'New Item',
                 value: 0,
-                referenceYear: assetCosts.opex?.reference_year || nowYear,
+                units: 'AUD M p.a.',
+                escalationMethod: 'CPI',
                 escalationPct: DEFAULT_OPEX_ESCALATION_PCT,
+                flexPct: 0,
+                referenceYear: assetCosts.opex?.reference_year || nowYear,
                 startDate: defaultOpexRange.startDate,
                 endDate: defaultOpexRange.endDate,
               };
@@ -400,13 +579,55 @@ export default function CostsPage() {
   };
 
   const setConstructionMonths = (months) => {
-    updateAssetCosts((assetCosts) => ({
-      ...assetCosts,
-      capex: {
-        ...assetCosts.capex,
-        construction_duration_months: parseInt(months) || 0,
-      },
-    }));
+    const monthsInt = parseInt(months) || 0;
+    updateAssetCosts((assetCosts) => {
+      // When construction months change, ensure all CAPEX items have the right number of monthly allocations
+      const groups = (assetCosts.capex?.groups || []).map((g) => ({
+        ...g,
+        items: (g.items || []).map((i) => {
+          const currentAllocs = Array.isArray(i.monthlyAllocations) ? i.monthlyAllocations : [];
+          const newAllocs = Array.from({ length: monthsInt }, (_, idx) => currentAllocs[idx] || 0);
+          return { ...i, monthlyAllocations: newAllocs };
+        }),
+      }));
+      return {
+        ...assetCosts,
+        capex: {
+          ...assetCosts.capex,
+          construction_duration_months: monthsInt,
+          groups,
+        },
+      };
+    });
+  };
+
+  const updateMonthlyAllocation = (groupId, itemId, monthIndex, inputValue) => {
+    const parsedValue = parseFormulaOrValue(inputValue);
+    updateAssetCosts((assetCosts) => {
+      const target = assetCosts.capex;
+      const nextGroups = (target.groups || []).map((g) => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          items: (g.items || []).map((i) => {
+            if (i.id !== itemId) return i;
+            const allocs = Array.isArray(i.monthlyAllocations) ? [...i.monthlyAllocations] : [];
+            while (allocs.length <= monthIndex) allocs.push(0);
+            allocs[monthIndex] = parsedValue;
+            return { ...i, monthlyAllocations: allocs };
+          }),
+        };
+      });
+      return { ...assetCosts, capex: { ...target, groups: nextGroups } };
+    });
+  };
+
+  const getMonthlyAllocationTotal = (item) => {
+    const allocs = Array.isArray(item?.monthlyAllocations) ? item.monthlyAllocations : [];
+    const totalDollars = allocs.reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+    const itemValue = parseFloat(item.value) || 0;
+    if (itemValue === 0) return 0;
+    return (totalDollars / itemValue) * 100; // Return as percentage of input value
   };
 
   const ensureOpexDates = () => {
@@ -582,7 +803,7 @@ export default function CostsPage() {
                 <div className="space-y-1 text-sm text-gray-700">
                   <div className="flex justify-between gap-3">
                     <span>Total CAPEX</span>
-                    <span className="font-semibold">{formatCurrencyFromMillions(capexTotals.total, currencyUnit)}</span>
+                    <span className="font-semibold">{capexTotals.total === 0 ? '-' : formatCurrencyFromMillions(capexTotals.total, currencyUnit)}</span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span>Construction (months)</span>
@@ -590,14 +811,14 @@ export default function CostsPage() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <span>Avg / month</span>
-                    <span>{formatCurrencyFromMillions(capexTotals.avgMonthly, currencyUnit)}</span>
+                    <span>{capexTotals.avgMonthly === 0 ? '-' : formatCurrencyFromMillions(capexTotals.avgMonthly, currencyUnit)}</span>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1 text-sm text-gray-700">
                   <div className="flex justify-between gap-3">
                     <span>Total OPEX (ref year)</span>
-                    <span className="font-semibold">{formatCurrencyFromMillions(opexTotals.total, currencyUnit)}</span>
+                    <span className="font-semibold">{opexTotals.total === 0 ? '-' : formatCurrencyFromMillions(opexTotals.total, currencyUnit)}</span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span>Ref year</span>
@@ -676,53 +897,318 @@ export default function CostsPage() {
           )}
         </div>
 
-        {/* Groups + Items (Excel-like table) */}
+        {/* CAPEX / OPEX tables */}
         <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
-                {activeTab === 'capex' ? 'CAPEX groups' : 'OPEX groups'}
+                {activeTab === 'capex' ? 'CAPEX sections' : 'OPEX groups'}
               </h2>
-              <button
-                onClick={addGroup}
-                className="px-3 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 flex items-center gap-2 text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Add group
-              </button>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group / Item</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value ($M)</th>
-                      {activeTab === 'opex' && (
-                        <>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ref year</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Escalation %</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End</th>
-                        </>
-                      )}
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Row value</th>
-                      <th className="px-3 py-2" />
-                    </tr>
+                    {activeTab === 'capex' ? (
+                      <>
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                              <span style={{ minWidth: '200px' }}>Section</span>
+                              <button
+                                onClick={addGroup}
+                                className="px-2 py-2 rounded-md bg-green-600 text-white hover:bg-green-700"
+                                title="Add section"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input value ($M)</th>
+                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total %</th>
+                          {Array.from({ length: currentAssetCosts?.capex?.construction_duration_months || 0 }, (_, i) => (
+                            <th key={`cm_${i}`} className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              CM{i + 1}
+                            </th>
+                          ))}
+                          <th className="px-3 py-2" />
+                        </tr>
+                      </>
+                    ) : (
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fixed costs</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Escalation</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied amount</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End</th>
+                        <th className="px-3 py-2" />
+                      </tr>
+                    )}
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {(activeTab === 'capex' ? currentAssetCosts?.capex?.groups : currentAssetCosts?.opex?.groups)?.flatMap((group) => {
                       const totals = computeGroupTotals(group);
+
+                      if (activeTab === 'capex') {
+                        const sectionLabelKey = `group_${group.id}`;
+                        const isEditingSection = editingLabel === sectionLabelKey;
+                        
+                        const sectionRow = (
+                          <tr key={`s_${group.id}`} className="bg-gray-50">
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                {isEditingSection ? (
+                                  <input
+                                    type="text"
+                                    value={group.name}
+                                    onChange={(e) => renameGroup(group.id, e.target.value)}
+                                    onBlur={() => setEditingLabel(null)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.target.blur();
+                                      }
+                                    }}
+                                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                                    style={{ minWidth: '200px' }}
+                                    placeholder="Section label"
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <div
+                                    onDoubleClick={() => setEditingLabel(sectionLabelKey)}
+                                    className="flex-1 p-2 border border-transparent rounded-md text-sm font-semibold cursor-pointer hover:bg-gray-100"
+                                    style={{ minWidth: '200px' }}
+                                  >
+                                    {group.name}
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => addItem(group.id)}
+                                  className="px-2 py-2 rounded-md bg-gray-900 text-white hover:bg-black"
+                                  title="Add item"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-500">—</td>
+                            <td className="px-3 py-2 text-sm text-gray-500">—</td>
+                            {Array.from({ length: currentAssetCosts?.capex?.construction_duration_months || 0 }, (_, i) => (
+                              <td key={`section_cm_${i}`} className="px-2 py-2 text-sm text-gray-500">—</td>
+                            ))}
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                onClick={() => deleteGroup(group.id)}
+                                className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                title="Delete section"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+
+                        const itemRows = (group.items || []).map((item) => {
+                          const value = parseFloat(item.value) || 0;
+                          const allocs = Array.isArray(item.monthlyAllocations) ? item.monthlyAllocations : [];
+                          const months = currentAssetCosts?.capex?.construction_duration_months || 0;
+                          const totalPct = getMonthlyAllocationTotal(item);
+                          const isPctValid = Math.abs(totalPct - 100) < 0.01;
+                          const itemLabelKey = `item_${group.id}_${item.id}`;
+                          const isEditingItem = editingLabel === itemLabelKey;
+                          
+                          return (
+                            <tr key={`i_${group.id}_${item.id}`} className="hover:bg-gray-50">
+                              <td className="px-3 py-2">
+                                {isEditingItem ? (
+                                  <input
+                                    type="text"
+                                    value={item.label}
+                                    onChange={(e) => updateItem(group.id, item.id, { label: e.target.value })}
+                                    onBlur={() => setEditingLabel(null)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.target.blur();
+                                      }
+                                    }}
+                                    className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                                    style={{ minWidth: '200px', marginLeft: '20px' }}
+                                    placeholder="Item label"
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <div
+                                    onDoubleClick={() => setEditingLabel(itemLabelKey)}
+                                    className="p-2 border border-transparent rounded-md text-sm cursor-pointer hover:bg-gray-100"
+                                    style={{ minWidth: '200px', marginLeft: '20px' }}
+                                  >
+                                    {item.label}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {(() => {
+                                  const value = parseFloat(item.value) || 0;
+                                  const inputKey = `${group.id}_${item.id}_value`;
+                                  const tempValue = tempValueInputs[inputKey];
+                                  // Show temp value while typing, or actual value (formatted) when not typing
+                                  const displayValue = tempValue !== undefined 
+                                    ? tempValue 
+                                    : (value === 0 ? '' : String(value));
+                                  return (
+                                    <input
+                                      type="text"
+                                      value={displayValue}
+                                      onChange={(e) => {
+                                        // Update temporary value while typing (don't calculate yet)
+                                        setTempValueInputs(prev => ({ ...prev, [inputKey]: e.target.value }));
+                                      }}
+                                      onBlur={(e) => {
+                                        // Commit the value when user leaves the field (Excel-like)
+                                        const parsed = parseFormulaOrValue(e.target.value);
+                                        updateItem(group.id, item.id, { value: parsed });
+                                        // Clear temporary value after committing
+                                        setTempValueInputs(prev => {
+                                          const next = { ...prev };
+                                          delete next[inputKey];
+                                          return next;
+                                        });
+                                      }}
+                                      onKeyDown={(e) => {
+                                        // Commit on Enter key
+                                        if (e.key === 'Enter') {
+                                          e.target.blur();
+                                        }
+                                      }}
+                                      className="w-full p-2 border border-gray-300 rounded-md text-sm text-center"
+                                      style={{ minWidth: '100px' }}
+                                    />
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-3 py-2 text-center text-sm">
+                                <span className={`font-medium ${isPctValid ? 'text-gray-700' : 'text-red-600'}`}>
+                                  {totalPct === 0 ? '-' : totalPct.toFixed(2) + '%'}
+                                </span>
+                              </td>
+                              {Array.from({ length: months }, (_, i) => {
+                                const allocValue = parseFloat(allocs[i]) || 0;
+                                const inputKey = `${group.id}_${item.id}_${i}`;
+                                const tempValue = tempPctInputs[inputKey];
+                                // Show temp value while typing, or actual value (formatted) when not typing
+                                const displayValue = tempValue !== undefined 
+                                  ? tempValue 
+                                  : (allocValue === 0 ? '' : String(allocValue));
+                                return (
+                                  <td key={`alloc_${i}`} className="px-2 py-2">
+                                    <input
+                                      type="text"
+                                      value={displayValue}
+                                      onChange={(e) => {
+                                        // Update temporary value while typing (don't calculate yet)
+                                        setTempPctInputs(prev => ({ ...prev, [inputKey]: e.target.value }));
+                                      }}
+                                      onBlur={(e) => {
+                                        // Commit the value when user leaves the field (Excel-like)
+                                        const parsed = parseFormulaOrValue(e.target.value);
+                                        updateMonthlyAllocation(group.id, item.id, i, parsed);
+                                        // Clear temporary value after committing
+                                        setTempPctInputs(prev => {
+                                          const next = { ...prev };
+                                          delete next[inputKey];
+                                          return next;
+                                        });
+                                      }}
+                                      onKeyDown={(e) => {
+                                        // Commit on Enter key
+                                        if (e.key === 'Enter') {
+                                          e.target.blur();
+                                        }
+                                      }}
+                                      className="w-full p-2 border border-gray-300 rounded-md text-sm text-center"
+                                      style={{ minWidth: '80px' }}
+                                    />
+                                  </td>
+                                );
+                              })}
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  onClick={() => deleteItem(group.id, item.id)}
+                                  className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                  title="Delete item"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
+
+                        // Add summary row showing section total
+                        // Calculate monthly totals for each CM (now storing dollar values directly)
+                        const months = currentAssetCosts?.capex?.construction_duration_months || 0;
+                        const monthlyTotals = Array.from({ length: months }, (_, cmIndex) => {
+                          return (group.items || []).reduce((sum, item) => {
+                            const allocs = Array.isArray(item.monthlyAllocations) ? item.monthlyAllocations : [];
+                            const dollarValue = parseFloat(allocs[cmIndex]) || 0;
+                            return sum + dollarValue;
+                          }, 0);
+                        });
+                        
+                        const summaryRow = (
+                          <tr key={`summary_${group.id}`} className="bg-gray-100 border-t-2 border-gray-300">
+                            <td className="px-3 py-2 text-sm font-semibold text-gray-700">
+                              <div style={{ marginLeft: '20px' }}>
+                                Total
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
+                              {totals.total === 0 ? '-' : formatCurrencyFromMillions(totals.total, currencyUnit)}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-500">—</td>
+                            {Array.from({ length: months }, (_, i) => (
+                              <td key={`summary_cm_${i}`} className="px-2 py-2 text-sm text-gray-500 text-center">
+                                —
+                              </td>
+                            ))}
+                            <td className="px-3 py-2"></td>
+                          </tr>
+                        );
+
+                        return [sectionRow, ...itemRows, summaryRow];
+                      }
+
+                      // OPEX: stack item labels under group label
+                      const opexGroupLabelKey = `group_${group.id}`;
+                      const isEditingOpexGroup = editingLabel === opexGroupLabelKey;
+                      
                       const groupRow = (
                         <tr key={`g_${group.id}`} className="bg-gray-50">
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={group.name}
-                                onChange={(e) => renameGroup(group.id, e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                              />
+                              {isEditingOpexGroup ? (
+                                <input
+                                  type="text"
+                                  value={group.name}
+                                  onChange={(e) => renameGroup(group.id, e.target.value)}
+                                  onBlur={() => setEditingLabel(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.target.blur();
+                                    }
+                                  }}
+                                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                                  autoFocus
+                                />
+                              ) : (
+                                <div
+                                  onDoubleClick={() => setEditingLabel(opexGroupLabelKey)}
+                                  className="flex-1 p-2 border border-transparent rounded-md text-sm font-semibold cursor-pointer hover:bg-gray-100"
+                                >
+                                  {group.name}
+                                </div>
+                              )}
                               <button
                                 onClick={() => addItem(group.id)}
                                 className="px-2 py-2 rounded-md bg-gray-900 text-white hover:bg-black"
@@ -731,22 +1217,23 @@ export default function CostsPage() {
                                 <Plus className="w-4 h-4" />
                               </button>
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Total {formatCurrencyFromMillions(totals.total, currencyUnit)}
-                              <span className="font-medium text-gray-700">{formatCurrencyFromMillions(totals.total, currencyUnit)}</span>
-                            </div>
                           </td>
                           <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                          {activeTab === 'opex' && (
-                            <>
-                              <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                              <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                              <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                              <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                            </>
-                          )}
-                          <td className="px-3 py-2 text-right text-sm text-gray-700">
-                            {formatCurrencyFromMillions(totals.total, currencyUnit)}
+                          <td className="px-3 py-2 text-sm text-gray-500">—</td>
+                          <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
+                            {totals.total === 0 ? '-' : formatCurrencyFromMillions(totals.total, currencyUnit)}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-600">
+                            {selectedAsset?.OperatingStartDate ? formatDateDDMMYYYY(selectedAsset.OperatingStartDate) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-600">
+                            {selectedAsset?.OperatingStartDate && selectedAsset?.assetLife 
+                              ? (() => {
+                                  const startDate = new Date(selectedAsset.OperatingStartDate);
+                                  startDate.setFullYear(startDate.getFullYear() + (selectedAsset.assetLife || 0));
+                                  return formatDateDDMMYYYY(startDate);
+                                })()
+                              : '—'}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <button
@@ -761,70 +1248,86 @@ export default function CostsPage() {
                       );
 
                       const itemRows = (group.items || []).map((item) => {
-                        const value = parseFloat(item.value) || 0;
+                        const amount = parseFloat(item.value) || 0;
+                        const appliedAmount = amount; // No flex % anymore
+                        const opexItemLabelKey = `item_${group.id}_${item.id}`;
+                        const isEditingOpexItem = editingLabel === opexItemLabelKey;
+                        
                         return (
                           <tr key={`i_${group.id}_${item.id}`} className="hover:bg-gray-50">
                             <td className="px-3 py-2">
-                              <div className="pl-4">
+                              {isEditingOpexItem ? (
                                 <input
                                   type="text"
                                   value={item.label}
                                   onChange={(e) => updateItem(group.id, item.id, { label: e.target.value })}
+                                  onBlur={() => setEditingLabel(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.target.blur();
+                                    }
+                                  }}
                                   className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                                  style={{ marginLeft: '20px' }}
+                                  autoFocus
                                 />
-                              </div>
+                              ) : (
+                                <div
+                                  onDoubleClick={() => setEditingLabel(opexItemLabelKey)}
+                                  className="p-2 border border-transparent rounded-md text-sm cursor-pointer hover:bg-gray-100"
+                                  style={{ marginLeft: '20px' }}
+                                >
+                                  {item.label}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={item.escalationMethod || 'CPI'}
+                                onChange={(e) => updateItem(group.id, item.id, { escalationMethod: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                              >
+                                <option value="CPI">CPI</option>
+                                <option value="custom">Custom %</option>
+                              </select>
+                              {item.escalationMethod === 'custom' && (
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={item.escalationPct ?? DEFAULT_OPEX_ESCALATION_PCT}
+                                  onChange={(e) => updateItem(group.id, item.id, { escalationPct: parseFloat(e.target.value) || 0 })}
+                                  className="w-full p-1 border border-gray-300 rounded-md text-xs mt-1"
+                                  placeholder="Escalation %"
+                                />
+                              )}
                             </td>
                             <td className="px-3 py-2">
                               <input
                                 type="number"
                                 step="0.1"
-                                value={item.value ?? 0}
+                                value={amount}
                                 onChange={(e) => updateItem(group.id, item.id, { value: parseFloat(e.target.value) || 0 })}
                                 className="w-full p-2 border border-gray-300 rounded-md text-sm"
                               />
                             </td>
-                            {activeTab === 'opex' && (
-                              <>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="number"
-                                    step="1"
-                                    value={item.referenceYear ?? currentAssetCosts?.opex?.reference_year ?? new Date().getFullYear()}
-                                    onChange={(e) =>
-                                      updateItem(group.id, item.id, { referenceYear: parseInt(e.target.value) || new Date().getFullYear() })
-                                    }
-                                    className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    value={item.escalationPct ?? DEFAULT_OPEX_ESCALATION_PCT}
-                                    onChange={(e) => updateItem(group.id, item.id, { escalationPct: parseFloat(e.target.value) || 0 })}
-                                    className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="date"
-                                    value={item.startDate || ''}
-                                    onChange={(e) => updateItem(group.id, item.id, { startDate: e.target.value })}
-                                    className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="date"
-                                    value={item.endDate || ''}
-                                    onChange={(e) => updateItem(group.id, item.id, { endDate: e.target.value })}
-                                    className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                                  />
-                                </td>
-                              </>
-                            )}
-                            <td className="px-3 py-2 text-right text-sm text-gray-700">
-                              {formatCurrencyFromMillions(value, currencyUnit)}
+                            <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
+                              {appliedAmount === 0 ? '-' : formatCurrencyFromMillions(appliedAmount, currencyUnit)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="date"
+                                value={item.startDate || defaultOpexRange.startDate || ''}
+                                onChange={(e) => updateItem(group.id, item.id, { startDate: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="date"
+                                value={item.endDate || ''}
+                                onChange={(e) => updateItem(group.id, item.id, { endDate: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                              />
                             </td>
                             <td className="px-3 py-2 text-right">
                               <button
@@ -843,10 +1346,10 @@ export default function CostsPage() {
                     }) || (
                       <tr>
                         <td
-                          colSpan={activeTab === 'opex' ? 8 : 4}
+                          colSpan={activeTab === 'capex' ? (4 + (currentAssetCosts?.capex?.construction_duration_months || 18)) : 7}
                           className="px-3 py-10 text-center text-sm text-gray-500"
                         >
-                          No groups yet — click “Add group”.
+                          {activeTab === 'capex' ? 'No sections yet — click "Add section".' : 'No groups yet — click "Add group".'}
                         </td>
                       </tr>
                     )}
