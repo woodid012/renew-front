@@ -5,7 +5,7 @@ import { Save, Loader2, CheckCircle, AlertCircle, DollarSign } from 'lucide-reac
 import { usePortfolio } from '../../../context/PortfolioContext';
 
 export default function FinancePage() {
-  const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio();
+  const { selectedPortfolio } = usePortfolio();
   const [financeSettings, setFinanceSettings] = useState({
     defaultCapexFundingType: 'equity_first',
     debtRepaymentDscrFrequency: 'quarterly',
@@ -80,14 +80,14 @@ export default function FinancePage() {
   const fetchAssets = async () => {
     setAssetsLoading(true);
     try {
-      const portfolioToUse = selectedPortfolio || 'ZEBRE';
-      const uniqueId = getPortfolioUniqueId(portfolioToUse);
-      if (!uniqueId) {
-        console.error('Finance page - No unique_id found for portfolio:', portfolioToUse);
+      // selectedPortfolio from context is always the unique_id
+      if (!selectedPortfolio) {
+        console.error('Finance page - No unique_id found for portfolio:', selectedPortfolio);
         setAssets([]);
         setAssetsLoading(false);
         return;
       }
+      const uniqueId = selectedPortfolio;
 
       const response = await fetch(`/api/assets?unique_id=${encodeURIComponent(uniqueId)}`);
       if (response.ok) {

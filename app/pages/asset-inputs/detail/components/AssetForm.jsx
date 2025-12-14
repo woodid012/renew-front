@@ -27,12 +27,23 @@ const AssetForm = ({
 }) => {
   const { currencyUnit } = useDisplaySettings();
   const [activeTab, setActiveTab] = useState('basic');
+  const [isOperating, setIsOperating] = useState(false);
+  const [previousConstructionValues, setPreviousConstructionValues] = useState({ constructionStartDate: '', constructionDuration: 0 });
+
+  // Safe helper to get string values
+  const safeValue = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value);
+  };
 
   // Recalculate contract end dates when Operations Start date or construction dates change
   useEffect(() => {
     // Calculate current Operations Start date
     let opsStartDate = formData.OperatingStartDate || '';
-    if (formData.constructionStartDate && !opsStartDate) {
+    
+    // When in operating mode, use the manually set OperatingStartDate
+    // Otherwise, calculate from construction dates if OperatingStartDate is not set
+    if (!isOperating && formData.constructionStartDate && !opsStartDate) {
       const start = new Date(formData.constructionStartDate);
       start.setDate(1);
       const duration = parseInt(formData.constructionDuration) || 0;
@@ -85,12 +96,96 @@ const AssetForm = ({
         })
       };
     });
-  }, [formData.constructionStartDate, formData.constructionDuration, formData.OperatingStartDate]);
+  }, [formData.constructionStartDate, formData.constructionDuration, formData.OperatingStartDate, isOperating]);
 
-  // Safe helper to get string values
-  const safeValue = (value) => {
-    if (value === null || value === undefined) return '';
-    return String(value);
+  // Initialize operating state when editing an asset
+  useEffect(() => {
+    if (editingAsset) {
+      const duration = parseInt(formData.constructionDuration) || 0;
+      const consStart = safeValue(formData.constructionStartDate);
+      const opsStart = safeValue(formData.OperatingStartDate);
+      // Check if asset is already operating (duration is 0 and dates match)
+      const shouldBeOperating = duration === 0 && consStart && opsStart && consStart === opsStart;
+      setIsOperating(shouldBeOperating);
+      if (shouldBeOperating) {
+        // If operating, we don't need to save previous values since they're already set
+        setPreviousConstructionValues({ constructionStartDate: consStart, constructionDuration: 0 });
+      }
+    } else {
+      // Reset for new assets
+      setIsOperating(false);
+      setPreviousConstructionValues({ constructionStartDate: '', constructionDuration: 0 });
+    }
+  }, [editingAsset, formData.constructionStartDate, formData.constructionDuration, formData.OperatingStartDate]);
+
+  // Handle operating checkbox change
+  const handleOperatingChange = (checked) => {
+    setIsOperating(checked);
+    
+    if (checked) {
+      // Save current construction values
+      const currentConsStart = safeValue(formData.constructionStartDate);
+      const currentConsDuration = parseInt(formData.constructionDuration) || 18;
+      setPreviousConstructionValues({
+        constructionStartDate: currentConsStart,
+        constructionDuration: currentConsDuration
+      });
+      
+      // Set construction start = operations start (or use construction start if ops start is empty)
+      const opsStartDate = safeValue(formData.OperatingStartDate);
+      let consStartDate = opsStartDate;
+      
+      // If ops start is empty, use construction start if available, otherwise use current date
+      if (!consStartDate) {
+        if (currentConsStart) {
+          consStartDate = currentConsStart;
+        } else {
+          const today = new Date();
+          today.setDate(1); // Set to 1st of month
+          consStartDate = today.toISOString().split('T')[0];
+        }
+      }
+      
+      // Ensure construction start is set to 1st of month
+      const consStart = new Date(consStartDate);
+      consStart.setDate(1);
+      consStartDate = consStart.toISOString().split('T')[0];
+      
+      setFormData(prev => ({
+        ...prev,
+        constructionStartDate: consStartDate,
+        constructionDuration: 0,
+        OperatingStartDate: opsStartDate || consStartDate // Set ops start if it was empty
+      }));
+    } else {
+      // Restore previous construction values
+      const prevConsStart = previousConstructionValues.constructionStartDate || '';
+      const prevConsDuration = previousConstructionValues.constructionDuration || 18;
+      
+      setFormData(prev => {
+        const updated = {
+          ...prev,
+          constructionStartDate: prevConsStart,
+          constructionDuration: prevConsDuration
+        };
+        
+        // Recalculate OperatingStartDate from construction dates if not manually set
+        if (prevConsStart && !prev.OperatingStartDate) {
+          const start = new Date(prevConsStart);
+          start.setDate(1);
+          if (prevConsDuration > 0) {
+            const constructionEnd = new Date(start);
+            constructionEnd.setMonth(constructionEnd.getMonth() + prevConsDuration - 1);
+            constructionEnd.setMonth(constructionEnd.getMonth() + 1, 0);
+            const opsStart = new Date(constructionEnd);
+            opsStart.setDate(opsStart.getDate() + 1);
+            updated.OperatingStartDate = opsStart.toISOString().split('T')[0];
+          }
+        }
+        
+        return updated;
+      });
+    }
   };
 
   // Calculate volume metrics for performance tab
@@ -150,8 +245,20 @@ const AssetForm = ({
         }
       }
 
+      // Handle OperatingStartDate change when in operating mode
+      if (field === 'OperatingStartDate' && isOperating) {
+        // When operating, set construction start = operations start
+        if (value) {
+          const opsStart = new Date(value);
+          opsStart.setDate(1); // Force to 1st of month
+          updated.constructionStartDate = opsStart.toISOString().split('T')[0];
+          updated.constructionDuration = 0;
+        }
+      }
+
       // Calculate timeline dates: construction start + duration = construction end, then ops start = construction end + 1 day
-      if (field === 'constructionStartDate' || field === 'constructionDuration') {
+      // Skip this calculation when in operating mode
+      if ((field === 'constructionStartDate' || field === 'constructionDuration') && !isOperating) {
         const startDate = field === 'constructionStartDate' ? value : prev.constructionStartDate;
         const duration = parseInt(field === 'constructionDuration' ? value : prev.constructionDuration) || 0;
         
@@ -193,8 +300,8 @@ const AssetForm = ({
             updated.annualDegradation = typeDefaults.annualDegradation;
             updated.constructionDuration = typeDefaults.constructionDuration;
 
-            // Recalculate dates with new default duration if start date exists
-            if (updated.constructionStartDate && typeDefaults.constructionDuration !== undefined) {
+            // Recalculate dates with new default duration if start date exists (only if not in operating mode)
+            if (!isOperating && updated.constructionStartDate && typeDefaults.constructionDuration !== undefined) {
               const start = new Date(updated.constructionStartDate);
               start.setDate(1); // Ensure construction start is 1st of month
               updated.constructionStartDate = start.toISOString().split('T')[0];
@@ -210,6 +317,9 @@ const AssetForm = ({
               const opsStart = new Date(constructionEnd);
               opsStart.setDate(opsStart.getDate() + 1);
               updated.OperatingStartDate = opsStart.toISOString().split('T')[0];
+            } else if (isOperating) {
+              // In operating mode, keep construction duration at 0
+              updated.constructionDuration = 0;
             }
             // Prepopulate cost defaults for new type
             const defaults = getDefaultAssetCosts(currentType, parseFloat(updated.capacity) || 0);
@@ -274,9 +384,10 @@ const AssetForm = ({
             // Get the actual start date (either from useOpsStartDate or manual entry)
             let startDate = updatedContract.startDate || '';
             if (updatedContract.useOpsStartDate) {
-              // Calculate Operations Start date
+              // Use Operations Start date (manually set when operating, or calculated from construction)
               startDate = prev.OperatingStartDate || '';
-              if (prev.constructionStartDate && !startDate) {
+              // Only calculate from construction if not in operating mode and ops start is not set
+              if (!isOperating && prev.constructionStartDate && !startDate) {
                 const start = new Date(prev.constructionStartDate);
                 start.setDate(1);
                 const constructionDuration = parseInt(prev.constructionDuration) || 0;
@@ -318,7 +429,8 @@ const AssetForm = ({
   const addContract = () => {
     // Calculate Operations Start date for default
     let opsStartDate = formData.OperatingStartDate || '';
-    if (formData.constructionStartDate && !opsStartDate) {
+    // Only calculate from construction if not in operating mode and ops start is not set
+    if (!isOperating && formData.constructionStartDate && !opsStartDate) {
       const start = new Date(formData.constructionStartDate);
       start.setDate(1);
       const duration = parseInt(formData.constructionDuration) || 0;
@@ -342,7 +454,7 @@ const AssetForm = ({
       indexationReferenceYear: new Date().getFullYear(),
       startDate: opsStartDate,
       useOpsStartDate: true, // Default to using Operations Start date
-      contractDuration: '', // Duration in months
+      contractDuration: 120, // Duration in months
       endDate: '',
       hasFloor: false,
       floorValue: ''
@@ -730,7 +842,19 @@ const AssetForm = ({
               let opsStartDate = safeValue(formData.OperatingStartDate);
               let opsEndDate = '';
               
-              if (formData.constructionStartDate) {
+              if (isOperating) {
+                // When operating, construction end = construction start (duration is 0)
+                if (formData.constructionStartDate) {
+                  const start = new Date(formData.constructionStartDate);
+                  start.setDate(1);
+                  // Construction end is the same as construction start (end of that month)
+                  const constructionEnd = new Date(start);
+                  constructionEnd.setMonth(constructionEnd.getMonth() + 1, 0); // Last day of the month
+                  constructionEndDate = constructionEnd.toISOString().split('T')[0];
+                }
+                // Operations start uses the manually entered value
+                opsStartDate = safeValue(formData.OperatingStartDate);
+              } else if (formData.constructionStartDate) {
                 const start = new Date(formData.constructionStartDate);
                 start.setDate(1);
                 const duration = parseInt(formData.constructionDuration) || 0;
@@ -743,10 +867,14 @@ const AssetForm = ({
                 constructionEnd.setMonth(constructionEnd.getMonth() + 1, 0); // 0th day of next month = last day of current month
                 constructionEndDate = constructionEnd.toISOString().split('T')[0];
                 
-                // Operations start = construction end + 1 day
-                const opsStart = new Date(constructionEnd);
-                opsStart.setDate(opsStart.getDate() + 1);
-                opsStartDate = opsStart.toISOString().split('T')[0];
+                // Operations start = construction end + 1 day (or use manually set value if available)
+                if (!formData.OperatingStartDate) {
+                  const opsStart = new Date(constructionEnd);
+                  opsStart.setDate(opsStart.getDate() + 1);
+                  opsStartDate = opsStart.toISOString().split('T')[0];
+                } else {
+                  opsStartDate = safeValue(formData.OperatingStartDate);
+                }
               }
               
               // Calculate operations end = operations start + asset life (years) - 1 day
@@ -770,38 +898,59 @@ const AssetForm = ({
               
               return (
                 <div className="space-y-6">
-                  {/* Construction Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Construction Start</label>
-                      <input
-                        type="date"
-                        value={safeValue(formData.constructionStartDate)}
-                        onChange={(e) => handleInputChange('constructionStartDate', e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Construction Duration (months)</label>
-                      <input
-                        type="number"
-                        value={safeValue(formData.constructionDuration)}
-                        onChange={(e) => handleInputChange('constructionDuration', e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Construction End</label>
-                      <input
-                        type="date"
-                        value={constructionEndDate}
-                        disabled
-                        className="w-full p-2 border border-gray-300 rounded-md bg-gray-100 opacity-75 cursor-not-allowed"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Calculated: Construction Start + Duration</p>
-                    </div>
+                  {/* Operating Checkbox */}
+                  <div className="flex items-center space-x-2 pb-4 border-b">
+                    <input
+                      type="checkbox"
+                      id="isOperating"
+                      checked={isOperating}
+                      onChange={(e) => handleOperatingChange(e.target.checked)}
+                      className="w-4 h-4 text-green-600 border-gray-300 rounded"
+                    />
+                    <label htmlFor="isOperating" className="text-sm font-medium text-gray-700">
+                      Operating
+                    </label>
+                    <p className="text-xs text-gray-500 ml-2">
+                      {isOperating 
+                        ? 'Asset is already operating. Construction inputs are hidden.' 
+                        : 'Check if asset is already in operation'}
+                    </p>
                   </div>
+
+                  {/* Construction Row - Hidden when operating */}
+                  {!isOperating && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Construction Start</label>
+                        <input
+                          type="date"
+                          value={safeValue(formData.constructionStartDate)}
+                          onChange={(e) => handleInputChange('constructionStartDate', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Construction Duration (months)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.constructionDuration)}
+                          onChange={(e) => handleInputChange('constructionDuration', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          min="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Construction End</label>
+                        <input
+                          type="date"
+                          value={constructionEndDate}
+                          disabled
+                          className="w-full p-2 border border-gray-300 rounded-md bg-gray-100 opacity-75 cursor-not-allowed"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Calculated: Construction Start + Duration</p>
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Operations Row */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -810,10 +959,19 @@ const AssetForm = ({
                       <input
                         type="date"
                         value={opsStartDate}
-                        disabled
-                        className="w-full p-2 border border-gray-300 rounded-md bg-gray-100 opacity-75 cursor-not-allowed"
+                        onChange={(e) => handleInputChange('OperatingStartDate', e.target.value)}
+                        disabled={!isOperating}
+                        className={`w-full p-2 border border-gray-300 rounded-md ${
+                          isOperating 
+                            ? '' 
+                            : 'bg-gray-100 opacity-75 cursor-not-allowed'
+                        }`}
                       />
-                      <p className="text-xs text-gray-500 mt-1">Calculated: Construction End + 1 day</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {isOperating 
+                          ? 'Enter the operations start date' 
+                          : 'Calculated: Construction End + 1 day'}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Operations Duration (years)</label>
@@ -919,9 +1077,10 @@ const AssetForm = ({
                               const useOpsStart = e.target.checked;
                               handleContractChange(index, 'useOpsStartDate', useOpsStart);
                               if (useOpsStart) {
-                                // Calculate Operations Start date
+                                // Use Operations Start date (manually set when operating, or calculated from construction)
                                 let opsStartDate = formData.OperatingStartDate || '';
-                                if (formData.constructionStartDate && !opsStartDate) {
+                                // Only calculate from construction if not in operating mode and ops start is not set
+                                if (!isOperating && formData.constructionStartDate && !opsStartDate) {
                                   const start = new Date(formData.constructionStartDate);
                                   start.setDate(1);
                                   const duration = parseInt(formData.constructionDuration) || 0;
@@ -949,10 +1108,11 @@ const AssetForm = ({
                             <input
                               type="date"
                               value={(() => {
-                                // If useOpsStartDate is checked, calculate and return Operations Start date
+                                // If useOpsStartDate is checked, use Operations Start date (manually set when operating, or calculated)
                                 if (contract.useOpsStartDate) {
                                   let opsStartDate = formData.OperatingStartDate || '';
-                                  if (formData.constructionStartDate && !opsStartDate) {
+                                  // Only calculate from construction if not in operating mode and ops start is not set
+                                  if (!isOperating && formData.constructionStartDate && !opsStartDate) {
                                     const start = new Date(formData.constructionStartDate);
                                     start.setDate(1);
                                     const duration = parseInt(formData.constructionDuration) || 0;

@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { Shield, Users, Plus, Edit, Trash2, Search, X, Save, Briefcase, AlertTriangle } from 'lucide-react';
+import { Shield, Users, Plus, Edit, Trash2, Search, X, Save, Briefcase, AlertTriangle, Star } from 'lucide-react';
 
 export default function AdministratorPage() {
   const [accounts, setAccounts] = useState([]);
   const [filteredAccounts, setFilteredAccounts] = useState([]);
   const [portfolios, setPortfolios] = useState([]);
   const [loadingPortfolios, setLoadingPortfolios] = useState(false);
+  const [defaultPortfolio, setDefaultPortfolio] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('accounts'); // 'accounts' or 'portfolios'
   const [showAddModal, setShowAddModal] = useState(false);
@@ -32,7 +33,7 @@ export default function AdministratorPage() {
     } else {
       // Default accounts
       const defaultAccounts = [
-        { id: 1, username: 'admin', email: 'admin@example.com', role: 'admin', status: 'active', portfolioAccess: ['ZEBRE', 'xxx'] },
+        { id: 1, username: 'admin', email: 'admin@example.com', role: 'admin', status: 'active', portfolioAccess: ['ZEBRE'] },
         { id: 2, username: 'user1', email: 'user1@example.com', role: 'user', status: 'active', portfolioAccess: ['ZEBRE'] }
       ];
       setAccounts(defaultAccounts);
@@ -58,11 +59,15 @@ export default function AdministratorPage() {
           typeof p === 'string' ? { name: p, assetCount: 0, lastUpdated: null } : p
         );
         setPortfolios(portfolios);
+        // Store default portfolio unique_id
+        if (data.defaultPortfolio) {
+          setDefaultPortfolio(data.defaultPortfolio);
+        }
       } else {
         // Fallback to localStorage
         const stored = localStorage.getItem('portfolios');
         const storedPortfolios = stored ? JSON.parse(stored) : [];
-        const fallbackPortfolios = ['ZEBRE', 'xxx', ...storedPortfolios].map(name => ({
+        const fallbackPortfolios = ['ZEBRE', ...storedPortfolios].map(name => ({
           name,
           assetCount: 0,
           lastUpdated: null
@@ -74,7 +79,7 @@ export default function AdministratorPage() {
       // Fallback to localStorage
       const stored = localStorage.getItem('portfolios');
       const storedPortfolios = stored ? JSON.parse(stored) : [];
-      const fallbackPortfolios = ['ZEBRE', 'xxx', ...storedPortfolios].map(name => ({
+      const fallbackPortfolios = ['ZEBRE', ...storedPortfolios].map(name => ({
         name,
         assetCount: 0,
         lastUpdated: null
@@ -90,8 +95,8 @@ export default function AdministratorPage() {
     const name = typeof portfolioName === 'string' ? portfolioName : portfolioName.name;
     
     // Prevent deletion of default portfolios
-    if (name === 'ZEBRE' || name === 'xxx') {
-      alert('Cannot delete default portfolios (ZEBRE, xxx)');
+    if (name === 'ZEBRE') {
+      alert('Cannot delete default portfolio (ZEBRE)');
       return;
     }
 
@@ -140,6 +145,40 @@ export default function AdministratorPage() {
     } catch (error) {
       console.error('Error deleting portfolio:', error);
       alert('Failed to delete portfolio: ' + error.message);
+    }
+  };
+
+  const handleSetDefaultPortfolio = async (uniqueId) => {
+    if (!uniqueId) {
+      alert('Portfolio unique_id is required');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/default-portfolio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ unique_id: uniqueId }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to set default portfolio');
+      }
+
+      // Update local state
+      setDefaultPortfolio(uniqueId);
+      
+      // Reload portfolios to update the isDefault flag
+      await loadPortfolios();
+
+      alert(`Portfolio has been set as the default. It will be the first to load.`);
+    } catch (error) {
+      console.error('Error setting default portfolio:', error);
+      alert('Failed to set default portfolio: ' + error.message);
     }
   };
 
@@ -237,7 +276,7 @@ export default function AdministratorPage() {
     }
     const stored = localStorage.getItem('portfolios');
     const storedPortfolios = stored ? JSON.parse(stored) : [];
-    return ['ZEBRE', 'xxx', ...storedPortfolios];
+    return ['ZEBRE', ...storedPortfolios];
   };
 
   return (
@@ -576,10 +615,14 @@ export default function AdministratorPage() {
                     portfolios.map((portfolio) => {
                       const portfolioName = typeof portfolio === 'string' ? portfolio : portfolio.name;
                       const portfolioTitle = typeof portfolio === 'string' ? portfolio : (portfolio.title || portfolio.name);
+                      const uniqueId = typeof portfolio === 'object' ? portfolio.unique_id : null;
+                      const portfolioTitles = typeof portfolio === 'object' ? (portfolio.portfolioTitles || []) : [];
+                      const portfolioNames = typeof portfolio === 'object' ? (portfolio.portfolioNames || [portfolioName]) : [portfolioName];
                       const assetCount = typeof portfolio === 'object' ? (portfolio.assetCount || 0) : 0;
                       const lastUpdated = typeof portfolio === 'object' ? portfolio.lastUpdated : null;
-                      const isDefault = portfolioName === 'ZEBRE' || portfolioName === 'xxx';
-                      const isEditing = editingPortfolioTitle === portfolioName;
+                      const isSystemDefault = portfolioNames.includes('ZEBRE');
+                      const isDefaultPortfolio = uniqueId && defaultPortfolio === uniqueId;
+                      const isEditing = editingPortfolioTitle === (uniqueId || portfolioName);
                       
                       // Format last updated date
                       const formatDate = (dateString) => {
@@ -597,7 +640,7 @@ export default function AdministratorPage() {
                       };
 
                       const handleEditTitle = () => {
-                        setEditingPortfolioTitle(portfolioName);
+                        setEditingPortfolioTitle(uniqueId || portfolioName);
                         setPortfolioTitleValue(portfolioTitle);
                       };
 
@@ -608,12 +651,12 @@ export default function AdministratorPage() {
                         }
 
                         try {
-                          const response = await fetch('/api/update-portfolio-title', {
+                          const response = await fetch('/api/update-platform-name', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                              portfolioName: portfolioName,
-                              portfolioTitle: portfolioTitleValue.trim()
+                              unique_id: uniqueId || portfolioName,
+                              platformName: portfolioTitleValue.trim()
                             })
                           });
 
@@ -621,14 +664,22 @@ export default function AdministratorPage() {
                           if (data.success) {
                             setEditingPortfolioTitle(null);
                             setPortfolioTitleValue('');
+                            // Dispatch events to notify other pages
+                            if (typeof window !== 'undefined') {
+                              window.dispatchEvent(new CustomEvent('portfolioNameUpdated', { 
+                                detail: { unique_id: uniqueId || portfolioName, platformName: portfolioTitleValue.trim() } 
+                              }));
+                              // Trigger PortfolioContext refresh so dropdown updates
+                              window.dispatchEvent(new CustomEvent('refreshPortfolios'));
+                            }
                             // Reload portfolios to get updated title
                             loadPortfolios();
                           } else {
-                            alert('Failed to update portfolio title: ' + (data.error || 'Unknown error'));
+                            alert('Failed to update portfolio name: ' + (data.error || 'Unknown error'));
                           }
                         } catch (error) {
-                          console.error('Error updating portfolio title:', error);
-                          alert('Failed to update portfolio title: ' + error.message);
+                          console.error('Error updating portfolio name:', error);
+                          alert('Failed to update portfolio name: ' + error.message);
                         }
                       };
 
@@ -639,7 +690,7 @@ export default function AdministratorPage() {
                       
                       return (
                         <div
-                          key={portfolioName}
+                          key={uniqueId || portfolioName}
                           className="px-6 py-4 flex items-center justify-between hover:bg-gray-50"
                         >
                           <div className="flex items-center space-x-3 flex-1">
@@ -679,6 +730,11 @@ export default function AdministratorPage() {
                                   </div>
                                 ) : (
                                   <>
+                                    {uniqueId && (
+                                      <div className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                                        ID: {uniqueId}
+                                      </div>
+                                    )}
                                     <div className="text-sm font-medium text-gray-900">
                                       {portfolioTitle}
                                     </div>
@@ -687,14 +743,37 @@ export default function AdministratorPage() {
                                         ({portfolioName})
                                       </span>
                                     )}
-                                    {isDefault && (
+                                    {isDefaultPortfolio && (
+                                      <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded flex items-center gap-1">
+                                        <Star className="w-3 h-3 fill-yellow-600" />
+                                        Default Portfolio
+                                      </span>
+                                    )}
+                                    {isSystemDefault && !isDefaultPortfolio && (
                                       <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
-                                        Default
+                                        System Default
                                       </span>
                                     )}
                                   </>
                                 )}
                               </div>
+                              {!isEditing && portfolioTitles.length > 0 && (
+                                <div className="mb-2">
+                                  <div className="text-xs text-gray-500 mb-1">Portfolios with this ID:</div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {portfolioTitles.map((pt, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded"
+                                        title={pt.title !== pt.name ? `${pt.name}: ${pt.title}` : pt.name}
+                                      >
+                                        {pt.name}
+                                        {pt.title !== pt.name && ` (${pt.title})`}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <span className="font-medium">{assetCount}</span>
@@ -706,13 +785,27 @@ export default function AdministratorPage() {
                                     <span className="font-medium">{formatDate(lastUpdated)}</span>
                                   </span>
                                 )}
-                                {!isDefault && (
+                                {!isSystemDefault && (
                                   <span className="text-gray-400">Custom portfolio</span>
                                 )}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2 flex-shrink-0">
+                            {!isEditing && uniqueId && (
+                              <button
+                                onClick={() => handleSetDefaultPortfolio(uniqueId)}
+                                className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 transition-colors ${
+                                  isDefaultPortfolio
+                                    ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                                    : 'text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50'
+                                }`}
+                                title={isDefaultPortfolio ? 'This is the default portfolio' : 'Set as default portfolio'}
+                              >
+                                <Star className={`w-4 h-4 ${isDefaultPortfolio ? 'fill-yellow-600' : ''}`} />
+                                <span>{isDefaultPortfolio ? 'Default' : 'Set Default'}</span>
+                              </button>
+                            )}
                             {!isEditing && (
                               <button
                                 onClick={handleEditTitle}
@@ -723,9 +816,9 @@ export default function AdministratorPage() {
                                 <span>Edit Title</span>
                               </button>
                             )}
-                            {!isDefault && !isEditing && (
+                            {!isSystemDefault && !isEditing && (
                               <button
-                                onClick={() => handleDeletePortfolio(portfolioName)}
+                                onClick={() => handleDeletePortfolio(portfolioNames[0] || portfolioName)}
                                 className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md flex items-center space-x-1 transition-colors"
                                 title="Delete portfolio"
                               >

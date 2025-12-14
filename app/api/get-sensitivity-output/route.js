@@ -26,60 +26,49 @@ export async function GET(request) {
         // Get asset IDs for this portfolio
         const portfolioAssetIds = await getPortfolioAssetIds(db, uniqueId);
 
+        // Build query that checks for EITHER unique_id OR portfolio name/portfolio_name/PlatformName
+        // This handles both new data (with unique_id) and old data (with portfolio name only)
         let query = {};
-        if (scenarioId) {
-            query.scenario_id = scenarioId;
+        
+        // Check what fields exist in the collection by sampling a record
+        const sampleRecord = await collection.findOne({});
+        const hasUniqueId = sampleRecord && sampleRecord.unique_id !== undefined;
+        const hasPortfolioName = sampleRecord && sampleRecord.portfolio_name !== undefined;
+        const hasPlatformName = sampleRecord && sampleRecord.PlatformName !== undefined;
+        const hasPortfolio = sampleRecord && sampleRecord.portfolio !== undefined;
+        
+        // Build $or condition for portfolio identifier
+        // ALWAYS prioritize unique_id filter when provided (don't rely on sample record check)
+        const portfolioConditions = [];
+        // Always add unique_id filter first (highest priority)
+        portfolioConditions.push({ unique_id: uniqueId });
+        if (hasPortfolioName) {
+            portfolioConditions.push({ portfolio_name: actualPortfolioName });
+        }
+        if (hasPlatformName) {
+            portfolioConditions.push({ PlatformName: actualPortfolioName });
+        }
+        if (hasPortfolio) {
+            portfolioConditions.push({ portfolio: actualPortfolioName });
         }
         
-        // Filter by unique_id (primary identifier) instead of PlatformName
-        // Check if unique_id field exists in the collection
-        const hasUniqueIdField = await collection.countDocuments({ 
-            unique_id: { $exists: true }
-        }, { limit: 1 });
-        
-        console.log(`Sensitivity API - Checking collection for unique_id field. Has unique_id field: ${hasUniqueIdField > 0}`);
-        
-        if (hasUniqueIdField > 0) {
-            query.unique_id = uniqueId;
-            console.log(`Sensitivity API - Filtering by unique_id: ${uniqueId} (display name: ${actualPortfolioName})`);
-            
-            // Also check if there are any records with this unique_id
-            const countWithUniqueId = await collection.countDocuments(query);
-            console.log(`Sensitivity API - Found ${countWithUniqueId} records with unique_id: ${uniqueId}`);
-            
-            // If no records found with unique_id, try without unique_id filter to see what's in the collection
-            if (countWithUniqueId === 0) {
-                const sampleRecord = await collection.findOne({});
-                console.log(`Sensitivity API - Sample record in collection:`, sampleRecord ? Object.keys(sampleRecord) : 'No records found');
-                if (sampleRecord && sampleRecord.unique_id) {
-                    console.log(`Sensitivity API - Sample record unique_id: ${sampleRecord.unique_id}`);
-                }
-            }
+        // Build the query with $and to combine scenario_id (if provided) with portfolio conditions
+        const queryConditions = [];
+        if (scenarioId) {
+            queryConditions.push({ scenario_id: scenarioId });
+        }
+        if (portfolioConditions.length > 0) {
+            queryConditions.push({ $or: portfolioConditions });
+            console.log(`Sensitivity API - Filtering by: ${portfolioConditions.map(c => Object.keys(c)[0]).join(' OR ')} for unique_id: ${uniqueId} (portfolio name: ${actualPortfolioName})`);
         } else {
-            // Fallback: check for portfolio_name or PlatformName fields for backward compatibility
-            const hasPortfolioField = await collection.countDocuments({ 
-                $or: [
-                    { portfolio_name: { $exists: true } },
-                    { PlatformName: { $exists: true } }
-                ]
-            }, { limit: 1 });
-            
-            if (hasPortfolioField > 0) {
-                const sampleWithPortfolio = await collection.findOne({
-                    $or: [
-                        { portfolio_name: { $exists: true } },
-                        { PlatformName: { $exists: true } }
-                    ]
-                });
-                
-                if (sampleWithPortfolio) {
-                    const portfolioField = sampleWithPortfolio.portfolio_name !== undefined ? 'portfolio_name' : 'PlatformName';
-                    query[portfolioField] = actualPortfolioName;
-                    console.log(`Sensitivity API - Filtering by ${portfolioField} (fallback): ${actualPortfolioName} (unique_id: ${uniqueId})`);
-                }
+            console.log(`Sensitivity API - WARNING: No portfolio identifier fields found in collection. Will filter by asset IDs only.`);
+        }
+        
+        if (queryConditions.length > 0) {
+            if (queryConditions.length === 1) {
+                query = queryConditions[0];
             } else {
-                console.log(`Sensitivity API - WARNING: No unique_id/portfolio_name/PlatformName field found in collection. Will filter by asset IDs only.`);
-                // Don't add any portfolio filter - will rely on asset ID filtering only
+                query = { $and: queryConditions };
             }
         }
         
@@ -93,16 +82,11 @@ export async function GET(request) {
             
             console.log(`Sensitivity API - Portfolio: ${actualPortfolioName} (unique_id: ${uniqueId}), Asset IDs: [${portfolioAssetIds.join(', ')}], Query:`, JSON.stringify(query), `Total rows before filtering: ${allData.length}`);
             
-            // If no data found with the query, try without any portfolio filter (just get all data and filter by asset IDs)
-            if (allData.length === 0 && Object.keys(query).length > (scenarioId ? 1 : 0)) {
-                console.log(`Sensitivity API - No data found with portfolio filter, trying without portfolio filter...`);
-                const queryWithoutPortfolio = scenarioId ? { scenario_id: scenarioId } : {};
-                const allDataWithoutFilter = await collection.find(queryWithoutPortfolio).limit(100).toArray();
-                console.log(`Sensitivity API - Found ${allDataWithoutFilter.length} records without portfolio filter`);
-                if (allDataWithoutFilter.length > 0) {
-                    // Use the unfiltered data
-                    allData.push(...allDataWithoutFilter);
-                }
+            // IMPORTANT: Always respect the unique_id filter - do NOT fall back to unfiltered data
+            // If no data is found with the portfolio filter, return empty results
+            // This ensures data is properly filtered by unique_id
+            if (allData.length === 0) {
+                console.log(`Sensitivity API - No data found with portfolio filter for unique_id: ${uniqueId} (portfolio: ${actualPortfolioName}). Returning empty results.`);
             }
             
             // Filter to only include rows that have data for assets in this portfolio

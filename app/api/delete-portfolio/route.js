@@ -6,16 +6,33 @@ import clientPromise from '@/lib/mongodb'
 
 export async function DELETE(request) {
   try {
-    const { unique_id } = await request.json();
+    const body = await request.json();
+    const { unique_id, portfolio } = body;
     
-    if (!unique_id || !unique_id.trim()) {
-      return NextResponse.json({ error: 'Portfolio unique_id is required' }, { status: 400 });
+    // Accept either unique_id or portfolio (PlatformName)
+    let portfolioUniqueId = null;
+    
+    const client = await clientPromise;
+    const db = client.db('renew_assets');
+    
+    if (unique_id && unique_id.trim()) {
+      portfolioUniqueId = unique_id.trim();
+    } else if (portfolio && portfolio.trim()) {
+      // Look up unique_id by PlatformName
+      const portfolioDoc = await db.collection('CONFIG_Inputs').findOne({ 
+        PlatformName: portfolio.trim() 
+      });
+      
+      if (!portfolioDoc || !portfolioDoc.unique_id) {
+        return NextResponse.json({ 
+          error: `Portfolio "${portfolio.trim()}" not found or missing unique_id` 
+        }, { status: 404 });
+      }
+      
+      portfolioUniqueId = portfolioDoc.unique_id;
+    } else {
+      return NextResponse.json({ error: 'Portfolio unique_id or portfolio name is required' }, { status: 400 });
     }
-    
-    const portfolioUniqueId = unique_id.trim();
-    
-    const client = await clientPromise
-    const db = client.db('renew_assets')
     
     // Check if portfolio exists by unique_id
     const existing = await db.collection('CONFIG_Inputs').findOne({ 
@@ -32,9 +49,9 @@ export async function DELETE(request) {
     
     // Prevent deletion of default portfolios by checking PlatformName
     const platformName = existing.PlatformName;
-    if (platformName === 'ZEBRE' || platformName === 'xxx') {
+    if (platformName === 'ZEBRE') {
       return NextResponse.json({ 
-        error: 'Cannot delete default portfolios (ZEBRE, xxx)' 
+        error: 'Cannot delete default portfolio (ZEBRE)' 
       }, { status: 400 });
     }
     

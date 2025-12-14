@@ -6,28 +6,41 @@ import { getPortfolioAssetIds, getPortfolioConfig } from '../utils/portfolio-hel
 export async function GET(request) {
   try {
     const client = await clientPromise;
-    const db = client.db();
+    const db = client.db(process.env.MONGODB_DB || 'renew_assets');
     const collection = db.collection('ASSET_cash_flows');
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period');
     const field = searchParams.get('field');
     const uniqueId = searchParams.get('unique_id');
+    
+    console.log('[all-assets-summary] Request received:', {
+      period,
+      field,
+      uniqueId
+    });
 
     if (!uniqueId) {
+      console.error('[all-assets-summary] Missing unique_id parameter');
       return NextResponse.json({ error: 'unique_id parameter is required' }, { status: 400 });
     }
 
     // Get portfolio config (PlatformName is for display only, not used for filtering)
     const portfolioConfig = await getPortfolioConfig(db, uniqueId);
     if (!portfolioConfig) {
+      console.error('[all-assets-summary] Portfolio not found for unique_id:', uniqueId);
       return NextResponse.json({ error: 'Portfolio not found for the provided unique_id' }, { status: 404 });
     }
     const actualPortfolioName = portfolioConfig.PlatformName; // For display/logging only
 
     // Get asset IDs for this portfolio
     const portfolioAssetIds = await getPortfolioAssetIds(db, uniqueId);
-    console.log(`All assets summary - Portfolio unique_id: ${uniqueId} (display name: ${actualPortfolioName}), Asset IDs: [${portfolioAssetIds.join(', ')}]`);
+    console.log('[all-assets-summary] Portfolio config loaded:', {
+      unique_id: uniqueId,
+      PlatformName: actualPortfolioName,
+      assetIds: portfolioAssetIds,
+      assetCount: portfolioAssetIds.length
+    });
 
     if (!period || !field) {
       return NextResponse.json({ error: 'Missing period or field parameter' }, { status: 400 });
@@ -50,21 +63,20 @@ export async function GET(request) {
       const outputSummaryCollection = db.collection('ASSET_Output_Summary');
       const normalizedPortfolioNames = portfolioAssetNames.map(n => n.trim().toLowerCase());
 
-      // Filter by unique_id and asset IDs (primary identifier)
+      // Filter by unique_id OR portfolio name and asset IDs (for backward compatibility)
+      // Check both fields to handle both new data (with unique_id) and old data (with portfolio name only)
       const verifiedAssets = await outputSummaryCollection.find({
-        unique_id: uniqueId,  // Filter by unique_id first
+        $or: [
+          { unique_id: uniqueId },  // Try unique_id first (preferred)
+          { portfolio: actualPortfolioName }  // Fallback to portfolio name (for old data)
+        ],
         asset_id: { $in: portfolioAssetIds }
       }).toArray();
       
-      // If no results with unique_id, try fallback to portfolio name for backward compatibility
-      if (verifiedAssets.length === 0) {
-        const fallbackAssets = await outputSummaryCollection.find({
-          portfolio: actualPortfolioName,  // Fallback to portfolio name
-          asset_id: { $in: portfolioAssetIds }
-        }).toArray();
-        if (fallbackAssets.length > 0) {
-          console.log(`All assets summary - Using portfolio name fallback for verification`);
-        }
+      if (verifiedAssets.length > 0) {
+        const matchedByUniqueId = verifiedAssets.filter(a => a.unique_id === uniqueId).length;
+        const matchedByPortfolio = verifiedAssets.filter(a => a.portfolio === actualPortfolioName && a.unique_id !== uniqueId).length;
+        console.log(`All assets summary - Verified ${verifiedAssets.length} assets (${matchedByUniqueId} by unique_id, ${matchedByPortfolio} by portfolio name)`);
       }
 
       // Filter by name to get only assets that belong to this portfolio
@@ -176,12 +188,16 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Invalid period parameter' }, { status: 400 });
     }
 
-    // Always filter by VERIFIED portfolio asset IDs and unique_id - if empty array, will return no results (correct behavior)
+    // Always filter by VERIFIED portfolio asset IDs and unique_id OR portfolio name - if empty array, will return no results (correct behavior)
     // Never skip the filter as it would return ALL assets from all portfolios
+    // Use $or to check both unique_id and portfolio name for backward compatibility with old data
     pipeline.unshift({
       $match: {
         asset_id: { $in: verifiedAssetIds },
-        unique_id: uniqueId  // Filter by unique_id (primary identifier)
+        $or: [
+          { unique_id: uniqueId },  // Try unique_id first (preferred for new data)
+          { portfolio: actualPortfolioName }  // Fallback to portfolio name (for old data)
+        ]
       }
     });
 
@@ -194,8 +210,20 @@ export async function GET(request) {
 
     pipeline.push({ $sort: sortStage });
 
+    console.log('[all-assets-summary] Executing aggregation pipeline:', {
+      matchStage: pipeline[0],
+      groupStage: pipeline.find(s => s.$group),
+      sortStage: pipeline.find(s => s.$sort)
+    });
+    
     const data = await collection.aggregate(pipeline).toArray();
-    console.log(`All assets summary - Found ${data.length} records for portfolio ${actualPortfolioName}, field ${field}, period ${period}`);
+    console.log('[all-assets-summary] Aggregation result:', {
+      recordCount: data.length,
+      portfolio: actualPortfolioName,
+      field,
+      period,
+      sampleRecord: data[0] || null
+    });
 
     // Transform data for easier consumption by frontend (group by period, then by asset)
     const transformedData = {};

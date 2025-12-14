@@ -5,8 +5,8 @@ import { createContext, useContext, useState, useEffect } from 'react';
 const PortfolioContext = createContext();
 
 export function PortfolioProvider({ children }) {
-  const [selectedPortfolio, setSelectedPortfolio] = useState('ZEBRE');
-  const [portfolios, setPortfolios] = useState([{ name: 'ZEBRE', title: 'ZEBRE' }, { name: 'xxx', title: 'xxx' }]);
+  const [selectedPortfolio, setSelectedPortfolio] = useState(null);
+  const [portfolios, setPortfolios] = useState([]);
 
   // Fetch portfolios from API
   const fetchPortfolios = async () => {
@@ -27,14 +27,25 @@ export function PortfolioProvider({ children }) {
           // Extract unique_ids for selection (use unique_id for API calls)
           const portfolioUniqueIds = portfolioObjects.map(p => p.unique_id || p.name);
 
-          // Check if stored value is a valid unique_id
-          const stored = localStorage.getItem('selectedPortfolio');
-          if (stored && portfolioUniqueIds.includes(stored)) {
-            setSelectedPortfolio(stored);
-          } else if (portfolioUniqueIds.length > 0) {
-            // If stored value is not a valid unique_id, default to first portfolio
-            setSelectedPortfolio(portfolioUniqueIds[0]);
-            localStorage.setItem('selectedPortfolio', portfolioUniqueIds[0]);
+          // Only set selectedPortfolio if portfolios exist
+          if (portfolioUniqueIds.length > 0) {
+            // Check if stored value is a valid unique_id
+            const stored = localStorage.getItem('selectedPortfolio');
+            if (stored && portfolioUniqueIds.includes(stored)) {
+              setSelectedPortfolio(stored);
+            } else {
+              // Prioritize default portfolio if set, otherwise use first portfolio
+              const defaultPortfolioId = data.defaultPortfolio;
+              const portfolioToSelect = (defaultPortfolioId && portfolioUniqueIds.includes(defaultPortfolioId))
+                ? defaultPortfolioId
+                : portfolioUniqueIds[0];
+              
+              setSelectedPortfolio(portfolioToSelect);
+              localStorage.setItem('selectedPortfolio', portfolioToSelect);
+            }
+          } else {
+            // No portfolios exist, keep selectedPortfolio as null
+            setSelectedPortfolio(null);
           }
         }
       }
@@ -44,12 +55,6 @@ export function PortfolioProvider({ children }) {
   };
 
   useEffect(() => {
-    // Load selected portfolio from localStorage on mount
-    const stored = localStorage.getItem('selectedPortfolio');
-    if (stored) {
-      setSelectedPortfolio(stored);
-    }
-
     fetchPortfolios();
 
     // Listen for portfolio changes

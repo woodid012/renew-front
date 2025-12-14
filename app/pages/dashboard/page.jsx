@@ -37,7 +37,7 @@ import { formatCurrencyFromMillions } from '../../utils/currencyFormatter'
 Chart.register(...registerables)
 
 export default function DashboardPage() {
-  const { selectedPortfolio, portfolios, getPortfolioUniqueId } = usePortfolio()
+  const { selectedPortfolio, portfolios } = usePortfolio()
   const { currencyUnit } = useDisplaySettings()
   const [dashboardData, setDashboardData] = useState(null)
   const [assetInputsData, setAssetInputsData] = useState(null)
@@ -54,11 +54,16 @@ export default function DashboardPage() {
     // Read from localStorage directly (synchronous, available immediately)
     // This runs only once on mount, before context has initialized
     const initialPortfolio = typeof window !== 'undefined'
-      ? localStorage.getItem('selectedPortfolio') || 'ZEBRE'
-      : 'ZEBRE'
+      ? localStorage.getItem('selectedPortfolio')
+      : null
 
-    console.log('Dashboard - Initial fetch for portfolio (from localStorage):', initialPortfolio)
-    fetchAllDashboardData(initialPortfolio)
+    if (initialPortfolio) {
+      console.log('Dashboard - Initial fetch for portfolio (from localStorage):', initialPortfolio)
+      fetchAllDashboardData(initialPortfolio)
+    } else {
+      console.log('Dashboard - No portfolio selected, skipping initial fetch')
+      setLoading(false)
+    }
     setHasInitialFetch(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty deps - only run once on mount
@@ -68,19 +73,36 @@ export default function DashboardPage() {
     // Skip if this is the initial mount (handled by the first useEffect)
     if (!hasInitialFetch) return
 
-    // Use the portfolio from context
-    const portfolio = selectedPortfolio || 'ZEBRE'
-    console.log('Dashboard - Portfolio changed (from context):', portfolio)
-    fetchAllDashboardData(portfolio)
+    // Only fetch if a portfolio is selected
+    if (selectedPortfolio) {
+      console.log('Dashboard - Portfolio changed (from context):', selectedPortfolio)
+      fetchAllDashboardData(selectedPortfolio)
+    } else {
+      console.log('Dashboard - No portfolio selected, clearing data')
+      setAssetInputsData(null)
+      setPortfolioData(null)
+      setSensitivityData([])
+      setError(null)
+      setLoading(false)
+    }
   }, [selectedPortfolio, hasInitialFetch])
 
   // Listen for portfolio change events
   useEffect(() => {
     const handlePortfolioChange = (event) => {
       // Use the portfolio from the event detail (most reliable) or context
-      const portfolio = event?.detail?.portfolio || selectedPortfolio || 'ZEBRE'
-      console.log('Dashboard - Portfolio changed event received:', portfolio)
-      fetchAllDashboardData(portfolio)
+      const portfolio = event?.detail?.portfolio || selectedPortfolio
+      if (portfolio) {
+        console.log('Dashboard - Portfolio changed event received:', portfolio)
+        fetchAllDashboardData(portfolio)
+      } else {
+        console.log('Dashboard - No portfolio in event, clearing data')
+        setAssetInputsData(null)
+        setPortfolioData(null)
+        setSensitivityData([])
+        setError(null)
+        setLoading(false)
+      }
     }
 
     window.addEventListener('portfolioChanged', handlePortfolioChange)
@@ -93,20 +115,21 @@ export default function DashboardPage() {
 
       // Use the portfolio from the parameter or context
       // Ensure portfolioOverride is a string (it might be an event object if called from a button)
+      // Both portfolioOverride and selectedPortfolio should be unique_ids
       let portfolioToUse = (typeof portfolioOverride === 'string' ? portfolioOverride : null)
         || selectedPortfolio
-        || 'ZEBRE'
 
-      console.log('Dashboard - Fetching data for portfolio:', portfolioToUse)
-
-      // Get unique_id for API calls
-      const uniqueId = getPortfolioUniqueId(portfolioToUse);
-      if (!uniqueId) {
-        console.error('Dashboard - No unique_id found for portfolio:', portfolioToUse);
-        setError('Portfolio unique_id not found');
+      if (!portfolioToUse) {
+        console.warn('Dashboard - No portfolio provided, cannot fetch data');
+        setError('No portfolio selected');
         setLoading(false);
         return;
       }
+
+      console.log('Dashboard - Fetching data for portfolio:', portfolioToUse)
+
+      // portfolioToUse is already the unique_id (from context or parameter)
+      const uniqueId = portfolioToUse;
       console.log('Dashboard - Using unique_id:', uniqueId)
 
       // Fetch asset output summary data, portfolio revenue/net income data, and sensitivity data
@@ -512,6 +535,19 @@ export default function DashboardPage() {
     },
   }
 
+  // Show message if no portfolio is selected
+  if (!selectedPortfolio && !loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">No Portfolio Selected</h2>
+          <p className="text-gray-600 mb-4">Please select a portfolio from the dropdown above to view the dashboard.</p>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -530,12 +566,14 @@ export default function DashboardPage() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Dashboard</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={fetchAllDashboardData}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            Retry
-          </button>
+          {selectedPortfolio && (
+            <button
+              onClick={() => fetchAllDashboardData(selectedPortfolio)}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     )
@@ -568,7 +606,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-600">Total CAPEX</p>
               <p className="text-2xl font-bold text-gray-900">
-                {assetInputsData ? formatCurrencyShort(assetInputsData.summary.totalCapex) : 'Loading...'}
+                {assetInputsData?.summary ? formatCurrencyShort(assetInputsData.summary.totalCapex) : 'Loading...'}
               </p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -583,7 +621,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-600">Total Debt</p>
               <p className="text-2xl font-bold text-gray-900">
-                {assetInputsData ? formatCurrencyShort(assetInputsData.summary.totalDebt) : 'Loading...'}
+                {assetInputsData?.summary ? formatCurrencyShort(assetInputsData.summary.totalDebt) : 'Loading...'}
               </p>
             </div>
             <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
@@ -598,7 +636,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-600">Total Equity</p>
               <p className="text-2xl font-bold text-gray-900">
-                {assetInputsData ? formatCurrencyShort(assetInputsData.summary.totalEquity) : 'Loading...'}
+                {assetInputsData?.summary ? formatCurrencyShort(assetInputsData.summary.totalEquity) : 'Loading...'}
               </p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -613,7 +651,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-600">Portfolio Gearing</p>
               <p className="text-2xl font-bold text-gray-900">
-                {assetInputsData ? formatPercentage(assetInputsData.summary.portfolioGearing) : 'Loading...'}
+                {assetInputsData?.summary ? formatPercentage(assetInputsData.summary.portfolioGearing) : 'Loading...'}
               </p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -628,7 +666,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-600">Portfolio IRR</p>
               <p className="text-2xl font-bold text-gray-900">
-                {assetInputsData ? formatPercentage(assetInputsData.summary.avgIRR) : 'Loading...'}
+                {assetInputsData?.summary ? formatPercentage(assetInputsData.summary.avgIRR) : 'Loading...'}
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">

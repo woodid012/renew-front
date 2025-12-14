@@ -34,48 +34,49 @@ export async function GET(request) {
     
     const collection = db.collection('ASSET_Output_Summary')
     
-    // Filter assets by unique_id (primary identifier) instead of portfolio name
+    // Filter assets by unique_id (primary identifier) OR portfolio name (for backward compatibility)
     // IMPORTANT: Only show base case (scenario_id is null, missing, or empty)
-    let assets;
+    // Use $or to check both unique_id and portfolio name - handles both new data (with unique_id) and old data (with portfolio name only)
+    const baseMatchConditions = [
+      { scenario_id: { $exists: false } },
+      { scenario_id: null },
+      { scenario_id: '' }
+    ];
+    
+    // Build query that checks for EITHER unique_id OR portfolio name
+    // This handles:
+    // 1. New results with unique_id set
+    // 2. Old results with only portfolio name (backward compatibility)
+    // 3. Results that might have both fields
     const query = {
-      unique_id: uniqueId,  // Use unique_id for filtering
-      $or: [
-        { scenario_id: { $exists: false } },
-        { scenario_id: null },
-        { scenario_id: '' }
+      $and: [
+        {
+          $or: baseMatchConditions  // Base case scenario filter
+        },
+        {
+          $or: [
+            { unique_id: uniqueId },  // Try unique_id first (preferred)
+            { portfolio: actualPortfolioName }  // Fallback to portfolio name (for old data)
+          ]
+        }
       ]
     };
     
     // Also filter by asset IDs if available (for additional safety)
     if (portfolioAssetIds.length > 0) {
-      query.asset_id = { $in: portfolioAssetIds };
+      query.$and.push({ asset_id: { $in: portfolioAssetIds } });
     }
     
-    assets = await collection.find(query).toArray();
+    console.log(`Asset output summary - Querying with unique_id: ${uniqueId} OR portfolio: ${actualPortfolioName}`);
+    const assets = await collection.find(query).toArray();
     
-    // If no results with unique_id, try fallback to portfolio name for backward compatibility
-    if (assets.length === 0) {
-      console.warn(`Asset output summary - No assets found with unique_id: ${uniqueId}, trying portfolio name fallback...`);
-      const fallbackQuery = {
-        portfolio: actualPortfolioName,
-        $or: [
-          { scenario_id: { $exists: false } },
-          { scenario_id: null },
-          { scenario_id: '' }
-        ]
-      };
-      if (portfolioAssetIds.length > 0) {
-        fallbackQuery.asset_id = { $in: portfolioAssetIds };
-      }
-      assets = await collection.find(fallbackQuery).toArray();
-      
-      if (assets.length > 0) {
-        console.log(`Asset output summary - Found ${assets.length} assets using portfolio name fallback`);
-      } else {
-        console.warn(`Asset output summary - No assets found for unique_id: ${uniqueId} (tried both unique_id and portfolio name)`);
-      }
+    if (assets.length > 0) {
+      // Check which field matched
+      const matchedByUniqueId = assets.filter(a => a.unique_id === uniqueId).length;
+      const matchedByPortfolio = assets.filter(a => a.portfolio === actualPortfolioName && a.unique_id !== uniqueId).length;
+      console.log(`Asset output summary - Found ${assets.length} assets (${matchedByUniqueId} by unique_id, ${matchedByPortfolio} by portfolio name)`);
     } else {
-      console.log(`Asset output summary - Found ${assets.length} assets for unique_id: ${uniqueId}`);
+      console.warn(`Asset output summary - No assets found for unique_id: ${uniqueId} OR portfolio: ${actualPortfolioName}`);
     }
     
     if (assets.length === 0) {

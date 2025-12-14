@@ -46,19 +46,37 @@ export async function getPortfolioAssetIds(db, uniqueId) {
 export async function getPortfolioConfig(db, uniqueId) {
   try {
     if (!uniqueId) {
+      console.log('[portfolio-helper] getPortfolioConfig: uniqueId is empty');
       return null;
     }
     
     const uniqueIdTrimmed = uniqueId.trim();
+    console.log('[portfolio-helper] getPortfolioConfig: Searching for unique_id:', uniqueIdTrimmed);
     
     // Find by unique_id only
     const configDoc = await db.collection('CONFIG_Inputs').findOne({ 
       unique_id: uniqueIdTrimmed 
     });
     
+    if (configDoc) {
+      console.log('[portfolio-helper] getPortfolioConfig: Found portfolio:', {
+        unique_id: configDoc.unique_id,
+        PlatformName: configDoc.PlatformName,
+        assetCount: configDoc.asset_inputs?.length || 0
+      });
+    } else {
+      console.log('[portfolio-helper] getPortfolioConfig: Portfolio not found for unique_id:', uniqueIdTrimmed);
+      
+      // List a few available unique_ids for debugging
+      const samplePortfolios = await db.collection('CONFIG_Inputs').find({}, { unique_id: 1, PlatformName: 1 }).limit(5).toArray();
+      console.log('[portfolio-helper] getPortfolioConfig: Sample available portfolios:', 
+        samplePortfolios.map(p => ({ unique_id: p.unique_id, PlatformName: p.PlatformName }))
+      );
+    }
+    
     return configDoc;
   } catch (error) {
-    console.error('Error getting portfolio config:', error);
+    console.error('[portfolio-helper] Error getting portfolio config:', error);
     return null;
   }
 }

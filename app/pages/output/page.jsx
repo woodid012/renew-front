@@ -159,7 +159,7 @@ const DualAxisChartCard = ({ title, chartData, chartOptions, loading, hasData, h
 };
 
 const AssetView = ({ assetIds, assetIdToNameMap }) => {
-    const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio();
+    const { selectedPortfolio } = usePortfolio();
     const { currencyUnit } = useDisplaySettings();
     const formatMetricValue = createFormatMetricValue(currencyUnit);
     const [selectedAssetId, setSelectedAssetId] = useState(assetIds.length > 0 ? assetIds[0].id : '');
@@ -181,18 +181,40 @@ const AssetView = ({ assetIds, assetIdToNameMap }) => {
                 setLoading(true);
                 setAssetData([]);
                 try {
-                    const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE';
-                    if (!uniqueId) {
+                    // selectedPortfolio from context is always the unique_id
+                    if (!selectedPortfolio) {
                         console.error('Output page - No unique_id found for portfolio:', selectedPortfolio);
+                        setError('No portfolio selected. Please select a portfolio from the portfolio selector.');
                         setLoading(false);
                         return;
                     }
+                    const uniqueId = selectedPortfolio;
+                    console.log('[AssetView] Fetching asset data:', {
+                        selectedAssetId,
+                        selectedPortfolio,
+                        uniqueId,
+                        selectedPeriod
+                    });
+                    
                     const url = `/api/output-asset-data?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}&unique_id=${encodeURIComponent(uniqueId)}`;
+                    console.log('[AssetView] Fetching from URL:', url);
+                    
                     const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('[AssetView] API error:', response.status, errorText);
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
                     const data = await response.json();
-                    setAssetData(data.data);
+                    console.log('[AssetView] Received data:', {
+                        dataCount: data.data?.length || 0,
+                        sampleRecord: data.data?.[0] || null
+                    });
+                    
+                    setAssetData(data.data || []);
                 } catch (err) {
+                    console.error('[AssetView] Error:', err);
                     setError(err.message);
                 } finally {
                     setLoading(false);
@@ -797,7 +819,7 @@ const PortfolioDualAxisChartCard = ({ title, chartData, chartOptions, loading, h
 };
 
 const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
-    const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio();
+    const { selectedPortfolio } = usePortfolio();
     const { currencyUnit } = useDisplaySettings();
     const formatMetricValue = createFormatMetricValue(currencyUnit);
     const [selectedPeriod, setSelectedPeriod] = useState('yearly');
@@ -822,12 +844,19 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
         const fetchAllData = async () => {
             setLoading(true);
             try {
-                const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE';
-                if (!uniqueId) {
+                // selectedPortfolio from context is always the unique_id
+                if (!selectedPortfolio) {
                     console.error('Output page - No unique_id found for portfolio:', selectedPortfolio);
                     setLoading(false);
                     return;
                 }
+                const uniqueId = selectedPortfolio;
+                console.log('[PortfolioView] Fetching portfolio data:', {
+                    selectedPortfolio,
+                    uniqueId,
+                    selectedPeriod,
+                    customChartField
+                });
 
                 const fields = [
                     'revenue',
@@ -844,9 +873,19 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
 
                 const fetchPromises = fields.map(async (field) => {
                     const url = `/api/all-assets-summary?period=${selectedPeriod}&field=${field}&unique_id=${encodeURIComponent(uniqueId)}`;
+                    console.log('[PortfolioView] Fetching field:', field, 'from URL:', url);
+                    
                     const res = await fetch(url);
-                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error('[PortfolioView] API error for field', field, ':', res.status, errorText);
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
                     const data = await res.json();
+                    console.log('[PortfolioView] Received data for field', field, ':', {
+                        dataKeys: data.data ? Object.keys(data.data) : [],
+                        dataCount: data.data ? Object.keys(data.data).length : 0
+                    });
                     return { field, data: data.data };
                 });
 
@@ -854,6 +893,11 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
                 const dataMap = {};
                 results.forEach(({ field, data }) => {
                     dataMap[field] = data;
+                });
+
+                console.log('[PortfolioView] All data fetched:', {
+                    fieldsWithData: Object.keys(dataMap).filter(f => dataMap[f] && Object.keys(dataMap[f]).length > 0),
+                    fieldsWithoutData: Object.keys(dataMap).filter(f => !dataMap[f] || Object.keys(dataMap[f]).length === 0)
                 });
 
                 setRevenueData(dataMap.revenue);
@@ -867,7 +911,7 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
                 setEquityCashflowData(dataMap.equity_cash_flow_pre_distributions);
                 setCustomChartData(dataMap[customChartField]);
             } catch (err) {
-                console.error('Error fetching portfolio data:', err);
+                console.error('[PortfolioView] Error fetching portfolio data:', err);
             } finally {
                 setLoading(false);
             }
@@ -1187,29 +1231,88 @@ const PortfolioView = ({ assetIds, assetIdToNameMap }) => {
 // --- Main Page Component ---
 
 export default function OutputPage() {
-    const { selectedPortfolio, portfolios, getPortfolioUniqueId } = usePortfolio();
+    const { selectedPortfolio, portfolios } = usePortfolio();
     const [viewMode, setViewMode] = useState('portfolio'); // 'portfolio' | 'asset'
     const [assetIds, setAssetIds] = useState([]);
     const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         const fetchAssets = async () => {
             try {
-                const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE';
-                if (!uniqueId) {
-                    console.error('Output page - No unique_id found for portfolio:', selectedPortfolio);
+                // Wait for portfolios to load if they haven't yet
+                if (portfolios.length === 0) {
+                    console.log('[Output Page] Waiting for portfolios to load...');
                     return;
                 }
-                const response = await fetch(`/api/output-asset-data?unique_id=${encodeURIComponent(uniqueId)}`);
-                if (!response.ok) throw new Error('Failed to fetch assets');
+                
+                // selectedPortfolio from context is always the unique_id
+                if (!selectedPortfolio) {
+                    console.error('Output page - No unique_id found for portfolio:', selectedPortfolio);
+                    setError('No portfolio selected. Please select a portfolio from the portfolio selector.');
+                    setLoading(false);
+                    return;
+                }
+                
+                const uniqueId = selectedPortfolio;
+                console.log('[Output Page] Fetching assets:', {
+                    selectedPortfolio,
+                    uniqueId,
+                    portfoliosCount: portfolios.length,
+                    portfolios: portfolios.map(p => typeof p === 'string' ? p : (p.unique_id || p.name))
+                });
+                
+                const url = `/api/output-asset-data?unique_id=${encodeURIComponent(uniqueId)}`;
+                console.log('[Output Page] Fetching from URL:', url);
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = `Failed to fetch assets: ${response.status}`;
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        if (errorData.error) {
+                            errorMessage = errorData.error;
+                        }
+                    } catch (e) {
+                        errorMessage = errorText || errorMessage;
+                    }
+                    
+                    console.error('[Output Page] API error:', response.status, errorMessage);
+                    
+                    if (response.status === 404) {
+                        setError(`Portfolio not found (unique_id: ${uniqueId}). Please select a different portfolio or ensure the model has been run for this portfolio.`);
+                    } else {
+                        setError(`Error loading portfolio: ${errorMessage}`);
+                    }
+                    setLoading(false);
+                    return;
+                }
+                
                 const data = await response.json();
-                setAssetIds(data.uniqueAssetIds.map(a => ({ id: a._id, name: a.name })));
-                const map = {};
-                data.uniqueAssetIds.forEach(a => map[a._id] = a.name);
-                setAssetIdToNameMap(map);
+                console.log('[Output Page] Received data:', {
+                    uniqueAssetIdsCount: data.uniqueAssetIds?.length || 0,
+                    uniqueAssetIds: data.uniqueAssetIds?.map(a => ({ id: a._id, name: a.name })) || []
+                });
+                
+                if (!data.uniqueAssetIds || data.uniqueAssetIds.length === 0) {
+                    console.warn('[Output Page] No assets found for unique_id:', uniqueId);
+                    setError(`No results found for portfolio. Please ensure the model has been run for this portfolio (unique_id: ${uniqueId}).`);
+                    setAssetIds([]);
+                    setAssetIdToNameMap({});
+                } else {
+                    setError(null);
+                    setAssetIds(data.uniqueAssetIds.map(a => ({ id: a._id, name: a.name })));
+                    const map = {};
+                    data.uniqueAssetIds.forEach(a => map[a._id] = a.name);
+                    setAssetIdToNameMap(map);
+                }
             } catch (e) {
-                console.error(e);
+                console.error('[Output Page] Error fetching assets:', e);
+                setError(`Failed to load results: ${e.message}. Please check the browser console for details.`);
+                setAssetIds([]);
+                setAssetIdToNameMap({});
             } finally {
                 setLoading(false);
             }
@@ -1218,11 +1321,12 @@ export default function OutputPage() {
         
         // Listen for portfolio changes
         const handlePortfolioChange = () => {
+            console.log('[Output Page] Portfolio changed event received');
             fetchAssets();
         };
         window.addEventListener('portfolioChanged', handlePortfolioChange);
         return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
-    }, [selectedPortfolio]);
+    }, [selectedPortfolio, portfolios]);
 
     if (loading) {
         return (
@@ -1234,6 +1338,19 @@ export default function OutputPage() {
 
     return (
         <div className="min-h-screen bg-gray-50/50 p-8">
+            {/* Error Message */}
+            {error && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <h3 className="text-sm font-semibold text-red-900 mb-1">No Results Found</h3>
+                        <p className="text-sm text-red-700">{error}</p>
+                        <p className="text-xs text-red-600 mt-2">
+                            Selected Portfolio Unique ID: <span className="font-mono">{selectedPortfolio || 'None'}</span>
+                        </p>
+                    </div>
+                </div>
+            )}
             {/* Header & Toggle */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <div>
@@ -1266,10 +1383,26 @@ export default function OutputPage() {
             </div>
 
             {/* Content */}
-            {viewMode === 'portfolio' ? (
-                <PortfolioView assetIds={assetIds} assetIdToNameMap={assetIdToNameMap} />
+            {error && assetIds.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Results Available</h3>
+                    <p className="text-gray-600 mb-4">{error}</p>
+                    <p className="text-sm text-gray-500 mb-2">
+                        Please run the model for this portfolio to generate results.
+                    </p>
+                    <p className="text-xs text-gray-400">
+                        Check the browser console (F12) for detailed debugging information.
+                    </p>
+                </div>
             ) : (
-                <AssetView assetIds={assetIds} assetIdToNameMap={assetIdToNameMap} />
+                <>
+                    {viewMode === 'portfolio' ? (
+                        <PortfolioView assetIds={assetIds} assetIdToNameMap={assetIdToNameMap} />
+                    ) : (
+                        <AssetView assetIds={assetIds} assetIdToNameMap={assetIdToNameMap} />
+                    )}
+                </>
             )}
         </div>
     );

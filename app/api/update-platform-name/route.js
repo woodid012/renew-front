@@ -34,8 +34,10 @@ export async function POST(request) {
       }, { status: 404 });
     }
     
-    // Update PlatformName by unique_id
-    const updateResult = await db.collection('CONFIG_Inputs').updateOne(
+    const previousPlatformName = existing.PlatformName;
+    
+    // Update PlatformName for all documents with this unique_id
+    const updateResult = await db.collection('CONFIG_Inputs').updateMany(
       { unique_id: portfolioUniqueId },
       { $set: { PlatformName: newPlatformName } }
     );
@@ -51,7 +53,8 @@ export async function POST(request) {
         success: true, 
         message: 'PlatformName unchanged (already set to this value)',
         unique_id: portfolioUniqueId,
-        platformName: newPlatformName
+        platformName: newPlatformName,
+        documentsMatched: updateResult.matchedCount
       });
     }
     
@@ -60,7 +63,9 @@ export async function POST(request) {
       message: 'PlatformName updated successfully',
       unique_id: portfolioUniqueId,
       platformName: newPlatformName,
-      previousPlatformName: existing.PlatformName
+      previousPlatformName: previousPlatformName,
+      documentsMatched: updateResult.matchedCount,
+      documentsModified: updateResult.modifiedCount
     });
   } catch (error) {
     console.error('Failed to update PlatformName:', error);

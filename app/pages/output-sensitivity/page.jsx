@@ -23,7 +23,7 @@ import { usePortfolio } from '../../context/PortfolioContext';
 Chart.register(...registerables);
 
 const SensitivityOutputPage = () => {
-  const { selectedPortfolio, portfolios, getPortfolioUniqueId } = usePortfolio();
+  const { selectedPortfolio, portfolios } = usePortfolio();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -49,13 +49,14 @@ const SensitivityOutputPage = () => {
       setLoading(true);
       setError(null);
       
-      const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE';
-      if (!uniqueId) {
-        console.error('Sensitivity output - No unique_id found for portfolio:', portfolio);
+      // selectedPortfolio from context is always the unique_id
+      if (!selectedPortfolio) {
+        console.error('Sensitivity output - No unique_id found for portfolio:', selectedPortfolio);
         setError('Portfolio unique_id not found');
         setLoading(false);
         return;
       }
+      const uniqueId = selectedPortfolio;
       const response = await fetch(`/api/get-sensitivity-output?unique_id=${encodeURIComponent(uniqueId)}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

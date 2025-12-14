@@ -2,18 +2,32 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { Settings, Sliders, DollarSign, FileText, Users, Shield, Play, Loader2, CheckCircle, AlertCircle, Folder } from 'lucide-react';
+import { Settings, Sliders, DollarSign, FileText, Users, Shield, Play, Loader2, CheckCircle, AlertCircle, Folder, Edit, Save, X } from 'lucide-react';
 
 export default function SettingsPage() {
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/pages/settings/page.jsx:7',message:'SettingsPage component mounted',data:{timestamp:Date.now(),pathname:typeof window !== 'undefined' ? window.location.pathname : 'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  }, []);
+  // #endregion
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [runStatus, setRunStatus] = useState({});
   const [portfolios, setPortfolios] = useState([]);
   const [currentPortfolio, setCurrentPortfolio] = useState(null);
+  const [editingPortfolioId, setEditingPortfolioId] = useState(null);
+  const [editingPortfolioName, setEditingPortfolioName] = useState('');
+  const [savingPortfolioId, setSavingPortfolioId] = useState(null);
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/pages/settings/page.jsx:13',message:'fetchPortfolios useEffect triggered',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     // Fetch portfolios on mount
     const fetchPortfolios = async () => {
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/pages/settings/page.jsx:17',message:'About to fetch portfolios',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         const response = await fetch('/api/list-portfolios');
         const data = await response.json();
         if (data.success && Array.isArray(data.portfolios)) {
@@ -30,7 +44,81 @@ export default function SettingsPage() {
       }
     };
     fetchPortfolios();
+
+    // Listen for portfolio refresh events (e.g., when portfolio name is updated elsewhere)
+    const handlePortfolioRefresh = () => {
+      fetchPortfolios();
+    };
+
+    window.addEventListener('refreshPortfolios', handlePortfolioRefresh);
+    return () => {
+      window.removeEventListener('refreshPortfolios', handlePortfolioRefresh);
+    };
   }, []);
+
+  const handleEditPortfolio = (portfolio) => {
+    const portfolioName = typeof portfolio === 'string' ? portfolio : portfolio.name;
+    const portfolioTitle = typeof portfolio === 'string' ? portfolio : (portfolio.title || portfolio.name);
+    const uniqueId = typeof portfolio === 'string' ? portfolio : portfolio.unique_id;
+    setEditingPortfolioId(uniqueId);
+    setEditingPortfolioName(portfolioTitle);
+  };
+
+  const handleSavePortfolio = async (uniqueId) => {
+    if (!editingPortfolioName.trim()) {
+      alert('Portfolio name cannot be empty');
+      return;
+    }
+
+    setSavingPortfolioId(uniqueId);
+    try {
+      const response = await fetch('/api/update-platform-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          unique_id: uniqueId, 
+          platformName: editingPortfolioName.trim() 
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setEditingPortfolioId(null);
+        setEditingPortfolioName('');
+        // Dispatch custom events to notify other pages
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('portfolioNameUpdated', { 
+            detail: { unique_id: uniqueId, platformName: editingPortfolioName.trim() } 
+          }));
+          // Trigger PortfolioContext refresh so dropdown updates
+          window.dispatchEvent(new CustomEvent('refreshPortfolios'));
+        }
+        // Refresh portfolio list
+        const fetchResponse = await fetch('/api/list-portfolios');
+        const fetchData = await fetchResponse.json();
+        if (fetchData.success && Array.isArray(fetchData.portfolios)) {
+          const portfolioObjects = fetchData.portfolios.map(p => 
+            typeof p === 'string' 
+              ? { name: p, title: p, unique_id: p } 
+              : { name: p.name, title: p.title || p.name, unique_id: p.unique_id }
+          );
+          setPortfolios(portfolioObjects);
+        }
+      } else {
+        alert('Failed to update portfolio name: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error updating portfolio name:', error);
+      alert('Failed to update portfolio name: ' + error.message);
+    } finally {
+      setSavingPortfolioId(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPortfolioId(null);
+    setEditingPortfolioName('');
+  };
 
   const runModelForPortfolio = async (portfolioName) => {
     try {
@@ -174,9 +262,58 @@ export default function SettingsPage() {
                         <Folder className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-semibold text-gray-900 truncate">
-                          {portfolioTitle}
-                        </h3>
+                        {editingPortfolioId === uniqueId ? (
+                          <div className="flex items-center gap-2 mb-2">
+                            <input
+                              type="text"
+                              value={editingPortfolioName}
+                              onChange={(e) => setEditingPortfolioName(e.target.value)}
+                              className="flex-1 px-2 py-1 text-lg font-semibold border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleSavePortfolio(uniqueId);
+                                } else if (e.key === 'Escape') {
+                                  handleCancelEdit();
+                                }
+                              }}
+                              autoFocus
+                              disabled={savingPortfolioId === uniqueId}
+                            />
+                            <button
+                              onClick={() => handleSavePortfolio(uniqueId)}
+                              disabled={savingPortfolioId === uniqueId}
+                              className="px-2 py-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md disabled:opacity-50"
+                              title="Save"
+                            >
+                              {savingPortfolioId === uniqueId ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Save className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              disabled={savingPortfolioId === uniqueId}
+                              className="px-2 py-1 text-gray-600 hover:text-gray-700 hover:bg-gray-50 rounded-md disabled:opacity-50"
+                              title="Cancel"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900 truncate">
+                              {portfolioTitle}
+                            </h3>
+                            <button
+                              onClick={() => handleEditPortfolio(portfolio)}
+                              className="ml-2 p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                              title="Edit portfolio name"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                         <div className="mt-2 space-y-1">
                           <div className="flex items-center space-x-2">
                             <span className="text-xs font-medium text-gray-500">Unique ID:</span>

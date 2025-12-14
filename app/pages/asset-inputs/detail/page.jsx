@@ -7,7 +7,6 @@ import { useDisplaySettings } from '../../../context/DisplaySettingsContext';
 import { formatCurrencyFromMillions } from '../../../utils/currencyFormatter';
 import AssetCards from './components/AssetCards';
 import BulkEdit from './components/BulkEdit';
-import ImportExport from './components/ImportExport';
 import AssetForm from './components/AssetForm';
 import {
   Plus,
@@ -16,12 +15,11 @@ import {
   AlertCircle,
   CheckCircle,
   Grid3X3,
-  Table,
-  Download
+  Table
 } from 'lucide-react';
 
 const AssetsDetailPage = () => {
-  const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio();
+  const { selectedPortfolio } = usePortfolio();
   const { currencyUnit } = useDisplaySettings();
   
   // Original data from database
@@ -35,7 +33,7 @@ const AssetsDetailPage = () => {
   const [platformName, setPlatformName] = useState('');
 
   // UI state
-  const [currentView, setCurrentView] = useState('cards'); // 'cards', 'bulk', 'import'
+  const [currentView, setCurrentView] = useState('cards'); // 'cards', 'bulk'
   const [showForm, setShowForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -85,9 +83,22 @@ const AssetsDetailPage = () => {
       loadAssetData(newPortfolio);
     };
 
+    const handlePortfolioNameUpdate = (event) => {
+      const { unique_id, platformName } = event.detail;
+      // Only update if this is the current portfolio
+      if (selectedPortfolio === unique_id) {
+        setPlatformName(platformName);
+        setOriginalPlatformName(platformName);
+      }
+    };
+
     window.addEventListener('portfolioChanged', handlePortfolioChange);
-    return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
-  }, []);
+    window.addEventListener('portfolioNameUpdated', handlePortfolioNameUpdate);
+    return () => {
+      window.removeEventListener('portfolioChanged', handlePortfolioChange);
+      window.removeEventListener('portfolioNameUpdated', handlePortfolioNameUpdate);
+    };
+  }, [selectedPortfolio]);
 
   const loadDefaults = async () => {
     try {
@@ -113,24 +124,25 @@ const AssetsDetailPage = () => {
   const loadAssetData = async (portfolio = null) => {
     setLoading(true);
     try {
-      // Use portfolio from context or parameter
-      const portfolioToUse = portfolio || selectedPortfolio || 'ZEBRE';
-      const uniqueId = getPortfolioUniqueId(portfolioToUse);
-      if (!uniqueId) {
+      // Use portfolio from context or parameter (both should be unique_ids)
+      const portfolioToUse = portfolio || selectedPortfolio;
+      if (!portfolioToUse) {
         console.error('Assets detail page - No unique_id found for portfolio:', portfolioToUse);
         setLoading(false);
         return;
       }
+      // portfolioToUse is already the unique_id
+      const uniqueId = portfolioToUse;
       const response = await fetch(`/api/get-asset-data?unique_id=${encodeURIComponent(uniqueId)}`);
       if (!response.ok) {
         throw new Error('Failed to fetch asset data');
       }
       const data = await response.json();
-      console.log(`Loaded data for portfolio: ${data.PlatformName}, requested: ${portfolioToUse}, assets count: ${data.asset_inputs?.length || 0}`);
+      console.log(`Loaded data for portfolio: ${data.PlatformName}, unique_id: ${data.unique_id}, requested: ${portfolioToUse}, assets count: ${data.asset_inputs?.length || 0}`);
 
-      // Verify the returned data matches the requested portfolio
-      if (data.PlatformName !== portfolioToUse) {
-        console.warn(`Portfolio mismatch! Requested: ${portfolioToUse}, Got: ${data.PlatformName}`);
+      // Verify the returned data matches the requested portfolio by unique_id
+      if (data.unique_id !== uniqueId) {
+        console.warn(`Portfolio mismatch! Requested unique_id: ${uniqueId}, Got unique_id: ${data.unique_id}`);
       }
 
       // Convert array to object format with asset.id as key
@@ -207,8 +219,12 @@ const AssetsDetailPage = () => {
 
       // If PlatformName has changed, update it separately using unique_id
       if (platformName !== originalPlatformName) {
-        const portfolioToUse = selectedPortfolio || 'ZEBRE';
-        const uniqueId = getPortfolioUniqueId(portfolioToUse);
+        if (!selectedPortfolio) {
+          console.error('Assets detail page - No unique_id found for portfolio update');
+          return;
+        }
+        // selectedPortfolio is already the unique_id
+        const uniqueId = selectedPortfolio;
         if (uniqueId) {
           const updateNameResponse = await fetch('/api/update-platform-name', {
             method: 'POST',
@@ -384,7 +400,7 @@ const AssetsDetailPage = () => {
     };
   };
 
-  const handleAddNew = () => {
+  const handleAddNew = async () => {
     let initialData = {
       name: '', region: 'NSW', type: 'solar', capacity: '', assetLife: 25,
       volumeLossAdjustment: 95, annualDegradation: 0.5, constructionStartDate: '',
@@ -392,6 +408,23 @@ const AssetsDetailPage = () => {
       qtrCapacityFactor_q2: '', qtrCapacityFactor_q3: '', qtrCapacityFactor_q4: '',
       volume: '', durationHours: '', contracts: []
     };
+
+    // Fetch model start date and set as construction start date
+    try {
+      const response = await fetch('/api/model-settings');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.settings && data.settings.userModelStartDate) {
+          // Set construction start date to model start date (1st of month)
+          const modelStartDate = new Date(data.settings.userModelStartDate);
+          modelStartDate.setDate(1); // Ensure it's the 1st of the month
+          initialData.constructionStartDate = modelStartDate.toISOString().split('T')[0];
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching model start date:', error);
+      // Continue with empty construction start date if fetch fails
+    }
 
     // Apply defaults if available
     if (assetDefaults && assetDefaults.assetDefaults) {
@@ -621,8 +654,7 @@ const AssetsDetailPage = () => {
         <nav className="flex space-x-8">
           {[
             { id: 'cards', label: 'Asset Cards', icon: Grid3X3 },
-            { id: 'bulk', label: 'Bulk Edit', icon: Table },
-            { id: 'import', label: 'Import/Export', icon: Download }
+            { id: 'bulk', label: 'Bulk Edit', icon: Table }
           ].map(tab => {
             const Icon = tab.icon;
             return (
@@ -667,18 +699,6 @@ const AssetsDetailPage = () => {
         />
       )}
 
-      {currentView === 'import' && (
-        <ImportExport
-          assets={assets}
-          setAssets={setAssets}
-          constants={constants}
-          setConstants={setConstants}
-          platformName={platformName}
-          setPlatformName={setPlatformName}
-          setHasUnsavedChanges={setHasUnsavedChanges}
-        />
-      )}
-
       {/* Asset Form Component */}
       <AssetForm
         showForm={showForm}
@@ -713,7 +733,7 @@ const AssetsDetailPage = () => {
           </div>
           <div className={`text-sm ${hasUnsavedChanges ? 'text-orange-600' : 'text-green-600'
             }`}>
-            Current View: {currentView === 'cards' ? 'Asset Cards' : currentView === 'bulk' ? 'Bulk Edit' : 'Import/Export'}
+            Current View: {currentView === 'cards' ? 'Asset Cards' : 'Bulk Edit'}
           </div>
         </div>
         {hasUnsavedChanges && (

@@ -5,12 +5,19 @@ import clientPromise from '../../../lib/mongodb';
 export async function GET(request) {
   try {
     const client = await clientPromise;
-    const db = client.db();
+    const db = client.db(process.env.MONGODB_DB || 'renew_assets');
     const collection = db.collection('ASSET_cash_flows');
 
     const { searchParams } = new URL(request.url);
     const assetId = searchParams.get('asset_id');
     const period = searchParams.get('period');
+    const uniqueId = searchParams.get('unique_id');
+    
+    console.log('[output-asset-data] Request received:', {
+      assetId,
+      period,
+      uniqueId
+    });
 
     const numericalFields = [
       'revenue',
@@ -60,10 +67,15 @@ export async function GET(request) {
     if (assetId) {
       let pipeline = [];
 
-      // Get unique_id from query params
-      const uniqueId = searchParams.get('unique_id');
+      // Get unique_id from query params (already retrieved above)
+      console.log('[output-asset-data] Processing asset_id request:', {
+        assetId,
+        uniqueId,
+        period
+      });
       
       if (!uniqueId) {
+        console.error('[output-asset-data] Missing unique_id parameter');
         return NextResponse.json({ error: 'unique_id parameter is required' }, { status: 400 });
       }
 
@@ -72,8 +84,15 @@ export async function GET(request) {
       const configData = await getPortfolioConfig(db, uniqueId);
       
       if (!configData) {
+        console.error('[output-asset-data] Portfolio not found for unique_id:', uniqueId);
         return NextResponse.json({ error: 'Portfolio not found for the provided unique_id' }, { status: 404 });
       }
+      
+      console.log('[output-asset-data] Portfolio config found:', {
+        unique_id: configData.unique_id,
+        PlatformName: configData.PlatformName,
+        assetCount: configData.asset_inputs?.length || 0
+      });
       let hybridGroup = null;
       let isHybrid = false;
       let componentAssetIds = [parseInt(assetId)];
@@ -258,12 +277,22 @@ export async function GET(request) {
       }
 
       const data = await collection.aggregate(pipeline).toArray();
+      console.log('[output-asset-data] Query result:', {
+        recordCount: data.length,
+        sampleRecord: data[0] || null,
+        assetId,
+        uniqueId
+      });
+      
       return NextResponse.json({ data });
     } else {
-      // Get unique_id from query params
-      const uniqueId = searchParams.get('unique_id');
+      // Get unique_id from query params (already retrieved above)
+      console.log('[output-asset-data] Processing list assets request:', {
+        uniqueId
+      });
       
       if (!uniqueId) {
+        console.error('[output-asset-data] Missing unique_id parameter');
         return NextResponse.json({ error: 'unique_id parameter is required' }, { status: 400 });
       }
 
@@ -272,31 +301,128 @@ export async function GET(request) {
       const portfolioConfig = await getPortfolioConfig(db, uniqueId);
       
       if (!portfolioConfig) {
-        return NextResponse.json({ error: 'Portfolio not found for the provided unique_id' }, { status: 404 });
+        console.error('[output-asset-data] Portfolio not found for unique_id:', uniqueId);
+        
+        // List available unique_ids for debugging
+        const allPortfolios = await db.collection('CONFIG_Inputs').find({}, { unique_id: 1, PlatformName: 1 }).limit(10).toArray();
+        const availableUniqueIds = allPortfolios.map(p => ({
+          unique_id: p.unique_id,
+          PlatformName: p.PlatformName
+        }));
+        console.error('[output-asset-data] Available portfolios:', availableUniqueIds);
+        
+        return NextResponse.json({ 
+          error: 'Portfolio not found for the provided unique_id',
+          unique_id: uniqueId,
+          available_portfolios: availableUniqueIds
+        }, { status: 404 });
       }
+      
+      console.log('[output-asset-data] Portfolio config found:', {
+        unique_id: portfolioConfig.unique_id,
+        PlatformName: portfolioConfig.PlatformName,
+        assetCount: portfolioConfig.asset_inputs?.length || 0
+      });
       const portfolioAssetIds = portfolioConfig && portfolioConfig.asset_inputs
         ? portfolioConfig.asset_inputs.map(a => parseInt(a.id)).filter(id => !isNaN(id))
         : [];
 
+      console.log('[output-asset-data] Portfolio config:', {
+        unique_id: portfolioConfig.unique_id,
+        PlatformName: portfolioConfig.PlatformName,
+        portfolioAssetIdsCount: portfolioAssetIds.length,
+        portfolioAssetIds: portfolioAssetIds
+      });
+
       // Get unique asset IDs from cash flows that match this portfolio
-      // Always filter by unique_id - if empty, will return empty array (correct behavior)
-      const uniqueAssetIdsFromCashFlows = portfolioAssetIds.length > 0
-        ? await collection.distinct('asset_id', { 
-            asset_id: { $in: portfolioAssetIds },
-            unique_id: uniqueId  // Filter by unique_id (primary identifier)
-          })
-        : []; // Return empty array instead of all asset IDs
+      // First, just filter by unique_id to get all assets for this portfolio
+      const cashflowQuery = { unique_id: uniqueId };
+      
+      console.log('[output-asset-data] Querying cash flows with:', {
+        query: cashflowQuery,
+        uniqueId: uniqueId,
+        uniqueIdType: typeof uniqueId
+      });
+      
+      // First check if any records exist with this unique_id
+      const cashflowCount = await collection.countDocuments(cashflowQuery);
+      console.log('[output-asset-data] Cash flow count for unique_id:', cashflowCount);
+      
+      if (cashflowCount === 0) {
+        console.warn('[output-asset-data] No cash flows found for unique_id:', uniqueId);
+        // Check if records exist with different unique_id format
+        const sampleRecord = await collection.findOne({}, { unique_id: 1, asset_id: 1 });
+        if (sampleRecord) {
+          console.log('[output-asset-data] Sample record from collection:', {
+            unique_id: sampleRecord.unique_id,
+            unique_id_type: typeof sampleRecord.unique_id,
+            asset_id: sampleRecord.asset_id
+          });
+        }
+      }
+      
+      const uniqueAssetIdsFromCashFlows = await collection.distinct('asset_id', cashflowQuery);
+      
+      // Convert to integers for comparison (MongoDB may return mixed types)
+      const uniqueAssetIdsInt = uniqueAssetIdsFromCashFlows.map(id => {
+        if (typeof id === 'string') {
+          const parsed = parseInt(id);
+          return isNaN(parsed) ? null : parsed;
+        }
+        return typeof id === 'number' ? id : null;
+      }).filter(id => id !== null);
+      
+      console.log('[output-asset-data] Found asset IDs in cash flows:', {
+        uniqueAssetIdsFromCashFlows,
+        uniqueAssetIdsFromCashFlowsTypes: uniqueAssetIdsFromCashFlows.map(id => typeof id),
+        uniqueAssetIdsInt,
+        count: uniqueAssetIdsInt.length
+      });
 
       // Use the portfolio config we already fetched
-      const assetData = portfolioConfig.asset_inputs
-        ? portfolioConfig.asset_inputs
-            .filter(asset => uniqueAssetIdsFromCashFlows.includes(parseInt(asset.id)))
+      // If we have asset IDs from cash flows, filter by those. Otherwise, use all assets from config.
+      // This handles cases where cash flows exist but the asset_id matching might have issues
+      let assetData = [];
+      
+      if (portfolioConfig.asset_inputs && portfolioConfig.asset_inputs.length > 0) {
+        if (uniqueAssetIdsInt.length > 0) {
+          // We found cash flows - filter assets by those IDs
+          assetData = portfolioConfig.asset_inputs
+            .filter(asset => {
+              const assetIdInt = parseInt(asset.id);
+              if (isNaN(assetIdInt)) return false;
+              return uniqueAssetIdsInt.includes(assetIdInt);
+            })
+            .map(asset => ({ 
+              _id: parseInt(asset.id), 
+              name: asset.name,
+              hybridGroup: asset.hybridGroup
+            }));
+          
+          console.log('[output-asset-data] Filtered assets by cash flow IDs:', {
+            totalAssetsInConfig: portfolioConfig.asset_inputs.length,
+            assetsInCashFlows: uniqueAssetIdsInt.length,
+            assetsAfterFilter: assetData.length
+          });
+        } else {
+          // No cash flows found - show all assets from config
+          // This might happen if model hasn't been run yet, or if there's a data issue
+          console.warn('[output-asset-data] No cash flows found for unique_id, showing all assets from config');
+          assetData = portfolioConfig.asset_inputs
             .map(asset => ({ 
               _id: parseInt(asset.id), 
               name: asset.name,
               hybridGroup: asset.hybridGroup
             }))
-        : [];
+            .filter(asset => !isNaN(asset._id));
+        }
+      }
+      
+      console.log('[output-asset-data] Filtered asset data from config:', {
+        assetDataCount: assetData.length,
+        assetData: assetData.map(a => ({ id: a._id, name: a.name })),
+        hasCashFlows: uniqueAssetIdsInt.length > 0
+      });
 
       // Check for hybrid groups in cashflow data (pre-combined hybrid assets)
       const hybridGroupsInCashflow = await collection.distinct('hybrid_group', { hybrid_group: { $exists: true, $ne: null } });
@@ -348,6 +474,11 @@ export async function GET(request) {
         }
       });
 
+      console.log('[output-asset-data] Returning asset list:', {
+        displayAssetsCount: displayAssets.length,
+        displayAssets: displayAssets.map(a => ({ id: a._id, name: a.name }))
+      });
+      
       return NextResponse.json({
         uniqueAssetIds: displayAssets,
         hybridGroups: hybridGroupMap,

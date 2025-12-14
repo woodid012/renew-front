@@ -11,7 +11,7 @@ import {
 } from '../../utils/excelExportRules'
 
 export default function BuildExcelPage() {
-  const { selectedPortfolio, getPortfolioUniqueId } = usePortfolio()
+  const { selectedPortfolio } = usePortfolio()
   const [assets, setAssets] = useState([])
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -26,12 +26,13 @@ export default function BuildExcelPage() {
   const fetchAssets = async () => {
     setLoading(true)
     try {
-      const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE'
-      if (!uniqueId) {
+      // selectedPortfolio from context is always the unique_id
+      if (!selectedPortfolio) {
         console.error('Build Excel page - No unique_id found for portfolio:', selectedPortfolio)
         setLoading(false)
         return
       }
+      const uniqueId = selectedPortfolio
       
       const response = await fetch(`/api/assets?unique_id=${encodeURIComponent(uniqueId)}`)
       if (!response.ok) throw new Error('Failed to fetch assets')
@@ -63,7 +64,11 @@ export default function BuildExcelPage() {
     setError('')
 
     try {
-      const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE'
+      // selectedPortfolio from context is always the unique_id
+      if (!selectedPortfolio) {
+        throw new Error('No portfolio selected')
+      }
+      const uniqueId = selectedPortfolio
       
       // Fetch asset inputs
       setStatus('Fetching asset inputs...')

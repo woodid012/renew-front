@@ -145,6 +145,11 @@ const navigationItems = [
 function LayoutContent({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:145',message:'LayoutContent pathname changed',data:{pathname,isSettingsRoute:pathname === '/pages/settings'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  }, [pathname]);
+  // #endregion
   const { selectedPortfolio, portfolios, changePortfolio, addPortfolio, getPortfolioTitle } = usePortfolio()
   const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false)
   const [showAddPortfolioModal, setShowAddPortfolioModal] = useState(false)
@@ -259,7 +264,14 @@ function LayoutContent({ children }) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={() => {
+                    // #region agent log
+                    if (item.href === '/pages/settings') {
+                      fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:259',message:'Settings link clicked',data:{href:item.href,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                    }
+                    // #endregion
+                    setSidebarOpen(false);
+                  }}
                   className={`
                     group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200
                     ${isActive
@@ -437,6 +449,34 @@ function LayoutContent({ children }) {
 }
 
 export default function RootLayout({ children }) {
+  // #region agent log
+  useEffect(() => {
+    const handleError = (event) => {
+      const error = event.error || event.reason;
+      if (error && (error.name === 'ChunkLoadError' || error.message?.includes('chunk') || error.message?.includes('Loading chunk'))) {
+        const chunkPath = error.message?.match(/chunk[^\\s]+/)?.[0] || error.message?.match(/\/_next\/static\/chunks\/[^\\s]+/)?.[0] || 'unknown';
+        fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:439',message:'ChunkLoadError detected',data:{errorName:error.name,errorMessage:error.message,errorStack:error.stack,pathname:typeof window !== 'undefined' ? window.location.pathname : 'unknown',chunkPath},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // Try to check if chunk file exists
+        if (chunkPath !== 'unknown' && typeof window !== 'undefined') {
+          const fullChunkUrl = chunkPath.startsWith('http') ? chunkPath : `${window.location.origin}${chunkPath}`;
+          fetch(fullChunkUrl, { method: 'HEAD' })
+            .then(response => {
+              fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:439',message:'Chunk file existence check',data:{chunkPath,fullChunkUrl,exists:response.ok,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            })
+            .catch(fetchError => {
+              fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:439',message:'Chunk file existence check failed',data:{chunkPath,fullChunkUrl,fetchError:fetchError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            });
+        }
+      }
+    };
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleError);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleError);
+    };
+  }, []);
+  // #endregion
   return (
     <html lang="en">
       <head>

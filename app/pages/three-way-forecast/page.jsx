@@ -19,7 +19,10 @@ import {
   Activity,
   Percent,
   BarChart,
-  LineChart as LineChartIcon
+  LineChart as LineChartIcon,
+  CheckSquare,
+  Square,
+  Layers
 } from 'lucide-react';
 import {
   LineChart,
@@ -44,7 +47,7 @@ const CHART_COLORS = [
 ];
 
 const ThreeWayForecastPage = () => {
-  const { selectedPortfolio, portfolios, getPortfolioUniqueId } = usePortfolio();
+  const { selectedPortfolio, portfolios } = usePortfolio();
   const { currencyUnit } = useDisplaySettings();
   const [assetIds, setAssetIds] = useState([]);
   const [assetIdToNameMap, setAssetIdToNameMap] = useState({});
@@ -54,7 +57,12 @@ const ThreeWayForecastPage = () => {
   const [error, setError] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('yearly');
   const [showCharts, setShowCharts] = useState(true);
-  
+
+  // New state for combined portfolio view
+  const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'portfolio'
+  const [selectedAssets, setSelectedAssets] = useState({}); // { assetId: boolean }
+  const [portfolioForecastData, setPortfolioForecastData] = useState([]); // Combined data for all selected assets
+
   // Refs for synchronized scrolling
   const pnlScrollRef = useRef(null);
   const balanceSheetScrollRef = useRef(null);
@@ -70,14 +78,28 @@ const ThreeWayForecastPage = () => {
 
   useEffect(() => {
     const fetchAssetIds = async () => {
+      // Wait for portfolios to load if they haven't yet
+      if (portfolios.length === 0) {
+        console.log('[Three-way Forecast] Waiting for portfolios to load...');
+        return;
+      }
+
       setLoading(true);
+      setError(null);
+      // Clear selected asset and asset list when portfolio changes to avoid stale data
+      setSelectedAssetId('');
+      setAssetIds([]);
+      setAssetIdToNameMap({});
+      setForecastData([]);
       try {
-        const uniqueId = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio || 'ZEBRE';
-        if (!uniqueId) {
-          console.error('Three-way forecast - No unique_id found for portfolio:', portfolio);
+        // selectedPortfolio from context is always the unique_id
+        if (!selectedPortfolio) {
+          console.error('Three-way forecast - No unique_id found for portfolio:', selectedPortfolio);
+          setError('No portfolio selected. Please select a portfolio from the portfolio selector.');
           setLoading(false);
           return;
         }
+        const uniqueId = selectedPortfolio;
         const response = await fetch(`/api/three-way-forecast?unique_id=${encodeURIComponent(uniqueId)}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -91,6 +113,8 @@ const ThreeWayForecastPage = () => {
         setAssetIdToNameMap(newMap);
         if (data.uniqueAssetIds.length > 0) {
           setSelectedAssetId(data.uniqueAssetIds[0]._id.toString());
+        } else {
+          setSelectedAssetId('');
         }
       } catch (err) {
         setError(err.message);
@@ -99,14 +123,14 @@ const ThreeWayForecastPage = () => {
       }
     };
     fetchAssetIds();
-    
+
     // Listen for portfolio changes
     const handlePortfolioChange = () => {
       fetchAssetIds();
     };
     window.addEventListener('portfolioChanged', handlePortfolioChange);
     return () => window.removeEventListener('portfolioChanged', handlePortfolioChange);
-  }, [selectedPortfolio]);
+  }, [selectedPortfolio, portfolios]);
 
   useEffect(() => {
     const fetchForecastData = async () => {
@@ -114,13 +138,13 @@ const ThreeWayForecastPage = () => {
         setLoading(true);
         setForecastData([]);
         try {
-          const portfolio = selectedPortfolio || localStorage.getItem('selectedPortfolio') || 'ZEBRE';
-          const uniqueId = getPortfolioUniqueId(portfolio);
-          if (!uniqueId) {
-            console.error('Three-way forecast - No unique_id found for portfolio:', portfolio);
+          // selectedPortfolio from context is always the unique_id
+          if (!selectedPortfolio) {
+            console.error('Three-way forecast - No unique_id found for portfolio:', selectedPortfolio);
             setLoading(false);
             return;
           }
+          const uniqueId = selectedPortfolio;
           const url = `/api/three-way-forecast?asset_id=${selectedAssetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}&unique_id=${encodeURIComponent(uniqueId)}`;
           const response = await fetch(url);
           if (!response.ok) {
@@ -136,12 +160,94 @@ const ThreeWayForecastPage = () => {
       }
     };
     fetchForecastData();
-  }, [selectedAssetId, selectedPeriod]);
+  }, [selectedAssetId, selectedPeriod, selectedPortfolio]);
+
+  // Initialize selectedAssets when assetIds are loaded
+  useEffect(() => {
+    if (assetIds.length > 0) {
+      const initialSelection = {};
+      assetIds.forEach(asset => {
+        initialSelection[asset.id] = true; // All assets selected by default
+      });
+      setSelectedAssets(initialSelection);
+    }
+  }, [assetIds]);
+
+  // Fetch portfolio combined data when in portfolio mode
+  useEffect(() => {
+    const fetchPortfolioData = async () => {
+      if (viewMode !== 'portfolio') return;
+
+      const selectedAssetIds = Object.entries(selectedAssets)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([id, _]) => id);
+
+      if (selectedAssetIds.length === 0) {
+        setPortfolioForecastData([]);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        if (!selectedPortfolio) {
+          setLoading(false);
+          return;
+        }
+
+        // Fetch data for all selected assets
+        const allAssetData = await Promise.all(
+          selectedAssetIds.map(async (assetId) => {
+            const url = `/api/three-way-forecast?asset_id=${assetId}${selectedPeriod ? `&period=${selectedPeriod}` : ''}&unique_id=${encodeURIComponent(selectedPortfolio)}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const data = await response.json();
+            return data.data;
+          })
+        );
+
+        // Aggregate data by period
+        const aggregatedData = {};
+
+        allAssetData.forEach(assetDataArray => {
+          assetDataArray.forEach(item => {
+            const periodKey = JSON.stringify(item._id);
+            if (!aggregatedData[periodKey]) {
+              aggregatedData[periodKey] = { _id: item._id, date: item.date };
+            }
+
+            // Sum all numeric fields
+            Object.keys(item).forEach(key => {
+              if (key !== '_id' && key !== 'date' && typeof item[key] === 'number') {
+                aggregatedData[periodKey][key] = (aggregatedData[periodKey][key] || 0) + item[key];
+              }
+            });
+          });
+        });
+
+        // Convert to array and sort
+        const sortedData = Object.values(aggregatedData).sort((a, b) => {
+          if (a._id.year !== b._id.year) return a._id.year - b._id.year;
+          if (a._id.month !== undefined && b._id.month !== undefined) return a._id.month - b._id.month;
+          if (a._id.quarter !== undefined && b._id.quarter !== undefined) return a._id.quarter - b._id.quarter;
+          if (a._id.fiscalYear !== undefined && b._id.fiscalYear !== undefined) return a._id.fiscalYear - b._id.fiscalYear;
+          return 0;
+        });
+
+        setPortfolioForecastData(sortedData);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPortfolioData();
+  }, [viewMode, selectedAssets, selectedPeriod, selectedPortfolio]);
 
   // Synchronize horizontal scrolling across all tables
   useEffect(() => {
     const scrollRefs = [pnlScrollRef, balanceSheetScrollRef, cashFlowScrollRef].filter(ref => ref.current);
-    
+
     if (scrollRefs.length === 0) return;
 
     const handleScroll = (sourceRef) => {
@@ -149,7 +255,7 @@ const ThreeWayForecastPage = () => {
       isScrollingRef.current = true;
 
       const scrollLeft = sourceRef.current.scrollLeft;
-      
+
       scrollRefs.forEach(ref => {
         if (ref.current && ref !== sourceRef) {
           ref.current.scrollLeft = scrollLeft;
@@ -193,11 +299,47 @@ const ThreeWayForecastPage = () => {
     }
   };
 
+  // Determine which data to display based on view mode
+  const displayData = useMemo(() => {
+    if (viewMode === 'portfolio') {
+      return portfolioForecastData;
+    }
+    return forecastData;
+  }, [viewMode, forecastData, portfolioForecastData]);
+
+  // Helper functions for asset selection
+  const toggleAsset = useCallback((assetId) => {
+    setSelectedAssets(prev => ({
+      ...prev,
+      [assetId]: !prev[assetId]
+    }));
+  }, []);
+
+  const selectAllAssets = useCallback(() => {
+    const allSelected = {};
+    assetIds.forEach(asset => {
+      allSelected[asset.id] = true;
+    });
+    setSelectedAssets(allSelected);
+  }, [assetIds]);
+
+  const deselectAllAssets = useCallback(() => {
+    const noneSelected = {};
+    assetIds.forEach(asset => {
+      noneSelected[asset.id] = false;
+    });
+    setSelectedAssets(noneSelected);
+  }, [assetIds]);
+
+  const selectedAssetCount = useMemo(() => {
+    return Object.values(selectedAssets).filter(Boolean).length;
+  }, [selectedAssets]);
+
   // Calculate financial metrics and ratios
   const financialMetrics = useMemo(() => {
-    if (!forecastData || forecastData.length === 0) return [];
+    if (!displayData || displayData.length === 0) return [];
 
-    return forecastData.map((item, index) => {
+    return displayData.map((item, index) => {
       const revenue = item.revenue || 0;
       const ebitda = item.ebitda || 0;
       const ebit = item.ebit || 0;
@@ -239,9 +381,9 @@ const ThreeWayForecastPage = () => {
       let ebitdaGrowth = 0;
       let netIncomeGrowth = 0;
       if (index > 0) {
-        const prevRevenue = forecastData[index - 1].revenue || 0;
-        const prevEbitda = forecastData[index - 1].ebitda || 0;
-        const prevNetIncome = forecastData[index - 1].net_income || 0;
+        const prevRevenue = displayData[index - 1].revenue || 0;
+        const prevEbitda = displayData[index - 1].ebitda || 0;
+        const prevNetIncome = displayData[index - 1].net_income || 0;
         revenueGrowth = prevRevenue !== 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : 0;
         ebitdaGrowth = prevEbitda !== 0 ? ((ebitda - prevEbitda) / prevEbitda) * 100 : 0;
         netIncomeGrowth = prevNetIncome !== 0 ? ((netIncome - prevNetIncome) / prevNetIncome) * 100 : 0;
@@ -272,15 +414,15 @@ const ThreeWayForecastPage = () => {
         netIncomeGrowth
       };
     });
-  }, [forecastData, selectedPeriod]);
+  }, [displayData, selectedPeriod]);
 
   // Data validation
   const validationResults = useMemo(() => {
-    if (!forecastData || forecastData.length === 0) return { isValid: true, issues: [] };
+    if (!displayData || displayData.length === 0) return { isValid: true, issues: [] };
 
     const issues = [];
 
-    forecastData.forEach((item, index) => {
+    displayData.forEach((item, index) => {
       const period = getPeriodLabel(item);
 
       // Balance Sheet Validation: Assets = Liabilities + Equity
@@ -301,7 +443,7 @@ const ThreeWayForecastPage = () => {
 
       // Cash Flow Reconciliation: Net Cash Flow should reconcile with change in cash
       if (index > 0) {
-        const prevCash = forecastData[index - 1].cash || 0;
+        const prevCash = displayData[index - 1].cash || 0;
         const currentCash = item.cash || 0;
         const netCashFlow = item.net_cash_flow || 0;
         const expectedCash = prevCash + netCashFlow;
@@ -356,7 +498,7 @@ const ThreeWayForecastPage = () => {
       isValid: issues.filter(i => i.severity === 'error').length === 0,
       issues
     };
-  }, [forecastData, selectedPeriod]);
+  }, [displayData, selectedPeriod]);
 
   const formatCurrency = useCallback((value, fieldKey = '') => {
     if (value === undefined || value === null || value === 0) return { display: '-', isNegative: false };
@@ -395,12 +537,12 @@ const ThreeWayForecastPage = () => {
   };
 
   const renderTable = (title, fields, icon, scrollRef) => (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6" key={`${title}-${currencyUnit}`}>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6" key={`${title}-${currencyUnit}-${viewMode}`}>
       <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
         {icon}
         {title}
       </h3>
-      {forecastData.length > 0 ? (
+      {displayData.length > 0 ? (
         <div className="overflow-x-auto" ref={scrollRef}>
           <table className="min-w-full divide-y divide-gray-200" key={currencyUnit}>
             <thead className="bg-gray-50">
@@ -408,7 +550,7 @@ const ThreeWayForecastPage = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
                   Metric
                 </th>
-                {forecastData.map((item, index) => (
+                {displayData.map((item, index) => (
                   <th key={index} className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                     {getPeriodLabel(item)}
                   </th>
@@ -422,7 +564,7 @@ const ThreeWayForecastPage = () => {
                     {field.indent && <span className="ml-4" />}
                     {field.label}
                   </td>
-                  {forecastData.map((item, itemIndex) => {
+                  {displayData.map((item, itemIndex) => {
                     const { display, isNegative } = formatCurrency(item[field.key], field.key);
                     return (
                       <td key={itemIndex} className={`px-6 py-4 whitespace-nowrap text-sm text-center ${isNegative ? 'text-red-600' : 'text-gray-700'
@@ -569,9 +711,15 @@ const ThreeWayForecastPage = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">3-Way Financial Forecast</h1>
             <p className="text-gray-600 mt-2">Integrated Profit & Loss, Balance Sheet, and Cash Flow statements</p>
-            {selectedAssetId && (
+            {viewMode === 'individual' && selectedAssetId && (
               <div className="mt-2 text-sm text-gray-500">
                 Asset: <span className="font-medium">{assetIdToNameMap[selectedAssetId]} ({selectedAssetId})</span>
+              </div>
+            )}
+            {viewMode === 'portfolio' && (
+              <div className="mt-2 text-sm text-gray-500">
+                <Layers className="w-4 h-4 inline mr-1" />
+                Combined Portfolio: <span className="font-medium">{selectedAssetCount} assets selected</span>
               </div>
             )}
           </div>
@@ -580,13 +728,13 @@ const ThreeWayForecastPage = () => {
               <div className="flex items-center space-x-2">
                 <DollarSign className="w-4 h-4 text-green-600" />
                 <span className="text-sm font-medium text-gray-700">
-                  {forecastData.length} periods
+                  {displayData.length} periods
                 </span>
               </div>
             </div>
             <button
               onClick={handleExportCsv}
-              disabled={forecastData.length === 0}
+              disabled={displayData.length === 0}
               className="px-4 py-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Export CSV
@@ -602,26 +750,63 @@ const ThreeWayForecastPage = () => {
           <h3 className="text-lg font-semibold text-gray-900">Analysis Configuration</h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Asset Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              <Building2 className="w-4 h-4 inline mr-1" />
-              Select Asset
-            </label>
-            <select
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              value={selectedAssetId}
-              onChange={(e) => setSelectedAssetId(e.target.value)}
+        {/* View Mode Toggle */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            <Layers className="w-4 h-4 inline mr-1" />
+            View Mode
+          </label>
+          <div className="flex space-x-4">
+            <button
+              onClick={() => setViewMode('individual')}
+              className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${viewMode === 'individual'
+                ? 'border-green-500 bg-green-50 text-green-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
             >
-              <option value="">-- Select an Asset --</option>
-              {assetIds.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {assetIdToNameMap[asset.id]} ({asset.id})
-                </option>
-              ))}
-            </select>
+              <Building2 className="w-5 h-5 inline mr-2" />
+              Individual Asset
+            </button>
+            <button
+              onClick={() => setViewMode('portfolio')}
+              className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${viewMode === 'portfolio'
+                ? 'border-green-500 bg-green-50 text-green-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+            >
+              <Layers className="w-5 h-5 inline mr-2" />
+              Combined Portfolio
+              {viewMode === 'portfolio' && (
+                <span className="ml-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">
+                  {selectedAssetCount}/{assetIds.length}
+                </span>
+              )}
+            </button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Asset Selection - only show in individual mode */}
+          {viewMode === 'individual' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                <Building2 className="w-4 h-4 inline mr-1" />
+                Select Asset
+              </label>
+              <select
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                value={selectedAssetId}
+                onChange={(e) => setSelectedAssetId(e.target.value)}
+              >
+                <option value="">-- Select an Asset --</option>
+                {assetIds.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {assetIdToNameMap[asset.id]} ({asset.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Period Selection */}
           <div>
@@ -642,6 +827,58 @@ const ThreeWayForecastPage = () => {
             </select>
           </div>
         </div>
+
+        {/* Asset Selection Checkboxes - only show in portfolio mode */}
+        {viewMode === 'portfolio' && assetIds.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <label className="block text-sm font-medium text-gray-700">
+                <CheckSquare className="w-4 h-4 inline mr-1" />
+                Select Assets to Include ({selectedAssetCount} of {assetIds.length} selected)
+              </label>
+              <div className="flex space-x-2">
+                <button
+                  onClick={selectAllAssets}
+                  className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={deselectAllAssets}
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {assetIds.map((asset) => (
+                <label
+                  key={asset.id}
+                  className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${selectedAssets[asset.id]
+                    ? 'border-green-300 bg-green-50'
+                    : 'border-gray-200 bg-gray-50 opacity-60'
+                    }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedAssets[asset.id] || false}
+                    onChange={() => toggleAsset(asset.id)}
+                    className="sr-only"
+                  />
+                  {selectedAssets[asset.id] ? (
+                    <CheckSquare className="w-5 h-5 text-green-600 mr-3 flex-shrink-0" />
+                  ) : (
+                    <Square className="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" />
+                  )}
+                  <span className={`text-sm ${selectedAssets[asset.id] ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                    {assetIdToNameMap[asset.id] || asset.id}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -653,7 +890,7 @@ const ThreeWayForecastPage = () => {
         </div>
       )}
 
-      {loading && selectedAssetId && (
+      {loading && (viewMode === 'individual' ? selectedAssetId : true) && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center space-x-2">
             <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
@@ -662,7 +899,7 @@ const ThreeWayForecastPage = () => {
         </div>
       )}
 
-      {!selectedAssetId && !loading && !error && (
+      {viewMode === 'individual' && !selectedAssetId && !loading && !error && (
         <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
           <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Select an Asset to Begin</h3>
@@ -670,50 +907,16 @@ const ThreeWayForecastPage = () => {
         </div>
       )}
 
-      {selectedAssetId && forecastData.length > 0 && (
+      {viewMode === 'portfolio' && selectedAssetCount === 0 && !loading && (
+        <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+          <Layers className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Assets Selected</h3>
+          <p className="text-gray-600">Select at least one asset from the checkboxes above to view the combined portfolio forecast</p>
+        </div>
+      )}
+
+      {displayData.length > 0 && (
         <>
-          {/* Data Validation Section */}
-          {validationResults.issues.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-              <div className="flex items-center space-x-2 mb-4">
-                {validationResults.isValid ? (
-                  <CheckCircle className="w-5 h-5 text-yellow-600" />
-                ) : (
-                  <XCircle className="w-5 h-5 text-red-600" />
-                )}
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Data Validation {validationResults.isValid ? '(Warnings Only)' : '(Errors Found)'}
-                </h3>
-              </div>
-              <div className="space-y-2">
-                {validationResults.issues.map((issue, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-3 rounded-lg ${issue.severity === 'error'
-                        ? 'bg-red-50 border border-red-200'
-                        : 'bg-yellow-50 border border-yellow-200'
-                      }`}
-                  >
-                    <div className="flex items-start space-x-2">
-                      {issue.severity === 'error' ? (
-                        <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                      )}
-                      <div className="flex-1">
-                        <span className="font-medium text-sm">
-                          {issue.period}: {issue.type.replace('_', ' ').toUpperCase()}
-                        </span>
-                        <p className="text-sm mt-1">{issue.message}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-
           {/* Visualizations */}
           {showCharts && chartData.length > 0 && (
             <div className="space-y-6 mb-6">
@@ -854,6 +1057,47 @@ const ThreeWayForecastPage = () => {
               </div>
             )}
           </div>
+
+          {/* Data Validation Section - At Bottom */}
+          {validationResults.issues.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+              <div className="flex items-center space-x-2 mb-4">
+                {validationResults.isValid ? (
+                  <CheckCircle className="w-5 h-5 text-yellow-600" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-red-600" />
+                )}
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Data Validation {validationResults.isValid ? '(Warnings Only)' : '(Errors Found)'}
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {validationResults.issues.map((issue, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg ${issue.severity === 'error'
+                      ? 'bg-red-50 border border-red-200'
+                      : 'bg-yellow-50 border border-yellow-200'
+                      }`}
+                  >
+                    <div className="flex items-start space-x-2">
+                      {issue.severity === 'error' ? (
+                        <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        <span className="font-medium text-sm">
+                          {issue.period}: {issue.type.replace('_', ' ').toUpperCase()}
+                        </span>
+                        <p className="text-sm mt-1">{issue.message}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
