@@ -13,11 +13,11 @@ export async function POST(request) {
     }
 
     if (!platformName || !platformName.trim()) {
-      return NextResponse.json({ error: 'platformName is required' }, { status: 400 });
+      return NextResponse.json({ error: 'portfolioTitle is required' }, { status: 400 });
     }
 
     const portfolioUniqueId = unique_id.trim();
-    const newPlatformName = platformName.trim();
+    const newPortfolioTitle = platformName.trim();
 
     const client = await clientPromise
     const db = client.db('renew_assets')
@@ -40,7 +40,7 @@ export async function POST(request) {
     // PortfolioTitle is the user-editable display name, PlatformName is the original identifier
     const updateResult = await db.collection('CONFIG_Inputs').updateMany(
       { unique_id: portfolioUniqueId },
-      { $set: { PortfolioTitle: newPlatformName } }
+      { $set: { PortfolioTitle: newPortfolioTitle } }
     );
 
     if (updateResult.matchedCount === 0) {
@@ -54,7 +54,7 @@ export async function POST(request) {
         success: true,
         message: 'PortfolioTitle unchanged (already set to this value)',
         unique_id: portfolioUniqueId,
-        portfolioTitle: newPlatformName,
+        portfolioTitle: newPortfolioTitle,
         documentsMatched: updateResult.matchedCount
       });
     }
@@ -63,7 +63,7 @@ export async function POST(request) {
       success: true,
       message: 'PortfolioTitle updated successfully',
       unique_id: portfolioUniqueId,
-      portfolioTitle: newPlatformName,
+      portfolioTitle: newPortfolioTitle,
       previousPlatformName: previousPlatformName,
       documentsMatched: updateResult.matchedCount,
       documentsModified: updateResult.modifiedCount

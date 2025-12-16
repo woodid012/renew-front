@@ -21,7 +21,7 @@ import {
 const AssetsDetailPage = () => {
   const { selectedPortfolio } = usePortfolio();
   const { currencyUnit } = useDisplaySettings();
-  
+
   // Original data from database
   const [originalAssets, setOriginalAssets] = useState({});
   const [originalConstants, setOriginalConstants] = useState({});
@@ -181,12 +181,12 @@ const AssetsDetailPage = () => {
       // Set original data
       setOriginalAssets(assetsObject);
       setOriginalConstants(constantsObject);
-      setOriginalPlatformName(data.PlatformName || '');
+      setOriginalPlatformName(data.PortfolioTitle || data.PlatformName || '');
 
       // Set working data (copies)
       setAssets(JSON.parse(JSON.stringify(assetsObject)));
       setConstants(JSON.parse(JSON.stringify(constantsObject)));
-      setPlatformName(data.PlatformName || '');
+      setPlatformName(data.PortfolioTitle || data.PlatformName || '');
 
       // Set other platform data
       setConfigDocId(data._id);
