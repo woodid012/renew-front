@@ -147,7 +147,7 @@ function LayoutContent({ children }) {
   const pathname = usePathname()
   // #region agent log
   useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:145',message:'LayoutContent pathname changed',data:{pathname,isSettingsRoute:pathname === '/pages/settings'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/layout.jsx:145', message: 'LayoutContent pathname changed', data: { pathname, isSettingsRoute: pathname === '/pages/settings' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
   }, [pathname]);
   // #endregion
   const { selectedPortfolio, portfolios, changePortfolio, addPortfolio, getPortfolioTitle } = usePortfolio()
@@ -168,7 +168,7 @@ function LayoutContent({ children }) {
       typeof p === 'string' ? { name: p, title: p, unique_id: p } : p
 
     return {
-      platformName: obj?.name || obj?.title || selectedPortfolio || '',
+      platformName: obj?.title || obj?.name || selectedPortfolio || '',
       uniqueId: selectedPortfolio || '',
     }
   }, [portfolios, selectedPortfolio])
@@ -183,7 +183,7 @@ function LayoutContent({ children }) {
       setShowAddPortfolioModal(true)
       return
     }
-    
+
     changePortfolio(portfolioName)
     setShowPortfolioDropdown(false)
   }
@@ -193,9 +193,9 @@ function LayoutContent({ children }) {
       alert('Please enter a portfolio name')
       return
     }
-    
+
     const portfolioName = newPortfolioName.trim()
-    
+
     try {
       await addPortfolio(portfolioName)
       setNewPortfolioName('')
@@ -267,7 +267,7 @@ function LayoutContent({ children }) {
                   onClick={() => {
                     // #region agent log
                     if (item.href === '/pages/settings') {
-                      fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:259',message:'Settings link clicked',data:{href:item.href,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                      fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/layout.jsx:259', message: 'Settings link clicked', data: { href: item.href, timestamp: Date.now() }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
                     }
                     // #endregion
                     setSidebarOpen(false);
@@ -343,31 +343,30 @@ function LayoutContent({ children }) {
                       {selectedPortfolioMeta.uniqueId}
                     </span>
                   </div>
-                  
+
                   {showPortfolioDropdown && (
                     <>
-                      <div 
-                        className="fixed inset-0 z-10" 
+                      <div
+                        className="fixed inset-0 z-10"
                         onClick={() => setShowPortfolioDropdown(false)}
                       />
                       <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200">
                         <div className="py-1">
                           {portfolios.map((portfolio) => {
-                            const portfolioObj = typeof portfolio === 'string' 
+                            const portfolioObj = typeof portfolio === 'string'
                               ? { name: portfolio, title: portfolio, unique_id: portfolio }
                               : portfolio;
-                            
+
                             const portfolioName = portfolioObj.name;
                             const uniqueId = portfolioObj.unique_id || portfolioObj.name;
                             const displayName = portfolioObj.title || portfolioObj.name || uniqueId;
-                            
+
                             return (
                               <button
                                 key={uniqueId}
                                 onClick={() => handlePortfolioChange(uniqueId)}
-                                className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                                  selectedPortfolio === uniqueId ? 'bg-green-50 text-green-700' : 'text-gray-700'
-                                }`}
+                                className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${selectedPortfolio === uniqueId ? 'bg-green-50 text-green-700' : 'text-gray-700'
+                                  }`}
                               >
                                 {displayName}
                               </button>
@@ -395,7 +394,7 @@ function LayoutContent({ children }) {
                 <span>RUN</span>
               </Link>
             </div>
-            
+
             {/* Add Portfolio Modal */}
             {showAddPortfolioModal && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -455,16 +454,16 @@ export default function RootLayout({ children }) {
       const error = event.error || event.reason;
       if (error && (error.name === 'ChunkLoadError' || error.message?.includes('chunk') || error.message?.includes('Loading chunk'))) {
         const chunkPath = error.message?.match(/chunk[^\\s]+/)?.[0] || error.message?.match(/\/_next\/static\/chunks\/[^\\s]+/)?.[0] || 'unknown';
-        fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:439',message:'ChunkLoadError detected',data:{errorName:error.name,errorMessage:error.message,errorStack:error.stack,pathname:typeof window !== 'undefined' ? window.location.pathname : 'unknown',chunkPath},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/layout.jsx:439', message: 'ChunkLoadError detected', data: { errorName: error.name, errorMessage: error.message, errorStack: error.stack, pathname: typeof window !== 'undefined' ? window.location.pathname : 'unknown', chunkPath }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
         // Try to check if chunk file exists
         if (chunkPath !== 'unknown' && typeof window !== 'undefined') {
           const fullChunkUrl = chunkPath.startsWith('http') ? chunkPath : `${window.location.origin}${chunkPath}`;
           fetch(fullChunkUrl, { method: 'HEAD' })
             .then(response => {
-              fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:439',message:'Chunk file existence check',data:{chunkPath,fullChunkUrl,exists:response.ok,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/layout.jsx:439', message: 'Chunk file existence check', data: { chunkPath, fullChunkUrl, exists: response.ok, status: response.status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'E' }) }).catch(() => { });
             })
             .catch(fetchError => {
-              fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/layout.jsx:439',message:'Chunk file existence check failed',data:{chunkPath,fullChunkUrl,fetchError:fetchError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/layout.jsx:439', message: 'Chunk file existence check failed', data: { chunkPath, fullChunkUrl, fetchError: fetchError.message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'E' }) }).catch(() => { });
             });
         }
       }

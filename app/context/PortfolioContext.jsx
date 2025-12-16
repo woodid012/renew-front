@@ -7,6 +7,7 @@ const PortfolioContext = createContext();
 export function PortfolioProvider({ children }) {
   const [selectedPortfolio, setSelectedPortfolio] = useState(null);
   const [portfolios, setPortfolios] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Fetch portfolios from API
   const fetchPortfolios = async () => {
@@ -17,9 +18,9 @@ export function PortfolioProvider({ children }) {
         if (data.success && Array.isArray(data.portfolios)) {
           // Store full portfolio objects (with name, title, and unique_id)
           // Keep backward compatibility with string format
-          const portfolioObjects = data.portfolios.map(p => 
-            typeof p === 'string' 
-              ? { name: p, title: p, unique_id: p } 
+          const portfolioObjects = data.portfolios.map(p =>
+            typeof p === 'string'
+              ? { name: p, title: p, unique_id: p }
               : { name: p.name, title: p.title || p.name, unique_id: p.unique_id || p.name }
           );
           setPortfolios(portfolioObjects);
@@ -39,7 +40,7 @@ export function PortfolioProvider({ children }) {
               const portfolioToSelect = (defaultPortfolioId && portfolioUniqueIds.includes(defaultPortfolioId))
                 ? defaultPortfolioId
                 : portfolioUniqueIds[0];
-              
+
               setSelectedPortfolio(portfolioToSelect);
               localStorage.setItem('selectedPortfolio', portfolioToSelect);
             }
@@ -51,6 +52,8 @@ export function PortfolioProvider({ children }) {
       }
     } catch (error) {
       console.error('Failed to fetch portfolios:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -90,7 +93,7 @@ export function PortfolioProvider({ children }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ portfolio: portfolioName })
       });
-      
+
       const result = await response.json();
       if (!result.success && !result.message?.includes('already exists')) {
         throw new Error(result.error || 'Failed to create portfolio');
@@ -98,7 +101,7 @@ export function PortfolioProvider({ children }) {
 
       // Refresh portfolios from API to ensure we have the latest list
       await fetchPortfolios();
-      
+
       // After refresh, find the unique_id for the newly created portfolio
       // Wait a bit for the state to update, then find and select by unique_id
       setTimeout(async () => {
@@ -131,19 +134,19 @@ export function PortfolioProvider({ children }) {
       return pUniqueId === portfolioIdentifier;
     });
     if (!portfolio) return portfolioIdentifier;
-    
-    const portfolioObj = typeof portfolio === 'string' 
+
+    const portfolioObj = typeof portfolio === 'string'
       ? { name: portfolio, title: portfolio, unique_id: portfolio }
       : portfolio;
-    
-    const platformName = portfolioObj.name || portfolioObj.title || portfolioIdentifier;
+
+    const platformName = portfolioObj.title || portfolioObj.name || portfolioIdentifier;
     const uniqueId = portfolioObj.unique_id || portfolioIdentifier;
-    
+
     // If unique_id is the same as platformName, just show platformName
     if (uniqueId === platformName) {
       return platformName;
     }
-    
+
     // Otherwise show "PlatformName (unique_id)"
     return `${platformName} (${uniqueId})`;
   };
@@ -167,6 +170,7 @@ export function PortfolioProvider({ children }) {
     <PortfolioContext.Provider value={{
       selectedPortfolio,
       portfolios,
+      isLoading,
       changePortfolio,
       addPortfolio,
       refreshPortfolios: fetchPortfolios,

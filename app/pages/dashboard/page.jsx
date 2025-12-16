@@ -37,7 +37,7 @@ import { formatCurrencyFromMillions } from '../../utils/currencyFormatter'
 Chart.register(...registerables)
 
 export default function DashboardPage() {
-  const { selectedPortfolio, portfolios } = usePortfolio()
+  const { selectedPortfolio, portfolios, isLoading: isPortfolioLoading } = usePortfolio()
   const { currencyUnit } = useDisplaySettings()
   const [dashboardData, setDashboardData] = useState(null)
   const [assetInputsData, setAssetInputsData] = useState(null)
@@ -362,10 +362,10 @@ export default function DashboardPage() {
     if (!sensitivityData.length) return { labels: [], datasets: [], processedData: [] }
 
     const parameterGroups = {}
-    
+
     sensitivityData.forEach(item => {
       const paramName = item.parameter_name || item.parameter || 'Unknown Parameter'
-      
+
       if (!parameterGroups[paramName]) {
         parameterGroups[paramName] = {
           scenarios: [],
@@ -373,10 +373,10 @@ export default function DashboardPage() {
           parameter_units: item.parameter_units || ''
         }
       }
-      
+
       // Use portfolio-level IRR difference for Platform
       const metricDiff = item.portfolio_irr_diff_bps || 0
-      
+
       parameterGroups[paramName].scenarios.push({
         scenario_id: item.scenario_id,
         parameter_value: item.input_value,
@@ -388,16 +388,16 @@ export default function DashboardPage() {
 
     const processedData = Object.entries(parameterGroups).map(([param, group]) => {
       const impacts = group.scenarios.map(s => s.metric_diff)
-      
+
       const maxImpact = Math.max(...impacts)
       const minImpact = Math.min(...impacts)
       const totalRange = Math.abs(maxImpact) + Math.abs(minImpact)
-      
+
       const maxIndex = impacts.indexOf(maxImpact)
       const minIndex = impacts.indexOf(minImpact)
       const maxScenario = group.scenarios[maxIndex]
       const minScenario = group.scenarios[minIndex]
-      
+
       return {
         parameter: param,
         upside: Math.max(maxImpact, 0),
@@ -421,7 +421,7 @@ export default function DashboardPage() {
       const maxVal = item.maxInputValue
       const minVal = item.minInputValue
       const units = item.units || ''
-      
+
       if (maxVal !== undefined && minVal !== undefined) {
         return `${item.parameter}\n(${minVal}${units} to ${maxVal}${units})`
       }
@@ -473,11 +473,11 @@ export default function DashboardPage() {
       },
       tooltip: {
         callbacks: {
-          title: function(context) {
+          title: function (context) {
             const fullLabel = context[0].label
             return fullLabel.split('\n')[0]
           },
-          afterTitle: function(context) {
+          afterTitle: function (context) {
             const dataIndex = context[0].dataIndex
             const item = platformTornadoData.processedData[dataIndex]
             if (item && item.maxInputValue !== undefined && item.minInputValue !== undefined) {
@@ -486,19 +486,19 @@ export default function DashboardPage() {
             }
             return ''
           },
-          label: function(context) {
+          label: function (context) {
             const value = Math.abs(context.parsed.x)
             const dataIndex = context.dataIndex
             const item = platformTornadoData.processedData[dataIndex]
-            
+
             if (!item) return `${context.dataset.label}: ${value.toFixed(2)}%`
-            
+
             const isUpside = context.dataset.label.includes('Upside')
             const inputValue = isUpside ? item.maxInputValue : item.minInputValue
             const units = item.units || ''
-            
+
             const impactText = `${value.toFixed(2)}%`
-            
+
             return `${context.dataset.label}: ${impactText} (at ${inputValue}${units})`
           }
         }
@@ -516,7 +516,7 @@ export default function DashboardPage() {
           }
         },
         ticks: {
-          callback: function(value) {
+          callback: function (value) {
             return Math.abs(value).toFixed(1) + '%'
           }
         }
@@ -535,25 +535,26 @@ export default function DashboardPage() {
     },
   }
 
-  // Show message if no portfolio is selected
-  if (!selectedPortfolio && !loading) {
+  // Show loading if portfolio context is still loading or if data is loading
+  if (isPortfolioLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center space-x-2">
+          <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+          <span className="text-gray-600">Loading dashboard...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show message if no portfolio is selected (only after context has loaded)
+  if (!selectedPortfolio) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Portfolio Selected</h2>
           <p className="text-gray-600 mb-4">Please select a portfolio from the dropdown above to view the dashboard.</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="w-6 h-6 animate-spin text-green-600" />
-          <span className="text-gray-600">Loading dashboard...</span>
         </div>
       </div>
     )
@@ -853,7 +854,7 @@ export default function DashboardPage() {
                   <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Sensitivity Data Available</h3>
                   <p className="text-gray-600 text-sm">
-                    {loading 
+                    {loading
                       ? 'Loading sensitivity data...'
                       : 'Run sensitivity analysis to view Platform sensitivity tornado chart'}
                   </p>
