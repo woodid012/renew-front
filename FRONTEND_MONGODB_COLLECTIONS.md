@@ -148,7 +148,7 @@ This document maps each frontend chart, component, and page to the MongoDB colle
   - Revenue summary data
 
 ### Price Curves API:
-- **`PRICE_Curves_2`** - Via `/api/price-curves2`
+- **`PRICE_Curves_2`** - Via `/api/price-curves`
   - Price curve data
 
 ### Dashboard Helper APIs:

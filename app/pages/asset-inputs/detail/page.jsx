@@ -83,20 +83,20 @@ const AssetsDetailPage = () => {
       loadAssetData(newPortfolio);
     };
 
-    const handlePortfolioNameUpdate = (event) => {
-      const { unique_id, platformName } = event.detail;
+    const handlePortfolioTitleUpdate = (event) => {
+      const { unique_id, portfolioTitle } = event.detail;
       // Only update if this is the current portfolio
       if (selectedPortfolio === unique_id) {
-        setPlatformName(platformName);
-        setOriginalPlatformName(platformName);
+        setPlatformName(portfolioTitle);
+        setOriginalPlatformName(portfolioTitle);
       }
     };
 
     window.addEventListener('portfolioChanged', handlePortfolioChange);
-    window.addEventListener('portfolioNameUpdated', handlePortfolioNameUpdate);
+    window.addEventListener('portfolioTitleUpdated', handlePortfolioTitleUpdate);
     return () => {
       window.removeEventListener('portfolioChanged', handlePortfolioChange);
-      window.removeEventListener('portfolioNameUpdated', handlePortfolioNameUpdate);
+      window.removeEventListener('portfolioTitleUpdated', handlePortfolioTitleUpdate);
     };
   }, [selectedPortfolio]);
 
@@ -226,20 +226,20 @@ const AssetsDetailPage = () => {
         // selectedPortfolio is already the unique_id
         const uniqueId = selectedPortfolio;
         if (uniqueId) {
-          const updateNameResponse = await fetch('/api/update-platform-name', {
+          const updateNameResponse = await fetch('/api/update-portfolio-title', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               unique_id: uniqueId,
-              platformName: platformName,
+              portfolioTitle: platformName,
             }),
           });
 
           const updateNameResult = await updateNameResponse.json();
           if (!updateNameResult.success) {
-            throw new Error(updateNameResult.error || 'Failed to update PlatformName');
+            throw new Error(updateNameResult.error || 'Failed to update PortfolioTitle');
           }
         }
       }

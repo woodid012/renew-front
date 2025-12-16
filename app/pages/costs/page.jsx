@@ -18,7 +18,7 @@ function parseFormulaOrPercent(input) {
   if (!input || input === '' || input === '-') return 0;
   const str = String(input).trim();
   if (str === '-') return 0;
-  
+
   // Handle formula: =1/10, =2/3, etc.
   if (str.startsWith('=')) {
     const formula = str.slice(1).trim();
@@ -34,12 +34,12 @@ function parseFormulaOrPercent(input) {
     // For now, only support division formulas like =1/10
     return 0;
   }
-  
+
   // Handle percentage: "10%" -> 10
   if (str.endsWith('%')) {
     return parseFloat(str.slice(0, -1)) || 0;
   }
-  
+
   // Handle plain number
   return parseFloat(str) || 0;
 }
@@ -50,11 +50,11 @@ function parseFormulaOrValue(input) {
   if (!input || input === '' || input === '-') return 0;
   const str = String(input).trim();
   if (str === '-') return 0;
-  
+
   // Handle formula: =1/10, =100/2, =10+5, =10-3, =10*2, etc.
   if (str.startsWith('=')) {
     const formula = str.slice(1).trim();
-    
+
     // Division: =10/2
     const divMatch = formula.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
     if (divMatch) {
@@ -65,29 +65,29 @@ function parseFormulaOrValue(input) {
       }
       return 0;
     }
-    
+
     // Multiplication: =10*2
     const multMatch = formula.match(/^(\d+(?:\.\d+)?)\s*\*\s*(\d+(?:\.\d+)?)$/);
     if (multMatch) {
       return parseFloat(multMatch[1]) * parseFloat(multMatch[2]);
     }
-    
+
     // Addition: =10+5
     const addMatch = formula.match(/^(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)$/);
     if (addMatch) {
       return parseFloat(addMatch[1]) + parseFloat(addMatch[2]);
     }
-    
+
     // Subtraction: =10-3
     const subMatch = formula.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
     if (subMatch) {
       return parseFloat(subMatch[1]) - parseFloat(subMatch[2]);
     }
-    
+
     // If no match, return 0
     return 0;
   }
-  
+
   // Handle plain number
   return parseFloat(str) || 0;
 }
@@ -253,13 +253,13 @@ export default function CostsPage() {
 
   const [activeTab, setActiveTab] = useState('capex'); // capex | opex
   const [selectedAssetId, setSelectedAssetId] = useState('');
-  
+
   // Track temporary input values for percentage fields (Excel-like behavior)
   const [tempPctInputs, setTempPctInputs] = useState({});
-  
+
   // Track temporary input values for dollar value fields (Excel-like behavior)
   const [tempValueInputs, setTempValueInputs] = useState({});
-  
+
   // Track which labels are being edited (double-click to edit)
   const [editingLabel, setEditingLabel] = useState(null); // Format: 'group_${groupId}' or 'item_${groupId}_${itemId}'
 
@@ -340,7 +340,7 @@ export default function CostsPage() {
             return;
           }
         }
-        
+
         // Only clear assets if we truly have no data AND we haven't successfully loaded before
         if (!assetsLoadedRef.current) {
           console.warn('No assets found for portfolio:', uniqueId);
@@ -533,17 +533,17 @@ export default function CostsPage() {
           activeTab === 'capex'
             ? { id: newId(), label: 'New Item', value: 0, monthlyAllocations: [] }
             : {
-                id: newId(),
-                label: 'New Item',
-                value: 0,
-                units: 'AUD M p.a.',
-                escalationMethod: 'CPI',
-                escalationPct: DEFAULT_OPEX_ESCALATION_PCT,
-                flexPct: 0,
-                referenceYear: assetCosts.opex?.reference_year || nowYear,
-                startDate: defaultOpexRange.startDate,
-                endDate: defaultOpexRange.endDate,
-              };
+              id: newId(),
+              label: 'New Item',
+              value: 0,
+              units: 'AUD M p.a.',
+              escalationMethod: 'CPI',
+              escalationPct: DEFAULT_OPEX_ESCALATION_PCT,
+              flexPct: 0,
+              referenceYear: assetCosts.opex?.reference_year || nowYear,
+              startDate: defaultOpexRange.startDate,
+              endDate: defaultOpexRange.endDate,
+            };
         return { ...g, items: [...(g.items || []), baseItem] };
       });
       const next = { ...target, groups: nextGroups };
@@ -667,10 +667,10 @@ export default function CostsPage() {
             ...section,
             groups: Array.isArray(section?.groups)
               ? section.groups.map((g) => {
-                  // eslint-disable-next-line no-unused-vars
-                  const { upliftPct, ...rest } = g || {};
-                  return rest;
-                })
+                // eslint-disable-next-line no-unused-vars
+                const { upliftPct, ...rest } = g || {};
+                return rest;
+              })
               : [],
           });
           return [
@@ -749,9 +749,8 @@ export default function CostsPage() {
             <button
               onClick={saveToMongo}
               disabled={saving || !hasUnsavedChanges}
-              className={`px-4 py-2 rounded-md text-white flex items-center gap-2 ${
-                hasUnsavedChanges ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'
-              }`}
+              className={`px-4 py-2 rounded-md text-white flex items-center gap-2 ${hasUnsavedChanges ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'
+                }`}
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {saving ? 'Saving…' : 'Save'}
@@ -762,11 +761,10 @@ export default function CostsPage() {
         {/* Status */}
         {status.type && (
           <div
-            className={`p-4 rounded-lg border flex items-center space-x-2 ${
-              status.type === 'success'
+            className={`p-4 rounded-lg border flex items-center space-x-2 ${status.type === 'success'
                 ? 'bg-green-50 border-green-200 text-green-800'
                 : 'bg-red-50 border-red-200 text-red-800'
-            }`}
+              }`}
           >
             {status.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
             <span>{status.message}</span>
@@ -842,9 +840,8 @@ export default function CostsPage() {
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id)}
-                  className={`py-3 border-b-2 font-medium text-sm ${
-                    activeTab === t.id ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
+                  className={`py-3 border-b-2 font-medium text-sm ${activeTab === t.id ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
                 >
                   {t.label}
                 </button>
@@ -899,295 +896,66 @@ export default function CostsPage() {
 
         {/* CAPEX / OPEX tables */}
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {activeTab === 'capex' ? 'CAPEX sections' : 'OPEX groups'}
-              </h2>
-            </div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {activeTab === 'capex' ? 'CAPEX sections' : 'OPEX groups'}
+            </h2>
+          </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    {activeTab === 'capex' ? (
-                      <>
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            <div className="flex items-center gap-2">
-                              <span style={{ minWidth: '200px' }}>Section</span>
-                              <button
-                                onClick={addGroup}
-                                className="px-2 py-2 rounded-md bg-green-600 text-white hover:bg-green-700"
-                                title="Add section"
-                              >
-                                <Plus className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input value ($M)</th>
-                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total %</th>
-                          {Array.from({ length: currentAssetCosts?.capex?.construction_duration_months || 0 }, (_, i) => (
-                            <th key={`cm_${i}`} className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              CM{i + 1}
-                            </th>
-                          ))}
-                          <th className="px-3 py-2" />
-                        </tr>
-                      </>
-                    ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  {activeTab === 'capex' ? (
+                    <>
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fixed costs</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Escalation</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied amount</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-20 bg-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]" style={{ width: '250px', minWidth: '250px' }}>
+                          <div className="flex items-center gap-2">
+                            <span>Section</span>
+                            <button
+                              onClick={addGroup}
+                              className="px-2 py-2 rounded-md bg-green-600 text-white hover:bg-green-700"
+                              title="Add section"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-[250px] z-20 bg-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]" style={{ width: '150px', minWidth: '150px' }}>Input value ($M)</th>
+                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-[400px] z-20 bg-gray-50 shadow-[4px_0_5px_-3px_rgba(0,0,0,0.1)]" style={{ width: '100px', minWidth: '100px' }}>Total %</th>
+                        {Array.from({ length: currentAssetCosts?.capex?.construction_duration_months || 0 }, (_, i) => (
+                          <th key={`cm_${i}`} className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ minWidth: '80px' }}>
+                            CM{i + 1}
+                          </th>
+                        ))}
                         <th className="px-3 py-2" />
                       </tr>
-                    )}
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {(activeTab === 'capex' ? currentAssetCosts?.capex?.groups : currentAssetCosts?.opex?.groups)?.flatMap((group) => {
-                      const totals = computeGroupTotals(group);
+                    </>
+                  ) : (
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fixed costs</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Escalation</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied amount</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End</th>
+                      <th className="px-3 py-2" />
+                    </tr>
+                  )}
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {(activeTab === 'capex' ? currentAssetCosts?.capex?.groups : currentAssetCosts?.opex?.groups)?.flatMap((group) => {
+                    const totals = computeGroupTotals(group);
 
-                      if (activeTab === 'capex') {
-                        const sectionLabelKey = `group_${group.id}`;
-                        const isEditingSection = editingLabel === sectionLabelKey;
-                        
-                        const sectionRow = (
-                          <tr key={`s_${group.id}`} className="bg-gray-50">
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                {isEditingSection ? (
-                                  <input
-                                    type="text"
-                                    value={group.name}
-                                    onChange={(e) => renameGroup(group.id, e.target.value)}
-                                    onBlur={() => setEditingLabel(null)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.target.blur();
-                                      }
-                                    }}
-                                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                                    style={{ minWidth: '200px' }}
-                                    placeholder="Section label"
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <div
-                                    onDoubleClick={() => setEditingLabel(sectionLabelKey)}
-                                    className="flex-1 p-2 border border-transparent rounded-md text-sm font-semibold cursor-pointer hover:bg-gray-100"
-                                    style={{ minWidth: '200px' }}
-                                  >
-                                    {group.name}
-                                  </div>
-                                )}
-                                <button
-                                  onClick={() => addItem(group.id)}
-                                  className="px-2 py-2 rounded-md bg-gray-900 text-white hover:bg-black"
-                                  title="Add item"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                            <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                            {Array.from({ length: currentAssetCosts?.capex?.construction_duration_months || 0 }, (_, i) => (
-                              <td key={`section_cm_${i}`} className="px-2 py-2 text-sm text-gray-500">—</td>
-                            ))}
-                            <td className="px-3 py-2 text-right">
-                              <button
-                                onClick={() => deleteGroup(group.id)}
-                                className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                                title="Delete section"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
+                    if (activeTab === 'capex') {
+                      const sectionLabelKey = `group_${group.id}`;
+                      const isEditingSection = editingLabel === sectionLabelKey;
 
-                        const itemRows = (group.items || []).map((item) => {
-                          const value = parseFloat(item.value) || 0;
-                          const allocs = Array.isArray(item.monthlyAllocations) ? item.monthlyAllocations : [];
-                          const months = currentAssetCosts?.capex?.construction_duration_months || 0;
-                          const totalPct = getMonthlyAllocationTotal(item);
-                          const isPctValid = Math.abs(totalPct - 100) < 0.01;
-                          const itemLabelKey = `item_${group.id}_${item.id}`;
-                          const isEditingItem = editingLabel === itemLabelKey;
-                          
-                          return (
-                            <tr key={`i_${group.id}_${item.id}`} className="hover:bg-gray-50">
-                              <td className="px-3 py-2">
-                                {isEditingItem ? (
-                                  <input
-                                    type="text"
-                                    value={item.label}
-                                    onChange={(e) => updateItem(group.id, item.id, { label: e.target.value })}
-                                    onBlur={() => setEditingLabel(null)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.target.blur();
-                                      }
-                                    }}
-                                    className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                                    style={{ minWidth: '200px', marginLeft: '20px' }}
-                                    placeholder="Item label"
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <div
-                                    onDoubleClick={() => setEditingLabel(itemLabelKey)}
-                                    className="p-2 border border-transparent rounded-md text-sm cursor-pointer hover:bg-gray-100"
-                                    style={{ minWidth: '200px', marginLeft: '20px' }}
-                                  >
-                                    {item.label}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                {(() => {
-                                  const value = parseFloat(item.value) || 0;
-                                  const inputKey = `${group.id}_${item.id}_value`;
-                                  const tempValue = tempValueInputs[inputKey];
-                                  // Show temp value while typing, or actual value (formatted) when not typing
-                                  const displayValue = tempValue !== undefined 
-                                    ? tempValue 
-                                    : (value === 0 ? '' : String(value));
-                                  return (
-                                    <input
-                                      type="text"
-                                      value={displayValue}
-                                      onChange={(e) => {
-                                        // Update temporary value while typing (don't calculate yet)
-                                        setTempValueInputs(prev => ({ ...prev, [inputKey]: e.target.value }));
-                                      }}
-                                      onBlur={(e) => {
-                                        // Commit the value when user leaves the field (Excel-like)
-                                        const parsed = parseFormulaOrValue(e.target.value);
-                                        updateItem(group.id, item.id, { value: parsed });
-                                        // Clear temporary value after committing
-                                        setTempValueInputs(prev => {
-                                          const next = { ...prev };
-                                          delete next[inputKey];
-                                          return next;
-                                        });
-                                      }}
-                                      onKeyDown={(e) => {
-                                        // Commit on Enter key
-                                        if (e.key === 'Enter') {
-                                          e.target.blur();
-                                        }
-                                      }}
-                                      className="w-full p-2 border border-gray-300 rounded-md text-sm text-center"
-                                      style={{ minWidth: '100px' }}
-                                    />
-                                  );
-                                })()}
-                              </td>
-                              <td className="px-3 py-2 text-center text-sm">
-                                <span className={`font-medium ${isPctValid ? 'text-gray-700' : 'text-red-600'}`}>
-                                  {totalPct === 0 ? '-' : totalPct.toFixed(2) + '%'}
-                                </span>
-                              </td>
-                              {Array.from({ length: months }, (_, i) => {
-                                const allocValue = parseFloat(allocs[i]) || 0;
-                                const inputKey = `${group.id}_${item.id}_${i}`;
-                                const tempValue = tempPctInputs[inputKey];
-                                // Show temp value while typing, or actual value (formatted) when not typing
-                                const displayValue = tempValue !== undefined 
-                                  ? tempValue 
-                                  : (allocValue === 0 ? '' : String(allocValue));
-                                return (
-                                  <td key={`alloc_${i}`} className="px-2 py-2">
-                                    <input
-                                      type="text"
-                                      value={displayValue}
-                                      onChange={(e) => {
-                                        // Update temporary value while typing (don't calculate yet)
-                                        setTempPctInputs(prev => ({ ...prev, [inputKey]: e.target.value }));
-                                      }}
-                                      onBlur={(e) => {
-                                        // Commit the value when user leaves the field (Excel-like)
-                                        const parsed = parseFormulaOrValue(e.target.value);
-                                        updateMonthlyAllocation(group.id, item.id, i, parsed);
-                                        // Clear temporary value after committing
-                                        setTempPctInputs(prev => {
-                                          const next = { ...prev };
-                                          delete next[inputKey];
-                                          return next;
-                                        });
-                                      }}
-                                      onKeyDown={(e) => {
-                                        // Commit on Enter key
-                                        if (e.key === 'Enter') {
-                                          e.target.blur();
-                                        }
-                                      }}
-                                      className="w-full p-2 border border-gray-300 rounded-md text-sm text-center"
-                                      style={{ minWidth: '80px' }}
-                                    />
-                                  </td>
-                                );
-                              })}
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  onClick={() => deleteItem(group.id, item.id)}
-                                  className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                                  title="Delete item"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        });
-
-                        // Add summary row showing section total
-                        // Calculate monthly totals for each CM (now storing dollar values directly)
-                        const months = currentAssetCosts?.capex?.construction_duration_months || 0;
-                        const monthlyTotals = Array.from({ length: months }, (_, cmIndex) => {
-                          return (group.items || []).reduce((sum, item) => {
-                            const allocs = Array.isArray(item.monthlyAllocations) ? item.monthlyAllocations : [];
-                            const dollarValue = parseFloat(allocs[cmIndex]) || 0;
-                            return sum + dollarValue;
-                          }, 0);
-                        });
-                        
-                        const summaryRow = (
-                          <tr key={`summary_${group.id}`} className="bg-gray-100 border-t-2 border-gray-300">
-                            <td className="px-3 py-2 text-sm font-semibold text-gray-700">
-                              <div style={{ marginLeft: '20px' }}>
-                                Total
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
-                              {totals.total === 0 ? '-' : formatCurrencyFromMillions(totals.total, currencyUnit)}
-                            </td>
-                            <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                            {Array.from({ length: months }, (_, i) => (
-                              <td key={`summary_cm_${i}`} className="px-2 py-2 text-sm text-gray-500 text-center">
-                                —
-                              </td>
-                            ))}
-                            <td className="px-3 py-2"></td>
-                          </tr>
-                        );
-
-                        return [sectionRow, ...itemRows, summaryRow];
-                      }
-
-                      // OPEX: stack item labels under group label
-                      const opexGroupLabelKey = `group_${group.id}`;
-                      const isEditingOpexGroup = editingLabel === opexGroupLabelKey;
-                      
-                      const groupRow = (
-                        <tr key={`g_${group.id}`} className="bg-gray-50">
-                          <td className="px-3 py-2">
+                      const sectionRow = (
+                        <tr key={`s_${group.id}`} className="bg-gray-50">
+                          <td className="px-3 py-2 sticky left-0 z-20 bg-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
                             <div className="flex items-center gap-2">
-                              {isEditingOpexGroup ? (
+                              {isEditingSection ? (
                                 <input
                                   type="text"
                                   value={group.name}
@@ -1199,11 +967,12 @@ export default function CostsPage() {
                                     }
                                   }}
                                   className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                                  placeholder="Section label"
                                   autoFocus
                                 />
                               ) : (
                                 <div
-                                  onDoubleClick={() => setEditingLabel(opexGroupLabelKey)}
+                                  onDoubleClick={() => setEditingLabel(sectionLabelKey)}
                                   className="flex-1 p-2 border border-transparent rounded-md text-sm font-semibold cursor-pointer hover:bg-gray-100"
                                 >
                                   {group.name}
@@ -1212,34 +981,22 @@ export default function CostsPage() {
                               <button
                                 onClick={() => addItem(group.id)}
                                 className="px-2 py-2 rounded-md bg-gray-900 text-white hover:bg-black"
-                                title="Add line to group"
+                                title="Add item"
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                          <td className="px-3 py-2 text-sm text-gray-500">—</td>
-                          <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
-                            {totals.total === 0 ? '-' : formatCurrencyFromMillions(totals.total, currencyUnit)}
-                          </td>
-                          <td className="px-3 py-2 text-sm text-gray-600">
-                            {selectedAsset?.OperatingStartDate ? formatDateDDMMYYYY(selectedAsset.OperatingStartDate) : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-sm text-gray-600">
-                            {selectedAsset?.OperatingStartDate && selectedAsset?.assetLife 
-                              ? (() => {
-                                  const startDate = new Date(selectedAsset.OperatingStartDate);
-                                  startDate.setFullYear(startDate.getFullYear() + (selectedAsset.assetLife || 0));
-                                  return formatDateDDMMYYYY(startDate);
-                                })()
-                              : '—'}
-                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-500 sticky left-[250px] z-20 bg-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">—</td>
+                          <td className="px-3 py-2 text-sm text-gray-500 sticky left-[400px] z-20 bg-gray-50 shadow-[4px_0_5px_-3px_rgba(0,0,0,0.1)]">—</td>
+                          {Array.from({ length: currentAssetCosts?.capex?.construction_duration_months || 0 }, (_, i) => (
+                            <td key={`section_cm_${i}`} className="px-2 py-2 text-sm text-gray-500">—</td>
+                          ))}
                           <td className="px-3 py-2 text-right">
                             <button
                               onClick={() => deleteGroup(group.id)}
                               className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                              title="Delete group"
+                              title="Delete section"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1248,15 +1005,18 @@ export default function CostsPage() {
                       );
 
                       const itemRows = (group.items || []).map((item) => {
-                        const amount = parseFloat(item.value) || 0;
-                        const appliedAmount = amount; // No flex % anymore
-                        const opexItemLabelKey = `item_${group.id}_${item.id}`;
-                        const isEditingOpexItem = editingLabel === opexItemLabelKey;
-                        
+                        const value = parseFloat(item.value) || 0;
+                        const allocs = Array.isArray(item.monthlyAllocations) ? item.monthlyAllocations : [];
+                        const months = currentAssetCosts?.capex?.construction_duration_months || 0;
+                        const totalPct = getMonthlyAllocationTotal(item);
+                        const isPctValid = Math.abs(totalPct - 100) < 0.01;
+                        const itemLabelKey = `item_${group.id}_${item.id}`;
+                        const isEditingItem = editingLabel === itemLabelKey;
+
                         return (
-                          <tr key={`i_${group.id}_${item.id}`} className="hover:bg-gray-50">
-                            <td className="px-3 py-2">
-                              {isEditingOpexItem ? (
+                          <tr key={`i_${group.id}_${item.id}`} className="hover:bg-gray-50 group">
+                            <td className="px-3 py-2 sticky left-0 z-20 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
+                              {isEditingItem ? (
                                 <input
                                   type="text"
                                   value={item.label}
@@ -1268,72 +1028,109 @@ export default function CostsPage() {
                                     }
                                   }}
                                   className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                                  style={{ marginLeft: '20px' }}
+                                  style={{ marginLeft: '20px', width: 'calc(100% - 20px)' }}
+                                  placeholder="Item label"
                                   autoFocus
                                 />
                               ) : (
                                 <div
-                                  onDoubleClick={() => setEditingLabel(opexItemLabelKey)}
-                                  className="p-2 border border-transparent rounded-md text-sm cursor-pointer hover:bg-gray-100"
+                                  onDoubleClick={() => setEditingLabel(itemLabelKey)}
+                                  className="p-2 border border-transparent rounded-md text-sm cursor-pointer hover:bg-gray-200"
                                   style={{ marginLeft: '20px' }}
                                 >
                                   {item.label}
                                 </div>
                               )}
                             </td>
-                            <td className="px-3 py-2">
-                              <select
-                                value={item.escalationMethod || 'CPI'}
-                                onChange={(e) => updateItem(group.id, item.id, { escalationMethod: e.target.value })}
-                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                              >
-                                <option value="CPI">CPI</option>
-                                <option value="custom">Custom %</option>
-                              </select>
-                              {item.escalationMethod === 'custom' && (
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  value={item.escalationPct ?? DEFAULT_OPEX_ESCALATION_PCT}
-                                  onChange={(e) => updateItem(group.id, item.id, { escalationPct: parseFloat(e.target.value) || 0 })}
-                                  className="w-full p-1 border border-gray-300 rounded-md text-xs mt-1"
-                                  placeholder="Escalation %"
-                                />
-                              )}
+                            <td className="px-3 py-2 text-center sticky left-[250px] z-20 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
+                              {(() => {
+                                const value = parseFloat(item.value) || 0;
+                                const inputKey = `${group.id}_${item.id}_value`;
+                                const tempValue = tempValueInputs[inputKey];
+                                // Show temp value while typing, or actual value (formatted) when not typing
+                                const displayValue = tempValue !== undefined
+                                  ? tempValue
+                                  : (value === 0 ? '' : String(value));
+                                return (
+                                  <input
+                                    type="text"
+                                    value={displayValue}
+                                    onChange={(e) => {
+                                      // Update temporary value while typing (don't calculate yet)
+                                      setTempValueInputs(prev => ({ ...prev, [inputKey]: e.target.value }));
+                                    }}
+                                    onBlur={(e) => {
+                                      // Commit the value when user leaves the field (Excel-like)
+                                      const parsed = parseFormulaOrValue(e.target.value);
+                                      updateItem(group.id, item.id, { value: parsed });
+                                      // Clear temporary value after committing
+                                      setTempValueInputs(prev => {
+                                        const next = { ...prev };
+                                        delete next[inputKey];
+                                        return next;
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      // Commit on Enter key
+                                      if (e.key === 'Enter') {
+                                        e.target.blur();
+                                      }
+                                    }}
+                                    className="w-full p-2 border border-gray-300 rounded-md text-sm text-center"
+                                  />
+                                );
+                              })()}
                             </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={amount}
-                                onChange={(e) => updateItem(group.id, item.id, { value: parseFloat(e.target.value) || 0 })}
-                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                              />
+                            <td className="px-3 py-2 text-center text-sm sticky left-[400px] z-20 bg-white group-hover:bg-gray-50 shadow-[4px_0_5px_-3px_rgba(0,0,0,0.1)]">
+                              <span className={`font-medium ${isPctValid ? 'text-gray-700' : 'text-red-600'}`}>
+                                {totalPct === 0 ? '-' : totalPct.toFixed(2) + '%'}
+                              </span>
                             </td>
-                            <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
-                              {appliedAmount === 0 ? '-' : formatCurrencyFromMillions(appliedAmount, currencyUnit)}
-                            </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="date"
-                                value={item.startDate || defaultOpexRange.startDate || ''}
-                                onChange={(e) => updateItem(group.id, item.id, { startDate: e.target.value })}
-                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="date"
-                                value={item.endDate || ''}
-                                onChange={(e) => updateItem(group.id, item.id, { endDate: e.target.value })}
-                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                              />
-                            </td>
+                            {Array.from({ length: months }, (_, i) => {
+                              const allocValue = parseFloat(allocs[i]) || 0;
+                              const inputKey = `${group.id}_${item.id}_${i}`;
+                              const tempValue = tempPctInputs[inputKey];
+                              // Show temp value while typing, or actual value (formatted) when not typing
+                              const displayValue = tempValue !== undefined
+                                ? tempValue
+                                : (allocValue === 0 ? '' : String(allocValue));
+                              return (
+                                <td key={`alloc_${i}`} className="px-2 py-2">
+                                  <input
+                                    type="text"
+                                    value={displayValue}
+                                    onChange={(e) => {
+                                      // Update temporary value while typing (don't calculate yet)
+                                      setTempPctInputs(prev => ({ ...prev, [inputKey]: e.target.value }));
+                                    }}
+                                    onBlur={(e) => {
+                                      // Commit the value when user leaves the field (Excel-like)
+                                      const parsed = parseFormulaOrValue(e.target.value);
+                                      updateMonthlyAllocation(group.id, item.id, i, parsed);
+                                      // Clear temporary value after committing
+                                      setTempPctInputs(prev => {
+                                        const next = { ...prev };
+                                        delete next[inputKey];
+                                        return next;
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      // Commit on Enter key
+                                      if (e.key === 'Enter') {
+                                        e.target.blur();
+                                      }
+                                    }}
+                                    className="w-full p-2 border border-gray-300 rounded-md text-sm text-center"
+                                    style={{ minWidth: '80px' }}
+                                  />
+                                </td>
+                              );
+                            })}
                             <td className="px-3 py-2 text-right">
                               <button
                                 onClick={() => deleteItem(group.id, item.id)}
                                 className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                                title="Delete line"
+                                title="Delete item"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1342,8 +1139,205 @@ export default function CostsPage() {
                         );
                       });
 
-                      return [groupRow, ...itemRows];
-                    }) || (
+                      // Add summary row showing section total
+                      // Calculate monthly totals for each CM (now storing dollar values directly)
+                      const months = currentAssetCosts?.capex?.construction_duration_months || 0;
+                      const monthlyTotals = Array.from({ length: months }, (_, cmIndex) => {
+                        return (group.items || []).reduce((sum, item) => {
+                          const allocs = Array.isArray(item.monthlyAllocations) ? item.monthlyAllocations : [];
+                          const dollarValue = parseFloat(allocs[cmIndex]) || 0;
+                          return sum + dollarValue;
+                        }, 0);
+                      });
+
+                      const summaryRow = (
+                        <tr key={`summary_${group.id}`} className="bg-gray-100 border-t-2 border-gray-300">
+                          <td className="px-3 py-2 text-sm font-semibold text-gray-700 sticky left-0 z-20 bg-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
+                            <div style={{ marginLeft: '20px' }}>
+                              Total
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800 sticky left-[250px] z-20 bg-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
+                            {totals.total === 0 ? '-' : formatCurrencyFromMillions(totals.total, currencyUnit)}
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-500 sticky left-[400px] z-20 bg-gray-100 shadow-[4px_0_5px_-3px_rgba(0,0,0,0.1)]">—</td>
+                          {Array.from({ length: months }, (_, i) => (
+                            <td key={`summary_cm_${i}`} className="px-2 py-2 text-sm text-gray-500 text-center">
+                              —
+                            </td>
+                          ))}
+                          <td className="px-3 py-2"></td>
+                        </tr>
+                      );
+
+                      return [sectionRow, ...itemRows, summaryRow];
+                    }
+
+                    // OPEX: stack item labels under group label
+                    const opexGroupLabelKey = `group_${group.id}`;
+                    const isEditingOpexGroup = editingLabel === opexGroupLabelKey;
+
+                    const groupRow = (
+                      <tr key={`g_${group.id}`} className="bg-gray-50">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {isEditingOpexGroup ? (
+                              <input
+                                type="text"
+                                value={group.name}
+                                onChange={(e) => renameGroup(group.id, e.target.value)}
+                                onBlur={() => setEditingLabel(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.target.blur();
+                                  }
+                                }}
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                                autoFocus
+                              />
+                            ) : (
+                              <div
+                                onDoubleClick={() => setEditingLabel(opexGroupLabelKey)}
+                                className="flex-1 p-2 border border-transparent rounded-md text-sm font-semibold cursor-pointer hover:bg-gray-100"
+                              >
+                                {group.name}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => addItem(group.id)}
+                              className="px-2 py-2 rounded-md bg-gray-900 text-white hover:bg-black"
+                              title="Add line to group"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-500">—</td>
+                        <td className="px-3 py-2 text-sm text-gray-500">—</td>
+                        <td className="px-3 py-2 text-right text-sm font-semibold text-gray-800">
+                          {totals.total === 0 ? '-' : formatCurrencyFromMillions(totals.total, currencyUnit)}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-600">
+                          {selectedAsset?.OperatingStartDate ? formatDateDDMMYYYY(selectedAsset.OperatingStartDate) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-600">
+                          {selectedAsset?.OperatingStartDate && selectedAsset?.assetLife
+                            ? (() => {
+                              const startDate = new Date(selectedAsset.OperatingStartDate);
+                              startDate.setFullYear(startDate.getFullYear() + (selectedAsset.assetLife || 0));
+                              return formatDateDDMMYYYY(startDate);
+                            })()
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            onClick={() => deleteGroup(group.id)}
+                            className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                            title="Delete group"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+
+                    const itemRows = (group.items || []).map((item) => {
+                      const amount = parseFloat(item.value) || 0;
+                      const appliedAmount = amount; // No flex % anymore
+                      const opexItemLabelKey = `item_${group.id}_${item.id}`;
+                      const isEditingOpexItem = editingLabel === opexItemLabelKey;
+
+                      return (
+                        <tr key={`i_${group.id}_${item.id}`} className="hover:bg-gray-50">
+                          <td className="px-3 py-2">
+                            {isEditingOpexItem ? (
+                              <input
+                                type="text"
+                                value={item.label}
+                                onChange={(e) => updateItem(group.id, item.id, { label: e.target.value })}
+                                onBlur={() => setEditingLabel(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.target.blur();
+                                  }
+                                }}
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                                style={{ marginLeft: '20px' }}
+                                autoFocus
+                              />
+                            ) : (
+                              <div
+                                onDoubleClick={() => setEditingLabel(opexItemLabelKey)}
+                                className="p-2 border border-transparent rounded-md text-sm cursor-pointer hover:bg-gray-100"
+                                style={{ marginLeft: '20px' }}
+                              >
+                                {item.label}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={item.escalationMethod || 'CPI'}
+                              onChange={(e) => updateItem(group.id, item.id, { escalationMethod: e.target.value })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            >
+                              <option value="CPI">CPI</option>
+                              <option value="custom">Custom %</option>
+                            </select>
+                            {item.escalationMethod === 'custom' && (
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={item.escalationPct ?? DEFAULT_OPEX_ESCALATION_PCT}
+                                onChange={(e) => updateItem(group.id, item.id, { escalationPct: parseFloat(e.target.value) || 0 })}
+                                className="w-full p-1 border border-gray-300 rounded-md text-xs mt-1"
+                                placeholder="Escalation %"
+                              />
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={amount}
+                              onChange={(e) => updateItem(group.id, item.id, { value: parseFloat(e.target.value) || 0 })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
+                            {appliedAmount === 0 ? '-' : formatCurrencyFromMillions(appliedAmount, currencyUnit)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={item.startDate || defaultOpexRange.startDate || ''}
+                              onChange={(e) => updateItem(group.id, item.id, { startDate: e.target.value })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={item.endDate || ''}
+                              onChange={(e) => updateItem(group.id, item.id, { endDate: e.target.value })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              onClick={() => deleteItem(group.id, item.id)}
+                              className="px-2 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                              title="Delete line"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    });
+
+                    return [groupRow, ...itemRows];
+                  }) || (
                       <tr>
                         <td
                           colSpan={activeTab === 'capex' ? (4 + (currentAssetCosts?.capex?.construction_duration_months || 18)) : 7}
@@ -1353,17 +1347,16 @@ export default function CostsPage() {
                         </td>
                       </tr>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                </tbody>
+              </table>
             </div>
+          </div>
         </div>
 
         {/* Save status (kept, but simplified) */}
         <div
-          className={`border rounded-lg p-4 ${
-            hasUnsavedChanges ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'
-          }`}
+          className={`border rounded-lg p-4 ${hasUnsavedChanges ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'
+            }`}
         >
           <div className="flex items-center space-x-2">
             {hasUnsavedChanges ? (

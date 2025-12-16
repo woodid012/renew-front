@@ -4,10 +4,10 @@
 import { useState, useEffect } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Chart, registerables } from 'chart.js';
-import { 
-  TrendingUp, 
-  Download, 
-  Building2, 
+import {
+  TrendingUp,
+  Download,
+  Building2,
   BarChart3,
   Filter,
   Loader2,
@@ -35,7 +35,7 @@ const SensitivityOutputPage = () => {
 
   useEffect(() => {
     fetchSensitivityData();
-    
+
     // Listen for portfolio changes
     const handlePortfolioChange = () => {
       fetchSensitivityData();
@@ -48,7 +48,7 @@ const SensitivityOutputPage = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // selectedPortfolio from context is always the unique_id
       if (!selectedPortfolio) {
         console.error('Sensitivity output - No unique_id found for portfolio:', selectedPortfolio);
@@ -61,15 +61,15 @@ const SensitivityOutputPage = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const result = await response.json();
       setData(result.data || []);
-      
+
       // Store asset names mapping
       if (result.assetNames) {
         setAssetNames(result.assetNames);
       }
-      
+
       if (result.data && result.data.length > 0) {
         const assetNumbers = new Set();
         result.data.forEach(item => {
@@ -80,7 +80,7 @@ const SensitivityOutputPage = () => {
             }
           });
         });
-        
+
         // Use asset names if available, otherwise fall back to "Asset {num}"
         const assetOptions = Array.from(assetNumbers)
           .sort((a, b) => a - b)
@@ -88,10 +88,10 @@ const SensitivityOutputPage = () => {
             const assetName = result.assetNames?.[num] || `Asset ${num}`;
             return assetName;
           });
-        
+
         setAvailableAssets(['Portfolio', ...assetOptions]);
       }
-      
+
     } catch (err) {
       console.error('Error fetching sensitivity data:', err);
       setError(err.message);
@@ -104,10 +104,10 @@ const SensitivityOutputPage = () => {
     if (!data.length) return { labels: [], datasets: [], processedData: [] };
 
     const parameterGroups = {};
-    
+
     data.forEach(item => {
       const paramName = item.parameter_name || item.parameter || 'Unknown Parameter';
-      
+
       if (!parameterGroups[paramName]) {
         parameterGroups[paramName] = {
           scenarios: [],
@@ -115,9 +115,9 @@ const SensitivityOutputPage = () => {
           parameter_units: item.parameter_units || ''
         };
       }
-      
+
       let metricDiff = 0;
-      
+
       if (selectedAsset === 'Portfolio') {
         metricDiff = item.portfolio_irr_diff_bps || 0;
       } else {
@@ -140,7 +140,7 @@ const SensitivityOutputPage = () => {
           metricDiff = item[`asset_${assetId}_irr_diff_bps`] || 0;
         }
       }
-      
+
       parameterGroups[paramName].scenarios.push({
         scenario_id: item.scenario_id,
         parameter_value: item.input_value,
@@ -169,16 +169,16 @@ const SensitivityOutputPage = () => {
 
     const processedData = Object.entries(parameterGroups).map(([param, group]) => {
       const impacts = group.scenarios.map(s => s.metric_diff);
-      
+
       const maxImpact = Math.max(...impacts);
       const minImpact = Math.min(...impacts);
       const totalRange = Math.abs(maxImpact) + Math.abs(minImpact);
-      
+
       const maxIndex = impacts.indexOf(maxImpact);
       const minIndex = impacts.indexOf(minImpact);
       const maxScenario = group.scenarios[maxIndex];
       const minScenario = group.scenarios[minIndex];
-      
+
       return {
         parameter: param,
         upside: Math.max(maxImpact, 0),
@@ -202,9 +202,9 @@ const SensitivityOutputPage = () => {
       const maxVal = item.maxInputValue;
       const minVal = item.minInputValue;
       const units = item.units || '';
-      
+
       if (maxVal !== undefined && minVal !== undefined) {
-        return `${item.parameter}\n(${minVal}${units} to ${maxVal}${units})`;
+        return [item.parameter, `(${minVal}${units} to ${maxVal}${units})`];
       }
       return item.parameter;
     });
@@ -253,11 +253,11 @@ const SensitivityOutputPage = () => {
         },
         tooltip: {
           callbacks: {
-            title: function(context) {
+            title: function (context) {
               const fullLabel = context[0].label;
-              return fullLabel.split('\n')[0];
+              return Array.isArray(fullLabel) ? fullLabel[0] : fullLabel;
             },
-            afterTitle: function(context) {
+            afterTitle: function (context) {
               const dataIndex = context[0].dataIndex;
               const item = chartData.processedData[dataIndex];
               if (item && item.maxInputValue !== undefined && item.minInputValue !== undefined) {
@@ -266,19 +266,19 @@ const SensitivityOutputPage = () => {
               }
               return '';
             },
-            label: function(context) {
+            label: function (context) {
               const value = Math.abs(context.parsed.x);
               const dataIndex = context.dataIndex;
               const item = chartData.processedData[dataIndex];
-              
+
               if (!item) return `${context.dataset.label}: ${value.toFixed(2)}%`;
-              
+
               const isUpside = context.dataset.label.includes('Upside');
               const inputValue = isUpside ? item.maxInputValue : item.minInputValue;
               const units = item.units || '';
-              
+
               const impactText = `${value.toFixed(2)}%`;
-              
+
               return `${context.dataset.label}: ${impactText} (at ${inputValue}${units})`;
             }
           }
@@ -296,7 +296,7 @@ const SensitivityOutputPage = () => {
             }
           },
           ticks: {
-            callback: function(value) {
+            callback: function (value) {
               return Math.abs(value).toFixed(1) + '%';
             }
           }
@@ -368,7 +368,7 @@ const SensitivityOutputPage = () => {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Sensitivity Data</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button 
+          <button
             onClick={fetchSensitivityData}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
           >
@@ -406,7 +406,7 @@ const SensitivityOutputPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">Sensitivity Analysis</h1>
             <p className="text-gray-600 mt-2">Comprehensive sensitivity analysis with tornado charts and detailed data tables</p>
           </div>
-          
+
         </div>
       </div>
 
@@ -415,7 +415,7 @@ const SensitivityOutputPage = () => {
           <Filter className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-900">Analysis Configuration</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -443,22 +443,20 @@ const SensitivityOutputPage = () => {
             <div className="flex space-x-2">
               <button
                 onClick={() => setActiveTab('tornado')}
-                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                  activeTab === 'tornado'
+                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${activeTab === 'tornado'
                     ? 'bg-blue-100 border-blue-500 text-blue-700'
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <BarChart3 className="w-4 h-4 inline mr-1" />
                 Tornado
               </button>
               <button
                 onClick={() => setActiveTab('table')}
-                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                  activeTab === 'table'
+                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${activeTab === 'table'
                     ? 'bg-blue-100 border-blue-500 text-blue-700'
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <TableIcon className="w-4 h-4 inline mr-1" />
                 Table
@@ -485,7 +483,7 @@ const SensitivityOutputPage = () => {
               <span>Export CSV</span>
             </button>
           </div>
-          
+
           {tornadoData.labels && tornadoData.labels.length > 0 ? (
             <div style={{ width: '100%', height: '600px' }}>
               <Bar data={tornadoData} options={chartOptions} />
@@ -510,7 +508,7 @@ const SensitivityOutputPage = () => {
               </div>
             </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -530,11 +528,11 @@ const SensitivityOutputPage = () => {
                   <tr key={index} className="hover:bg-gray-50">
                     {Object.entries(row).map(([key, value]) => (
                       <td key={key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {typeof value === 'number' 
-                          ? value.toLocaleString(undefined, { 
-                              minimumFractionDigits: 2, 
-                              maximumFractionDigits: 2 
-                            })
+                        {typeof value === 'number'
+                          ? value.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          })
                           : value || '-'
                         }
                       </td>
@@ -547,7 +545,7 @@ const SensitivityOutputPage = () => {
         </div>
       )}
 
-      
+
     </div>
   );
 };

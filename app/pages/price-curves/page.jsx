@@ -1,22 +1,21 @@
-// app/pages/price-curves2/page.jsx
+// app/pages/price-curves/page.jsx
 'use client'
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
-  Brush,
   ReferenceLine
 } from 'recharts'
-import { 
-  Filter, 
-  BarChart3, 
-  TrendingUp, 
+import {
+  Filter,
+  BarChart3,
+  TrendingUp,
   Calendar,
   MapPin,
   Zap,
@@ -36,7 +35,7 @@ import { formatCurrency } from '../../utils/currencyFormatter'
 
 // Constants
 const CHART_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
   '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
 ]
 
@@ -72,7 +71,7 @@ export default function PriceCurves2Page() {
   // Format period label helper function
   const formatPeriodLabel = useCallback((timeKey, period) => {
     if (!timeKey) return timeKey || '';
-    
+
     if (period === 'monthly') {
       const [year, month] = timeKey.split('-')
       if (!year || !month) return timeKey;
@@ -87,10 +86,10 @@ export default function PriceCurves2Page() {
       return timeKey
     } else {
       try {
-        return new Date(timeKey).toLocaleDateString('en-AU', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric' 
+        return new Date(timeKey).toLocaleDateString('en-AU', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
         })
       } catch (e) {
         return timeKey;
@@ -113,7 +112,7 @@ export default function PriceCurves2Page() {
     if (!priceCurves.length) return []
 
     const timeGroups = {}
-    
+
     priceCurves.forEach(item => {
       let timeKey, displayDate
 
@@ -137,27 +136,27 @@ export default function PriceCurves2Page() {
       if (!timeGroups[timeKey]) {
         timeGroups[timeKey] = { TIME: timeKey, date: displayDate }
       }
-      
+
       const regionMatch = selectedRegions.includes('ALL') || selectedRegions.includes(item._id.REGION)
       if (!regionMatch) return
 
       if (selectedProfile === 'storage') {
         if (item._id.TYPE && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ? 
-            `${item._id.REGION}_${item._id.TYPE}` : 
+          const seriesKey = selectedRegions.includes('ALL') ?
+            `${item._id.REGION}_${item._id.TYPE}` :
             item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       } else {
         if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ? 
-            `${item._id.REGION}_${item._id.TYPE}` : 
+          const seriesKey = selectedRegions.includes('ALL') ?
+            `${item._id.REGION}_${item._id.TYPE}` :
             item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       }
     })
-    
+
     return Object.values(timeGroups)
       .sort((a, b) => a.date - b.date)
       .map(item => ({
@@ -170,7 +169,7 @@ export default function PriceCurves2Page() {
   const seriesKeys = useMemo(() => {
     if (!chartData.length) return []
     const sampleData = chartData[0]
-    return Object.keys(sampleData).filter(key => 
+    return Object.keys(sampleData).filter(key =>
       key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number' && !key.includes('TAS')
     )
   }, [chartData])
@@ -186,7 +185,7 @@ export default function PriceCurves2Page() {
   // Filter regions by search term
   const filteredRegions = useMemo(() => {
     if (!searchTerm) return availableRegions
-    return availableRegions.filter(region => 
+    return availableRegions.filter(region =>
       region.toLowerCase().includes(searchTerm.toLowerCase())
     )
   }, [availableRegions, searchTerm])
@@ -253,7 +252,7 @@ export default function PriceCurves2Page() {
       }))
 
       setSaveStatus({ type: 'success', message: 'Merchant escalation settings saved successfully!' })
-      
+
       // Clear success message after 3 seconds
       setTimeout(() => {
         setSaveStatus({ type: null, message: '' })
@@ -270,23 +269,23 @@ export default function PriceCurves2Page() {
     try {
       setLoading(true)
       setError(null)
-      
-      const url = `/api/price-curves2${selectedPeriod ? `?period=${selectedPeriod}` : ''}`
+
+      const url = `/api/price-curves${selectedPeriod ? `?period=${selectedPeriod}` : ''}`
       const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-      
+
       const data = await response.json()
       setPriceCurves(data)
-      
+
       // Extract unique values for filters
       const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
       const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
       const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
-      
+
       setAvailableRegions(['ALL', ...regions])
-      
+
       const hasSpreadTypes = types.some(type => type.startsWith('SPREAD_'))
       if (hasSpreadTypes && !profiles.includes('storage')) {
         setAvailableProfiles([...profiles, 'storage'])
@@ -294,7 +293,7 @@ export default function PriceCurves2Page() {
         setAvailableProfiles(profiles)
       }
       setAvailableTypes(types)
-      
+
       // Set date range
       if (data.length > 0) {
         const dates = data.map(item => {
@@ -318,14 +317,14 @@ export default function PriceCurves2Page() {
           })
         }
       }
-      
+
       // Default to showing Energy and Green if they exist
       const defaultTypes = ['ENERGY']
       if (types.includes('GREEN')) {
         defaultTypes.push('GREEN')
       }
       setSelectedTypes(defaultTypes)
-      
+
     } catch (err) {
       console.error('Error fetching price curves:', err)
       setError(err.message)
@@ -342,7 +341,7 @@ export default function PriceCurves2Page() {
         if (prev.includes('ALL')) {
           return [region]
         } else {
-          return prev.includes(region) 
+          return prev.includes(region)
             ? prev.filter(r => r !== region)
             : [...prev, region]
         }
@@ -365,8 +364,8 @@ export default function PriceCurves2Page() {
   }, [availableTypes])
 
   const handleTypeChange = useCallback((type) => {
-    setSelectedTypes(prev => 
-      prev.includes(type) 
+    setSelectedTypes(prev =>
+      prev.includes(type)
         ? prev.filter(t => t !== type)
         : [...prev, type]
     )
@@ -424,26 +423,7 @@ export default function PriceCurves2Page() {
     return CHART_COLORS[index % CHART_COLORS.length]
   }, [])
 
-  // Calculate summary statistics
-  const summaryStats = useMemo(() => {
-    if (!chartData.length || !seriesKeys.length) return null
 
-    const allValues = seriesKeys.flatMap(key => 
-      chartData.map(d => d[key]).filter(v => typeof v === 'number')
-    )
-
-    if (allValues.length === 0) return null
-
-    const sorted = [...allValues].sort((a, b) => a - b)
-    const min = sorted[0]
-    const max = sorted[sorted.length - 1]
-    const avg = allValues.reduce((a, b) => a + b, 0) / allValues.length
-    const median = sorted.length % 2 === 0
-      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-      : sorted[Math.floor(sorted.length / 2)]
-
-    return { min, max, avg, median }
-  }, [chartData, seriesKeys])
 
   if (loading) {
     return (
@@ -463,7 +443,7 @@ export default function PriceCurves2Page() {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Price Curves</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button 
+          <button
             onClick={fetchPriceCurves}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center mx-auto"
           >
@@ -542,11 +522,10 @@ export default function PriceCurves2Page() {
         </div>
 
         {saveStatus.type && (
-          <div className={`mb-4 p-3 rounded-lg border flex items-center space-x-2 ${
-            saveStatus.type === 'success' 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}>
+          <div className={`mb-4 p-3 rounded-lg border flex items-center space-x-2 ${saveStatus.type === 'success'
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-red-50 border-red-200 text-red-800'
+            }`}>
             {saveStatus.type === 'success' ? (
               <CheckCircle className="w-5 h-5" />
             ) : (
@@ -610,7 +589,7 @@ export default function PriceCurves2Page() {
             Reset Filters
           </button>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Region Filter */}
           <div>
@@ -724,7 +703,7 @@ export default function PriceCurves2Page() {
         <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
-              {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)} 
+              {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)}
               {selectedProfile === 'storage' ? ' Spread' : ' Price'} Trends
               {selectedRegions.includes('ALL') ? ' - All Regions' : ` - ${selectedRegions.join(', ')}`}
             </h3>
@@ -762,38 +741,38 @@ export default function PriceCurves2Page() {
             </button>
           </div>
         </div>
-        
+
         <div style={{ width: '100%', height: chartHeight }}>
           {chartData.length > 0 && seriesKeys.length > 0 ? (
             <ResponsiveContainer>
-              <LineChart 
+              <LineChart
                 data={chartData}
                 margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis 
+                <XAxis
                   dataKey="TIME"
                   tick={{ fontSize: 12, fill: '#6b7280' }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
-                <YAxis 
+                <YAxis
                   tickFormatter={formatCurrencyValue}
                   tick={{ fontSize: 12, fill: '#6b7280' }}
                   label={{ value: `Price (${currencyUnit}/MWh)`, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#374151' } }}
                 />
-                <Tooltip 
+                <Tooltip
                   formatter={(value, name) => [formatCurrencyValue(value), name.replace(/_/g, ' ')]}
                   labelFormatter={(label) => `Period: ${label}`}
-                  contentStyle={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
                     border: '1px solid #e5e7eb',
                     borderRadius: '6px',
                     padding: '8px'
                   }}
                 />
-                <Legend 
+                <Legend
                   wrapperStyle={{ paddingTop: '20px' }}
                   iconType="line"
                 />
@@ -813,13 +792,7 @@ export default function PriceCurves2Page() {
                     connectNulls
                   />
                 ))}
-                {chartData.length > 20 && (
-                  <Brush 
-                    dataKey="TIME" 
-                    height={30}
-                    stroke="#3b82f6"
-                  />
-                )}
+
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -834,64 +807,7 @@ export default function PriceCurves2Page() {
         </div>
       </div>
 
-      {/* Summary Stats */}
-      {chartData.length > 0 && seriesKeys.length > 0 && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-medium text-gray-700">Active Series</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {seriesKeys.length}
-            </p>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span className="text-sm font-medium text-gray-700">Data Points</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {chartData.length}
-            </p>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-              <span className="text-sm font-medium text-gray-700">Regions</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {selectedRegions.includes('ALL') ? availableRegions.length - 1 : selectedRegions.length}
-            </p>
-          </div>
 
-          {summaryStats && (
-            <>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                  <span className="text-sm font-medium text-gray-700">Average Price</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrencyValue(summaryStats.avg)}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span className="text-sm font-medium text-gray-700">Price Range</span>
-                </div>
-                <p className="text-lg font-bold text-gray-900">
-                  {formatCurrencyValue(summaryStats.min)} - {formatCurrencyValue(summaryStats.max)}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   )
 }

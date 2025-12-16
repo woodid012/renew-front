@@ -7,7 +7,7 @@ import { Settings, Sliders, DollarSign, FileText, Users, Shield, Play, Loader2, 
 export default function SettingsPage() {
   // #region agent log
   useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/pages/settings/page.jsx:7',message:'SettingsPage component mounted',data:{timestamp:Date.now(),pathname:typeof window !== 'undefined' ? window.location.pathname : 'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/pages/settings/page.jsx:7', message: 'SettingsPage component mounted', data: { timestamp: Date.now(), pathname: typeof window !== 'undefined' ? window.location.pathname : 'unknown' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
   }, []);
   // #endregion
   const [isRunningAll, setIsRunningAll] = useState(false);
@@ -20,21 +20,21 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/pages/settings/page.jsx:13',message:'fetchPortfolios useEffect triggered',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/pages/settings/page.jsx:13', message: 'fetchPortfolios useEffect triggered', data: { timestamp: Date.now() }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
     // #endregion
     // Fetch portfolios on mount
     const fetchPortfolios = async () => {
       try {
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/pages/settings/page.jsx:17',message:'About to fetch portfolios',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/df963f91-bb06-4307-981b-f90593255e96', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'app/pages/settings/page.jsx:17', message: 'About to fetch portfolios', data: { timestamp: Date.now() }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
         // #endregion
         const response = await fetch('/api/list-portfolios');
         const data = await response.json();
         if (data.success && Array.isArray(data.portfolios)) {
           // Store full portfolio objects (with name, title, and unique_id)
-          const portfolioObjects = data.portfolios.map(p => 
-            typeof p === 'string' 
-              ? { name: p, title: p, unique_id: p } 
+          const portfolioObjects = data.portfolios.map(p =>
+            typeof p === 'string'
+              ? { name: p, title: p, unique_id: p }
               : { name: p.name, title: p.title || p.name, unique_id: p.unique_id }
           );
           setPortfolios(portfolioObjects);
@@ -72,12 +72,12 @@ export default function SettingsPage() {
 
     setSavingPortfolioId(uniqueId);
     try {
-      const response = await fetch('/api/update-platform-name', {
+      const response = await fetch('/api/update-portfolio-title', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          unique_id: uniqueId, 
-          platformName: editingPortfolioName.trim() 
+        body: JSON.stringify({
+          unique_id: uniqueId,
+          portfolioTitle: editingPortfolioName.trim()
         })
       });
 
@@ -87,8 +87,8 @@ export default function SettingsPage() {
         setEditingPortfolioName('');
         // Dispatch custom events to notify other pages
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('portfolioNameUpdated', { 
-            detail: { unique_id: uniqueId, platformName: editingPortfolioName.trim() } 
+          window.dispatchEvent(new CustomEvent('portfolioTitleUpdated', {
+            detail: { unique_id: uniqueId, portfolioTitle: editingPortfolioName.trim() }
           }));
           // Trigger PortfolioContext refresh so dropdown updates
           window.dispatchEvent(new CustomEvent('refreshPortfolios'));
@@ -97,9 +97,9 @@ export default function SettingsPage() {
         const fetchResponse = await fetch('/api/list-portfolios');
         const fetchData = await fetchResponse.json();
         if (fetchData.success && Array.isArray(fetchData.portfolios)) {
-          const portfolioObjects = fetchData.portfolios.map(p => 
-            typeof p === 'string' 
-              ? { name: p, title: p, unique_id: p } 
+          const portfolioObjects = fetchData.portfolios.map(p =>
+            typeof p === 'string'
+              ? { name: p, title: p, unique_id: p }
               : { name: p.name, title: p.title || p.name, unique_id: p.unique_id }
           );
           setPortfolios(portfolioObjects);
@@ -124,10 +124,10 @@ export default function SettingsPage() {
     try {
       // Determine backend URL
       const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-      const backendUrl = isDevelopment 
+      const backendUrl = isDevelopment
         ? process.env.NEXT_PUBLIC_LOCAL_BACKEND_URL || 'http://localhost:10000'
         : process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com';
-      
+
       const apiEndpoint = backendUrl
         ? `${backendUrl}/api/run-model`
         : '/api/run-model';
@@ -406,7 +406,7 @@ export default function SettingsPage() {
               <div className="text-sm text-gray-600 mb-2">
                 Portfolios: {portfolios.map(p => typeof p === 'string' ? p : (p.title || p.name)).join(', ')}
               </div>
-              
+
               {currentPortfolio && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
                   <div className="flex items-center space-x-2">
@@ -435,7 +435,7 @@ export default function SettingsPage() {
                         return <div className="w-4 h-4 rounded-full border-2 border-gray-300" />;
                     }
                   };
-                  
+
                   const getStatusColor = () => {
                     switch (status.status) {
                       case 'running':

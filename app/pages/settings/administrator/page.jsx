@@ -55,7 +55,7 @@ export default function AdministratorPage() {
       if (response.ok) {
         const data = await response.json();
         // Handle both old format (array of strings) and new format (array of objects)
-        const portfolios = (data.portfolios || []).map(p => 
+        const portfolios = (data.portfolios || []).map(p =>
           typeof p === 'string' ? { name: p, assetCount: 0, lastUpdated: null } : p
         );
         setPortfolios(portfolios);
@@ -93,7 +93,7 @@ export default function AdministratorPage() {
   const handleDeletePortfolio = async (portfolioName) => {
     // Extract name if portfolio is an object
     const name = typeof portfolioName === 'string' ? portfolioName : portfolioName.name;
-    
+
     // Prevent deletion of default portfolios
     if (name === 'ZEBRE') {
       alert('Cannot delete default portfolio (ZEBRE)');
@@ -101,7 +101,7 @@ export default function AdministratorPage() {
     }
 
     const confirmMessage = `Are you sure you want to delete the portfolio "${name}"?\n\nThis will:\n- Delete the portfolio from the database\n- Remove all assets and data associated with this portfolio\n- Remove it from the portfolio list\n\nThis action cannot be undone.`;
-    
+
     if (!window.confirm(confirmMessage)) {
       return;
     }
@@ -171,7 +171,7 @@ export default function AdministratorPage() {
 
       // Update local state
       setDefaultPortfolio(uniqueId);
-      
+
       // Reload portfolios to update the isDefault flag
       await loadPortfolios();
 
@@ -297,22 +297,20 @@ export default function AdministratorPage() {
           <nav className="flex space-x-8">
             <button
               onClick={() => setActiveTab('accounts')}
-              className={`py-4 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                activeTab === 'accounts'
+              className={`py-4 border-b-2 font-medium text-sm flex items-center space-x-2 ${activeTab === 'accounts'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <Users className="w-4 h-4" />
               <span>Accounts</span>
             </button>
             <button
               onClick={() => setActiveTab('portfolios')}
-              className={`py-4 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                activeTab === 'portfolios'
+              className={`py-4 border-b-2 font-medium text-sm flex items-center space-x-2 ${activeTab === 'portfolios'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <Briefcase className="w-4 h-4" />
               <span>Portfolios</span>
@@ -354,227 +352,225 @@ export default function AdministratorPage() {
 
             {/* Accounts Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Username
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Portfolio Access
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAccounts.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                    No accounts found
-                  </td>
-                </tr>
-              ) : (
-                filteredAccounts.map((account) => (
-                  <tr key={account.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {account.username}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {account.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        account.role === 'admin'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {account.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        account.status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {account.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      <div className="flex flex-wrap gap-1">
-                        {account.portfolioAccess && account.portfolioAccess.length > 0 ? (
-                          account.portfolioAccess.map((portfolio) => (
-                            <span
-                              key={portfolio}
-                              className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
-                            >
-                              {portfolio}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-gray-400">No access</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleEditAccount(account)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAccount(account.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Username
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Portfolio Access
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredAccounts.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                        No accounts found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAccounts.map((account) => (
+                      <tr key={account.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {account.username}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {account.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${account.role === 'admin'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-gray-100 text-gray-800'
+                            }`}>
+                            {account.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${account.status === 'active'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                            }`}>
+                            {account.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          <div className="flex flex-wrap gap-1">
+                            {account.portfolioAccess && account.portfolioAccess.length > 0 ? (
+                              account.portfolioAccess.map((portfolio) => (
+                                <span
+                                  key={portfolio}
+                                  className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
+                                >
+                                  {portfolio}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400">No access</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => handleEditAccount(account)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAccount(account.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             {/* Add/Edit Account Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">
-                  {editingAccount ? 'Edit Account' : 'Add New Account'}
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingAccount(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Username *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Role
-                    </label>
-                    <select
-                      value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md"
+            {showAddModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold">
+                      {editingAccount ? 'Edit Account' : 'Add New Account'}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setShowAddModal(false);
+                        setEditingAccount(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-600"
                     >
-                      <option value="user">User</option>
-                      <option value="admin">Administrator</option>
-                    </select>
+                      <X className="w-6 h-6" />
+                    </button>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </div>
-                </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Username *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.username}
+                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                        required
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Portfolio Access
-                  </label>
-                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
-                    {getAvailablePortfolios().length === 0 ? (
-                      <p className="text-sm text-gray-500">No portfolios available</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {getAvailablePortfolios().map((portfolio) => (
-                          <label
-                            key={portfolio}
-                            className="flex items-center space-x-2 cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={formData.portfolioAccess?.includes(portfolio) || false}
-                              onChange={() => togglePortfolioAccess(portfolio)}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">{portfolio}</span>
-                          </label>
-                        ))}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email *
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Role
+                        </label>
+                        <select
+                          value={formData.role}
+                          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Administrator</option>
+                        </select>
                       </div>
-                    )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Status
+                        </label>
+                        <select
+                          value={formData.status}
+                          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Portfolio Access
+                      </label>
+                      <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                        {getAvailablePortfolios().length === 0 ? (
+                          <p className="text-sm text-gray-500">No portfolios available</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {getAvailablePortfolios().map((portfolio) => (
+                              <label
+                                key={portfolio}
+                                className="flex items-center space-x-2 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={formData.portfolioAccess?.includes(portfolio) || false}
+                                  onChange={() => togglePortfolioAccess(portfolio)}
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{portfolio}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setShowAddModal(false);
+                        setEditingAccount(null);
+                      }}
+                      className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveAccount}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>Save</span>
+                    </button>
                   </div>
                 </div>
               </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingAccount(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveAccount}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save</span>
-                </button>
-              </div>
-            </div>
-          </div>
             )}
           </>
         )}
@@ -623,16 +619,16 @@ export default function AdministratorPage() {
                       const isSystemDefault = portfolioNames.includes('ZEBRE');
                       const isDefaultPortfolio = uniqueId && defaultPortfolio === uniqueId;
                       const isEditing = editingPortfolioTitle === (uniqueId || portfolioName);
-                      
+
                       // Format last updated date
                       const formatDate = (dateString) => {
                         if (!dateString) return null;
                         try {
                           const date = new Date(dateString);
-                          return date.toLocaleDateString('en-US', { 
-                            year: 'numeric', 
-                            month: 'short', 
-                            day: 'numeric' 
+                          return date.toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
                           });
                         } catch {
                           return null;
@@ -651,12 +647,12 @@ export default function AdministratorPage() {
                         }
 
                         try {
-                          const response = await fetch('/api/update-platform-name', {
+                          const response = await fetch('/api/update-portfolio-title', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               unique_id: uniqueId || portfolioName,
-                              platformName: portfolioTitleValue.trim()
+                              portfolioTitle: portfolioTitleValue.trim()
                             })
                           });
 
@@ -666,8 +662,8 @@ export default function AdministratorPage() {
                             setPortfolioTitleValue('');
                             // Dispatch events to notify other pages
                             if (typeof window !== 'undefined') {
-                              window.dispatchEvent(new CustomEvent('portfolioNameUpdated', { 
-                                detail: { unique_id: uniqueId || portfolioName, platformName: portfolioTitleValue.trim() } 
+                              window.dispatchEvent(new CustomEvent('portfolioTitleUpdated', {
+                                detail: { unique_id: uniqueId || portfolioName, portfolioTitle: portfolioTitleValue.trim() }
                               }));
                               // Trigger PortfolioContext refresh so dropdown updates
                               window.dispatchEvent(new CustomEvent('refreshPortfolios'));
@@ -687,7 +683,7 @@ export default function AdministratorPage() {
                         setEditingPortfolioTitle(null);
                         setPortfolioTitleValue('');
                       };
-                      
+
                       return (
                         <div
                           key={uniqueId || portfolioName}
@@ -795,11 +791,10 @@ export default function AdministratorPage() {
                             {!isEditing && uniqueId && (
                               <button
                                 onClick={() => handleSetDefaultPortfolio(uniqueId)}
-                                className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 transition-colors ${
-                                  isDefaultPortfolio
+                                className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 transition-colors ${isDefaultPortfolio
                                     ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
                                     : 'text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50'
-                                }`}
+                                  }`}
                                 title={isDefaultPortfolio ? 'This is the default portfolio' : 'Set as default portfolio'}
                               >
                                 <Star className={`w-4 h-4 ${isDefaultPortfolio ? 'fill-yellow-600' : ''}`} />

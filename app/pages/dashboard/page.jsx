@@ -423,7 +423,7 @@ export default function DashboardPage() {
       const units = item.units || ''
 
       if (maxVal !== undefined && minVal !== undefined) {
-        return `${item.parameter}\n(${minVal}${units} to ${maxVal}${units})`
+        return [item.parameter, `(${minVal}${units} to ${maxVal}${units})`]
       }
       return item.parameter
     })
@@ -475,7 +475,7 @@ export default function DashboardPage() {
         callbacks: {
           title: function (context) {
             const fullLabel = context[0].label
-            return fullLabel.split('\n')[0]
+            return Array.isArray(fullLabel) ? fullLabel[0] : fullLabel
           },
           afterTitle: function (context) {
             const dataIndex = context[0].dataIndex

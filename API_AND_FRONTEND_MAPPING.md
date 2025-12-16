@@ -197,7 +197,7 @@ This document provides a complete mapping of:
 
 ---
 
-#### `/api/price-curves2`
+#### `/api/price-curves`
 **Collections Used:**
 - `PRICE_Curves_2` (price curve data)
 
@@ -359,9 +359,9 @@ This document provides a complete mapping of:
 
 ### Other Pages
 
-#### Price Curves (`/pages/price-curves2/page.jsx`)
+#### Price Curves (`/pages/price-curves/page.jsx`)
 1. **Price Curve Visualization**
-   - **API:** `/api/price-curves2?period={period}`
+   - **API:** `/api/price-curves?period={period}`
    - **Data Source:** `PRICE_Curves_2`
 
 #### WIP Pages

@@ -104,7 +104,7 @@ export default function ExportPage() {
       // 1. Export Price Curves
       if (includePrice) {
         setStatus('Fetching Price Curves...')
-        const res = await fetch(`/api/price-curves2?period=${selectedGranularity}`)
+        const res = await fetch(`/api/price-curves?period=${selectedGranularity}`)
         if (!res.ok) throw new Error('Failed to fetch price curves')
         const data = await res.json()
         if (!data || !Array.isArray(data) || data.length === 0) {
