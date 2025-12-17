@@ -156,6 +156,20 @@ function LayoutContent({ children }) {
   const [showAddPortfolioModal, setShowAddPortfolioModal] = useState(false)
   const [newPortfolioName, setNewPortfolioName] = useState('')
 
+  // Warm up the backend on initial load
+  useEffect(() => {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com'
+
+    // Only run in production or if explicitly configured
+    if (backendUrl && !window.location.hostname.includes('localhost')) {
+      console.log('🔥 Warming up backend:', backendUrl)
+      fetch(`${backendUrl}/`, { method: 'GET', mode: 'no-cors' })
+        .then(() => console.log('✅ Backend warmup signal sent'))
+        .catch(err => console.log('ℹ️ Backend warmup signal sent (background)'))
+    }
+  }, [])
+
+
   const selectedPortfolioMeta = useMemo(() => {
     const p = portfolios.find((portfolio) => {
       const obj =
