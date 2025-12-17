@@ -25,6 +25,12 @@ export async function GET(request) {
       }
     });
 
+    const curveName = searchParams.get('curve_name') || 'AC Nov 2024';
+    pipeline.push({
+      $match: { curve_name: curveName }
+    });
+
+
     const fiscalYearStartMonth = 7; // Assuming July as the start month for fiscal year
 
     let groupStage = {

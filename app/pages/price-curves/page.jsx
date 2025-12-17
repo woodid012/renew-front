@@ -1,6 +1,7 @@
 // app/pages/price-curves/page.jsx
 'use client'
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   LineChart,
   Line,
@@ -28,7 +29,8 @@ import {
   X,
   Search,
   Save,
-  CheckCircle
+  CheckCircle,
+  Database
 } from 'lucide-react'
 import { useDisplaySettings } from '../../context/DisplaySettingsContext'
 import { formatCurrency } from '../../utils/currencyFormatter'
@@ -47,8 +49,11 @@ const PERIOD_OPTIONS = [
 ]
 
 export default function PriceCurves2Page() {
+  const searchParams = useSearchParams()
   const { currencyUnit } = useDisplaySettings()
   const [priceCurves, setPriceCurves] = useState([])
+  const [curveNames, setCurveNames] = useState(['AC Nov 2024'])
+  const [selectedCurve, setSelectedCurve] = useState('AC Nov 2024')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedRegions, setSelectedRegions] = useState(['ALL'])
@@ -61,7 +66,6 @@ export default function PriceCurves2Page() {
   const [selectedPeriod, setSelectedPeriod] = useState('yearly')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showZeroLine, setShowZeroLine] = useState(false)
   const [modelSettings, setModelSettings] = useState(null)
   const [merchantEscalationRate, setMerchantEscalationRate] = useState(0.025)
   const [merchantRefDate, setMerchantRefDate] = useState('2025-01-01')
@@ -97,15 +101,77 @@ export default function PriceCurves2Page() {
     }
   }, [])
 
-  // Fetch model settings on mount
+  // Initialize page data
   useEffect(() => {
-    fetchModelSettings()
-  }, [])
+    const initializePage = async () => {
+      try {
+        // 1. Fetch Model Settings (to get saved default)
+        let savedDefaultCurve = null;
+        try {
+          const settingsResponse = await fetch('/api/model-settings');
+          if (settingsResponse.ok) {
+            const settingsData = await settingsResponse.json();
+            if (settingsData.settings) {
+              setModelSettings(settingsData.settings);
+              // Set local state for editable fields
+              if (settingsData.settings.merchantPriceEscalationRate !== undefined) {
+                setMerchantEscalationRate(settingsData.settings.merchantPriceEscalationRate);
+              }
+              if (settingsData.settings.merchantPriceEscalationReferenceDate) {
+                setMerchantRefDate(settingsData.settings.merchantPriceEscalationReferenceDate);
+              }
+              savedDefaultCurve = settingsData.settings.defaultPriceCurve;
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching model settings:', err);
+        }
 
-  // Fetch price curves when period changes
+        // 2. Fetch Curve Names
+        const metaResponse = await fetch('/api/price-curves/meta');
+        if (metaResponse.ok) {
+          const metaData = await metaResponse.json();
+          if (metaData.curveNames && metaData.curveNames.length > 0) {
+            setCurveNames(metaData.curveNames);
+
+            // 3. Determine Selection Priority:
+            //    a. URL Param (?curve_name=...)
+            //    b. Saved Default (from settings)
+            //    c. "AC Nov 2024" (hardcoded fallback preference)
+            //    d. First available curve
+
+            const urlCurve = searchParams.get('curve_name');
+
+            if (urlCurve && metaData.curveNames.includes(urlCurve)) {
+              setSelectedCurve(urlCurve);
+            } else if (savedDefaultCurve && metaData.curveNames.includes(savedDefaultCurve)) {
+              setSelectedCurve(savedDefaultCurve);
+            } else if (metaData.curveNames.includes('AC Nov 2024')) {
+              setSelectedCurve('AC Nov 2024');
+            } else {
+              setSelectedCurve(metaData.curveNames[0]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error initializing page:', err);
+      }
+    };
+
+    initializePage();
+  }, [searchParams]); // Re-run if URL params change, though usually this is just on mount/nav
+
+  // fetchModelSettings is now part of initialization, but we might keep it if needed for re-fetching independently?
+  // The 'saveMerchantSettings' refetches it internally before saving, so we don't strictly need it exposed as a standalone function for that purpose.
+  // However, let's keep a simplified version if other effects depend on it, OR just remove the independent calls.
+  // The previous code had `fetchModelSettings` and `fetchCurveNames` as standalone.
+  // Let's remove `fetchCurveNames` as a standalone function to avoid confusion/conflicts, or define it inside the effect?
+  // To keep code clean, I will remove the standalone definitions and just have the effect do the work.
+
+  // Fetch price curves when period or curve changes
   useEffect(() => {
     fetchPriceCurves()
-  }, [selectedPeriod])
+  }, [selectedPeriod, selectedCurve])
 
   // Process chart data when filters change
   const chartData = useMemo(() => {
@@ -169,6 +235,12 @@ export default function PriceCurves2Page() {
   const seriesKeys = useMemo(() => {
     if (!chartData.length) return []
     const sampleData = chartData[0]
+    // Sort, ensuring "AC Nov 2024" is first if it exists
+    curveNames.sort((a, b) => {
+      if (a === 'AC Nov 2024') return -1;
+      if (b === 'AC Nov 2024') return 1;
+      return a.localeCompare(b);
+    });
     return Object.keys(sampleData).filter(key =>
       key !== 'TIME' && key !== 'date' && typeof sampleData[key] === 'number' && !key.includes('TAS')
     )
@@ -190,26 +262,10 @@ export default function PriceCurves2Page() {
     )
   }, [availableRegions, searchTerm])
 
-  const fetchModelSettings = useCallback(async () => {
-    try {
-      const response = await fetch('/api/model-settings')
-      if (response.ok) {
-        const data = await response.json()
-        if (data.settings) {
-          setModelSettings(data.settings)
-          // Set local state for editable fields
-          if (data.settings.merchantPriceEscalationRate !== undefined) {
-            setMerchantEscalationRate(data.settings.merchantPriceEscalationRate)
-          }
-          if (data.settings.merchantPriceEscalationReferenceDate) {
-            setMerchantRefDate(data.settings.merchantPriceEscalationReferenceDate)
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching model settings:', err)
-    }
-  }, [])
+  // fetchModelSettings is now handled in the main initialization effect to ensure correct order
+  // Keeping this as a stub or removing it.
+  // If 'saveMerchantSettings' previously used it? No, saveMerchantSettings has its own fetch inside.
+  // So it is safe to remove.
 
   const saveMerchantSettings = useCallback(async () => {
     setSavingSettings(true)
@@ -226,11 +282,12 @@ export default function PriceCurves2Page() {
         }
       }
 
-      // Update only the merchant escalation fields
+      // Update only the merchant escalation fields AND the default price curve
       const updatedSettings = {
         ...currentSettings,
         merchantPriceEscalationRate: merchantEscalationRate,
-        merchantPriceEscalationReferenceDate: merchantRefDate
+        merchantPriceEscalationReferenceDate: merchantRefDate,
+        defaultPriceCurve: selectedCurve // Save the currently selected curve as default
       }
 
       const response = await fetch('/api/model-settings', {
@@ -251,7 +308,7 @@ export default function PriceCurves2Page() {
         ...updatedSettings
       }))
 
-      setSaveStatus({ type: 'success', message: 'Merchant escalation settings saved successfully!' })
+      setSaveStatus({ type: 'success', message: 'Settings saved successfully! Default curve updated.' })
 
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -263,14 +320,17 @@ export default function PriceCurves2Page() {
     } finally {
       setSavingSettings(false)
     }
-  }, [merchantEscalationRate, merchantRefDate])
+  }, [merchantEscalationRate, merchantRefDate, selectedCurve])
 
   const fetchPriceCurves = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const url = `/api/price-curves${selectedPeriod ? `?period=${selectedPeriod}` : ''}`
+      setLoading(true)
+      setError(null)
+
+      const url = `/api/price-curves?period=${selectedPeriod}&curve_name=${encodeURIComponent(selectedCurve)}`
       const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -331,7 +391,7 @@ export default function PriceCurves2Page() {
     } finally {
       setLoading(false)
     }
-  }, [selectedPeriod])
+  }, [selectedPeriod, selectedCurve, searchParams]) // Added searchParams to dependencies
 
   const handleRegionChange = useCallback((region) => {
     if (region === 'ALL') {
@@ -425,16 +485,7 @@ export default function PriceCurves2Page() {
 
 
 
-  if (loading) {
-    return (
-      <div className="p-6 min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
-          <span className="text-gray-600">Loading price curves...</span>
-        </div>
-      </div>
-    )
-  }
+
 
   if (error) {
     return (
@@ -474,6 +525,10 @@ export default function PriceCurves2Page() {
             )}
           </div>
           <div className="flex items-center space-x-3">
+
+
+
+
             <div className="bg-white rounded-lg border border-gray-200 px-4 py-2">
               <div className="flex items-center space-x-2">
                 <BarChart3 className="w-4 h-4 text-green-600" />
@@ -500,7 +555,7 @@ export default function PriceCurves2Page() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <TrendingUp className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Merchant Price Escalation</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Model Assumptions</h2>
           </div>
           <button
             onClick={saveMerchantSettings}
@@ -515,7 +570,7 @@ export default function PriceCurves2Page() {
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                <span>Save</span>
+                <span>Save All Settings</span>
               </>
             )}
           </button>
@@ -535,7 +590,25 @@ export default function PriceCurves2Page() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Default Price Curve
+            </label>
+
+            <select
+              value={selectedCurve}
+              onChange={(e) => setSelectedCurve(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+              {curveNames.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Select the curve to save as global default.
+            </p>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Escalation Rate (% per year)
@@ -571,7 +644,12 @@ export default function PriceCurves2Page() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6 relative">
+        {loading && (
+          <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10 rounded-lg backdrop-blur-[1px]">
+            <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+          </div>
+        )}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Filter className="w-5 h-5 text-gray-600" />
@@ -699,7 +777,12 @@ export default function PriceCurves2Page() {
       </div>
 
       {/* Chart */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 relative">
+        {loading && (
+          <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10 rounded-lg backdrop-blur-[1px]">
+            <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+          </div>
+        )}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
@@ -712,15 +795,6 @@ export default function PriceCurves2Page() {
             </p>
           </div>
           <div className="flex items-center space-x-2">
-            <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showZeroLine}
-                onChange={(e) => setShowZeroLine(e.target.checked)}
-                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-              />
-              <span>Show zero line</span>
-            </label>
             {!isFullscreen && (
               <button
                 onClick={() => setIsFullscreen(true)}
@@ -776,9 +850,6 @@ export default function PriceCurves2Page() {
                   wrapperStyle={{ paddingTop: '20px' }}
                   iconType="line"
                 />
-                {showZeroLine && (
-                  <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="2 2" />
-                )}
                 {seriesKeys.map((key, index) => (
                   <Line
                     key={key}

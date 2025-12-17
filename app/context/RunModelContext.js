@@ -100,8 +100,10 @@ export const RunModelProvider = ({ children }) => {
     fetchInitialData();
   }, []); // Empty dependency array to run only once on mount
 
-  const runModel = async () => {
+  const runModel = async (options = {}) => {
     if (isRunning) return;
+
+    const { priceCurve } = options;
 
     setIsRunning(true);
     setStatus('running');
@@ -147,6 +149,12 @@ export const RunModelProvider = ({ children }) => {
       addLog(`Selected portfolio: ${selectedPortfolio}`, 'info');
       addLog(`Using unique_id: ${uniqueId}`, 'info');
 
+      if (priceCurve) {
+        addLog(`Using price curve: ${priceCurve}`, 'info');
+      } else {
+        addLog(`No price curve selected, will use backend default`, 'warning');
+      }
+
       // Use EventSource for SSE
       return new Promise((resolve, reject) => {
         // First, send POST request to start the stream
@@ -156,7 +164,8 @@ export const RunModelProvider = ({ children }) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            portfolio: uniqueId
+            portfolio: uniqueId,
+            price_curve: priceCurve
           }),
         }).then(response => {
           if (!response.ok) {
@@ -188,7 +197,7 @@ export const RunModelProvider = ({ children }) => {
                   try {
                     const data = JSON.parse(line.slice(6));
                     addLog(data.message, data.type || 'info');
-                    
+
                     if (data.type === 'error') {
                       setStatus('error');
                       setEndTime(new Date());
@@ -292,7 +301,7 @@ export const RunModelProvider = ({ children }) => {
                   try {
                     const data = JSON.parse(line.slice(6));
                     addLog(data.message, data.type || 'info');
-                    
+
                     if (data.type === 'error') {
                       setStatus('error');
                       setEndTime(new Date());

@@ -1,7 +1,7 @@
 // app/pages/run-model/page.jsx
 "use client"
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Play, Square, AlertCircle, CheckCircle, Loader2, Settings, FileText } from 'lucide-react';
 import { useRunModel } from '../../context/RunModelContext';
 
@@ -31,6 +31,47 @@ const RunModelPage = () => {
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  const [priceCurves, setPriceCurves] = useState([]);
+  const [selectedPriceCurve, setSelectedPriceCurve] = useState('');
+  const [isLoadingCurves, setIsLoadingCurves] = useState(false);
+
+  useEffect(() => {
+    const fetchCurvesAndSettings = async () => {
+      setIsLoadingCurves(true);
+      try {
+        // Fetch curve names
+        const metaResponse = await fetch('/api/price-curves/meta');
+        const metaData = await metaResponse.json();
+
+        let curves = [];
+        if (metaData.curveNames && Array.isArray(metaData.curveNames)) {
+          curves = metaData.curveNames;
+          setPriceCurves(curves);
+        }
+
+        // Fetch saved settings for default
+        const settingsResponse = await fetch('/api/model-settings');
+        const settingsData = await settingsResponse.json();
+        const savedDefault = settingsData.settings?.defaultPriceCurve;
+
+        // Determine selection
+        if (savedDefault && curves.includes(savedDefault)) {
+          setSelectedPriceCurve(savedDefault);
+        } else if (curves.length > 0) {
+          // Fallback to last one if no default saved or saved default not found
+          setSelectedPriceCurve(curves[curves.length - 1]);
+        }
+      } catch (error) {
+        console.error("Failed to fetch price curves or settings:", error);
+        addLog("Failed to fetch price curves or settings", "warning");
+      } finally {
+        setIsLoadingCurves(false);
+      }
+    };
+
+    fetchCurvesAndSettings();
+  }, [backendUrl]);
 
   const getStatusIcon = () => {
     switch (status) {
@@ -110,10 +151,41 @@ const RunModelPage = () => {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold mb-4">Model Configuration</h2>
-            
+
             {/* Basic Controls */}
             <div className="space-y-4">
-              
+
+              {/* Price Curve Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Price Curve
+                </label>
+                <select
+                  value={selectedPriceCurve}
+                  onChange={(e) => setSelectedPriceCurve(e.target.value)}
+                  disabled={isRunning || isLoadingCurves}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                >
+                  {isLoadingCurves ? (
+                    <option>Loading curves...</option>
+                  ) : priceCurves.length === 0 ? (
+                    <option value="">No curves found</option>
+                  ) : (
+                    priceCurves.map((curve) => (
+                      <option key={curve} value={curve}>
+                        {curve}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div className="mt-1 flex justify-between">
+                  <p className="text-xs text-gray-500">
+                    Select the market price scenario.
+                  </p>
+
+                </div>
+              </div>
+
 
               {/* Advanced Options */}
               {showAdvanced && (
@@ -146,8 +218,9 @@ const RunModelPage = () => {
               {/* Action Buttons */}
               <div className="pt-4 space-y-2">
                 <button
-                  onClick={runModel}
-                  disabled={isRunning}
+                  onClick={() => runModel({ priceCurve: selectedPriceCurve })}
+                  disabled={isRunning || (priceCurves.length === 0 && !isLoadingCurves)} // Disable if no curves? Or allow default? The user said "Before i had no selection - just 1 price cruve in the mongo db". I should probably allow it if user wants to try default behavior, but modifying backend to FAIL if no curve is selected suggests I should maybe force selection. But backend has "if no price curve specified... defaulting". So safe to enable. 
+                  // Actually, to be safe and clear, let's keep it enabled but warn if empty.
                   className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isRunning ? (
@@ -222,7 +295,7 @@ const RunModelPage = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="h-96 overflow-y-auto p-4 bg-gray-900 text-green-400 font-mono text-sm">
               {logs.length === 0 ? (
                 <div className="text-gray-500 text-center py-8">
@@ -239,12 +312,11 @@ const RunModelPage = () => {
                       <span className="text-gray-500 text-xs whitespace-nowrap font-sans">
                         {log.timestamp}
                       </span>
-                      <span className={`flex-1 ${
-                        log.type === 'error' ? 'text-red-400' :
+                      <span className={`flex-1 ${log.type === 'error' ? 'text-red-400' :
                         log.type === 'warning' ? 'text-yellow-400' :
-                        log.type === 'success' ? 'text-green-400' :
-                        'text-gray-300'
-                      }`}>
+                          log.type === 'success' ? 'text-green-400' :
+                            'text-gray-300'
+                        }`}>
                         {log.message}
                       </span>
                     </div>

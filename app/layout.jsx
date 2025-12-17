@@ -115,6 +115,16 @@ const navigationItems = [
     section: 'excel-model'
   },
   {
+    section: 'SETTINGS',
+    isSection: true
+  },
+  {
+    name: 'Settings',
+    href: '/pages/settings',
+    icon: Settings,
+    section: 'settings'
+  },
+  {
     section: 'WIP',
     isSection: true
   },
@@ -124,7 +134,6 @@ const navigationItems = [
     icon: DollarSign,
     section: 'wip'
   },
-
   {
     name: 'Export',
     href: '/pages/export',
@@ -132,14 +141,10 @@ const navigationItems = [
     section: 'wip'
   },
   {
-    section: 'SETTINGS',
-    isSection: true
-  },
-  {
-    name: 'Settings',
-    href: '/pages/settings',
-    icon: Settings,
-    section: 'settings'
+    name: 'Upload Price Curves',
+    href: '/pages/wip/upload-price-curves',
+    icon: FileText,
+    section: 'wip'
   },
 ]
 
@@ -243,10 +248,16 @@ function LayoutContent({ children }) {
             {navigationItems.map((item, index) => {
               // Render section headers
               if (item.isSection) {
+                const isWIP = item.section === 'WIP'
                 return (
                   <div key={`section-${index}`} className="pt-4 pb-2">
-                    <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      {item.section}
+                    {isWIP && (
+                      <div className="mx-3 mb-4 mt-2">
+                        <div className="border-t border-gray-200" />
+                      </div>
+                    )}
+                    <h3 className={`px-3 text-xs font-semibold uppercase tracking-wider ${isWIP ? 'text-orange-600' : 'text-gray-500'}`}>
+                      {isWIP ? 'In Progress Items' : item.section}
                     </h3>
                   </div>
                 )
