@@ -56,7 +56,8 @@ export default function PriceCurves2Page() {
   const [selectedCurve, setSelectedCurve] = useState('AC Nov 2024')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selectedRegions, setSelectedRegions] = useState(['ALL'])
+  const [curvesMetadata, setCurvesMetadata] = useState({}) // Store metadata for all curves
+  const [selectedRegions, setSelectedRegions] = useState(['NSW', 'QLD', 'SA', 'VIC'])
   const [selectedProfile, setSelectedProfile] = useState('baseload')
   const [selectedTypes, setSelectedTypes] = useState(['ENERGY'])
   const [availableRegions, setAvailableRegions] = useState([])
@@ -133,6 +134,9 @@ export default function PriceCurves2Page() {
           const metaData = await metaResponse.json();
           if (metaData.curveNames && metaData.curveNames.length > 0) {
             setCurveNames(metaData.curveNames);
+            if (metaData.metadata) {
+              setCurvesMetadata(metaData.metadata);
+            }
 
             // 3. Determine Selection Priority:
             //    a. URL Param (?curve_name=...)
@@ -203,19 +207,19 @@ export default function PriceCurves2Page() {
         timeGroups[timeKey] = { TIME: timeKey, date: displayDate }
       }
 
-      const regionMatch = selectedRegions.includes('ALL') || selectedRegions.includes(item._id.REGION)
+      const regionMatch = selectedRegions.includes(item._id.REGION)
       if (!regionMatch) return
 
       if (selectedProfile === 'storage') {
         if (item._id.TYPE && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ?
+          const seriesKey = selectedRegions.length > 1 ?
             `${item._id.REGION}_${item._id.TYPE}` :
             item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
       } else {
         if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.includes('ALL') ?
+          const seriesKey = selectedRegions.length > 1 ?
             `${item._id.REGION}_${item._id.TYPE}` :
             item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
@@ -341,10 +345,11 @@ export default function PriceCurves2Page() {
 
       // Extract unique values for filters
       const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
+      const filteredRegions = regions.filter(r => r !== 'TAS')
       const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
       const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
 
-      setAvailableRegions(['ALL', ...regions])
+      setAvailableRegions(filteredRegions)
 
       const hasSpreadTypes = types.some(type => type.startsWith('SPREAD_'))
       if (hasSpreadTypes && !profiles.includes('storage')) {
@@ -394,19 +399,11 @@ export default function PriceCurves2Page() {
   }, [selectedPeriod, selectedCurve, searchParams]) // Added searchParams to dependencies
 
   const handleRegionChange = useCallback((region) => {
-    if (region === 'ALL') {
-      setSelectedRegions(['ALL'])
-    } else {
-      setSelectedRegions(prev => {
-        if (prev.includes('ALL')) {
-          return [region]
-        } else {
-          return prev.includes(region)
-            ? prev.filter(r => r !== region)
-            : [...prev, region]
-        }
-      })
-    }
+    setSelectedRegions(prev => {
+      return prev.includes(region)
+        ? prev.filter(r => r !== region)
+        : [...prev, region]
+    })
   }, [])
 
   const handleProfileChange = useCallback((profile) => {
@@ -639,6 +636,47 @@ export default function PriceCurves2Page() {
             <p className="text-xs text-gray-500 mt-1">
               Reference year: {new Date(merchantRefDate).getFullYear()}
             </p>
+            {(() => {
+              // Logic to check for mismatch
+              if (!selectedCurve || !curvesMetadata[selectedCurve]) return null;
+
+              const meta = curvesMetadata[selectedCurve];
+              // Try to find year in "Currency" or similar fields
+              // Looking for "Real 20XX" or similar pattern
+              let curveYear = null;
+              const currencyItem = meta.find(m => m.label && m.label.toLowerCase().includes('currency'));
+              if (currencyItem && currencyItem.value) {
+                const match = currencyItem.value.match(/Real\s+(\d{4})/i);
+                if (match) {
+                  curveYear = parseInt(match[1]);
+                }
+              }
+
+              // Fallback: look through all values for "Real 20XX"
+              if (!curveYear) {
+                for (const m of meta) {
+                  if (m.value) {
+                    const match = String(m.value).match(/Real\s+(\d{4})/i);
+                    if (match) {
+                      curveYear = parseInt(match[1]);
+                      break;
+                    }
+                  }
+                }
+              }
+
+              const selectedYear = new Date(merchantRefDate).getFullYear();
+
+              if (curveYear && curveYear !== selectedYear) {
+                return (
+                  <p className="text-xs text-red-600 font-bold mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Curve Ref: {curveYear} (Mismatch)
+                  </p>
+                )
+              }
+              return null;
+            })()}
           </div>
         </div>
       </div>
@@ -657,7 +695,7 @@ export default function PriceCurves2Page() {
           </div>
           <button
             onClick={() => {
-              setSelectedRegions(['ALL'])
+              setSelectedRegions(['NSW', 'QLD', 'SA', 'VIC'])
               setSelectedProfile('baseload')
               setSelectedTypes(['ENERGY'])
               setSearchTerm('')
@@ -673,7 +711,7 @@ export default function PriceCurves2Page() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <MapPin className="w-4 h-4 inline mr-1" />
-              Regions ({selectedRegions.includes('ALL') ? 'All' : selectedRegions.length})
+              Regions ({selectedRegions.length})
             </label>
             <div className="relative mb-2">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -879,6 +917,6 @@ export default function PriceCurves2Page() {
       </div>
 
 
-    </div>
+    </div >
   )
 }

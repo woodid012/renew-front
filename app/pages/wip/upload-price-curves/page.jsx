@@ -15,6 +15,10 @@ export default function UploadPriceCurvesPage() {
     const [lastMetadata, setLastMetadata] = useState(null)
     const [error, setError] = useState(null)
 
+    // Config State
+    const [parserConfig, setParserConfig] = useState(null)
+    const [activeTab, setActiveTab] = useState('baseload')
+
     const fileInputRef = useRef(null)
 
     const handleFileSelect = (e) => {
@@ -25,10 +29,11 @@ export default function UploadPriceCurvesPage() {
             setUploadResult(null)
             setLastMetadata(null)
             setError(null)
+            setParserConfig(null) // Reset config on new file
         }
     }
 
-    const handleAnalyze = async () => {
+    const handleAnalyze = async (customConfig = null) => {
         if (!file) return
 
         setAnalyzing(true)
@@ -37,6 +42,12 @@ export default function UploadPriceCurvesPage() {
         try {
             const formData = new FormData()
             formData.append('file', file)
+
+            // If customConfig passed (re-analyze), use it. Otherwise use current state if available.
+            const configToSend = customConfig || parserConfig
+            if (configToSend) {
+                formData.append('config', JSON.stringify(configToSend))
+            }
 
             const res = await fetch('/api/price-curves/analyze', {
                 method: 'POST',
@@ -48,6 +59,11 @@ export default function UploadPriceCurvesPage() {
             if (data.status === 'success') {
                 setPreviewData(data.data)
                 setCurveName(data.data.suggestedName)
+
+                // Initialize parser config from backend response if not set or updated
+                if (data.data.config) {
+                    setParserConfig(data.data.config)
+                }
             } else {
                 setError(data.message || 'Analysis failed')
             }
@@ -68,6 +84,9 @@ export default function UploadPriceCurvesPage() {
             const formData = new FormData()
             formData.append('file', file)
             formData.append('curve_name', curveName)
+            if (parserConfig) {
+                formData.append('config', JSON.stringify(parserConfig))
+            }
 
             const res = await fetch('/api/price-curves/upload', {
                 method: 'POST',
@@ -83,6 +102,7 @@ export default function UploadPriceCurvesPage() {
                 }
                 setPreviewData(null) // Clear preview on success
                 setFile(null)       // Clear file
+                setParserConfig(null)
             } else {
                 setError(data.message || 'Upload failed')
             }
@@ -92,6 +112,25 @@ export default function UploadPriceCurvesPage() {
             setUploading(false)
         }
     }
+
+    const handleConfigChange = (key, value) => {
+        setParserConfig(prev => ({
+            ...prev,
+            [key]: value
+        }))
+    }
+
+    const ConfigInput = ({ label, fieldKey, type = "number" }) => (
+        <div className="flex flex-col">
+            <label className="text-xs font-medium text-gray-500 mb-1">{label}</label>
+            <input
+                type={type}
+                value={parserConfig?.[fieldKey] || ''}
+                onChange={(e) => handleConfigChange(fieldKey, e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+        </div>
+    )
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
@@ -181,7 +220,7 @@ export default function UploadPriceCurvesPage() {
                             </div>
 
                             <button
-                                onClick={handleAnalyze}
+                                onClick={() => handleAnalyze()}
                                 disabled={analyzing}
                                 className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 shadow-sm disabled:opacity-50"
                             >
@@ -224,7 +263,7 @@ export default function UploadPriceCurvesPage() {
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     placeholder="e.g. AC Oct 2025"
                                 />
-                                <p className="text-xs text-am-500 mt-1 flex items-center gap-1">
+                                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3" />
                                     Warning: Uploading will overwrite any existing curve with this name.
                                 </p>
@@ -343,6 +382,160 @@ export default function UploadPriceCurvesPage() {
                             </div>
                         </div>
                     </div>
+
+
+
+
+
+                    {/* DATA PREVIEW TABLE */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                                <BarChart className="w-4 h-4 text-blue-600" />
+                                Data Preview (First 5 Periods)
+                            </h3>
+                            <div className="flex gap-2">
+                                {['baseload', 'wind', 'solar', 'storage', 'lgc'].map(tab => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setActiveTab(tab)}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${activeTab === tab
+                                            ? 'bg-blue-100 text-blue-700'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {previewData.preview_table && previewData.preview_table[activeTab] ? (
+                            <>
+                                {previewData.preview_table[activeTab].rows.every(row => row.values.every(v => v === 0 || v === null)) && (
+                                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        Warning: No valid data found (all zeros). Please check your row references.
+                                    </div>
+                                )}
+                                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 font-medium">Region / Item</th>
+                                                {previewData.preview_table[activeTab].columns.map((col, idx) => (
+                                                    <th key={idx} className="px-4 py-3 font-medium border-l border-gray-200">
+                                                        {col}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {previewData.preview_table[activeTab].rows.map((row, rIdx) => (
+                                                <tr key={rIdx} className="hover:bg-gray-50">
+                                                    <td className="px-4 py-3 font-medium text-gray-900 bg-gray-50/50">
+                                                        {row.region}
+                                                    </td>
+                                                    {row.values.map((val, cIdx) => (
+                                                        <td key={cIdx} className="px-4 py-3 text-gray-600 border-l border-gray-200">
+                                                            {typeof val === 'number'
+                                                                ? val.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 2 })
+                                                                : val
+                                                            }
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="p-8 text-center text-gray-400 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
+                                No preview data available for {activeTab}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* CONFIGURATION PANEL */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                                <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                                File Row References
+                            </h3>
+                            <button
+                                onClick={() => handleAnalyze()}
+                                disabled={analyzing}
+                                className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                                Re-Analyze with Updates
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-gray-500 mb-6">
+                            Adjust these row numbers if the Excel format changes. Row numbers are 1-based (exactly as seen in Excel).
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {/* Baseload */}
+                            <div className="space-y-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                <h4 className="font-semibold text-blue-800 text-sm">Baseload (Central)</h4>
+                                <ConfigInput label="Start Row" fieldKey="baseload_start_row" />
+                                <ConfigInput label="End Row" fieldKey="baseload_end_row" />
+                            </div>
+
+                            {/* Solar */}
+                            <div className="space-y-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                                <h4 className="font-semibold text-amber-800 text-sm">Solar (Central)</h4>
+                                <ConfigInput label="Start Row" fieldKey="solar_start_row" />
+                                <ConfigInput label="End Row" fieldKey="solar_end_row" />
+                            </div>
+
+                            {/* Wind */}
+                            <div className="space-y-3 p-3 bg-green-50 rounded-lg border border-green-100">
+                                <h4 className="font-semibold text-green-800 text-sm">Wind (Central)</h4>
+                                <ConfigInput label="Start Row" fieldKey="wind_start_row" />
+                                <ConfigInput label="End Row" fieldKey="wind_end_row" />
+                            </div>
+
+                            {/* LGC */}
+                            <div className="space-y-3 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                                <h4 className="font-semibold text-emerald-800 text-sm">LGC (Inputs)</h4>
+                                <ConfigInput label="LGC Row" fieldKey="lgc_row" />
+                                <ConfigInput label="LGC Headers Row" fieldKey="lgc_fy_header_row" />
+                                <div className="flex flex-col">
+                                    <label className="text-xs font-medium text-gray-500 mb-1">Year Type</label>
+                                    <select
+                                        value={parserConfig?.lgc_year_type || 'FY'}
+                                        onChange={(e) => handleConfigChange('lgc_year_type', e.target.value)}
+                                        className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                    >
+                                        <option value="FY">Financial Year</option>
+                                        <option value="Calendar">Calendar Year</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Spreads */}
+                            <div className="space-y-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                                <h4 className="font-semibold text-purple-800 text-sm">Spreads (Central)</h4>
+                                <ConfigInput label="Start Row" fieldKey="spreads_start_row" />
+                                <ConfigInput label="End Row" fieldKey="spreads_end_row" />
+                                <ConfigInput label="FY Headers Row" fieldKey="fy_header_row" />
+                            </div>
+
+                            {/* Dates */}
+                            <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                <h4 className="font-semibold text-gray-800 text-sm">Monthly Headers</h4>
+                                <ConfigInput label="Date Row" fieldKey="monthly_date_row" />
+                                <ConfigInput label="Start Col (0-idx)" fieldKey="monthly_date_col_start" />
+                            </div>
+                        </div>
+                    </div>
+
+
                 </div>
             )}
         </div>

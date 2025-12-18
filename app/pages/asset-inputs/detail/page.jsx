@@ -596,7 +596,7 @@ const AssetsDetailPage = () => {
               type="text"
               value={platformName}
               onChange={(e) => setPlatformName(e.target.value)}
-              className="text-2xl font-bold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2"
+              className="text-2xl font-bold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 -ml-2"
               placeholder="Platform Name"
             />
             {hasUnsavedChanges && (
@@ -610,9 +610,7 @@ const AssetsDetailPage = () => {
             {Object.keys(assets).length} assets • {calculateTotalCapacity().toFixed(1)} MW •
             {formatCurrencyFromMillions(calculateTotalValue(), currencyUnit)} CAPEX
           </p>
-          <p className="text-sm text-gray-500">
-            Platform ID: {platformID} • MongoDB Asset Management
-          </p>
+
         </div>
         <div className="flex space-x-3">
           {hasUnsavedChanges && (
