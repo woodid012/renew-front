@@ -27,7 +27,6 @@ import {
   Download,
   Maximize2,
   X,
-  Search,
   Save,
   CheckCircle,
   Database
@@ -58,7 +57,7 @@ export default function PriceCurves2Page() {
   const [error, setError] = useState(null)
   const [curvesMetadata, setCurvesMetadata] = useState({}) // Store metadata for all curves
   const [selectedRegions, setSelectedRegions] = useState(['NSW', 'QLD', 'SA', 'VIC'])
-  const [selectedProfile, setSelectedProfile] = useState('baseload')
+  const [selectedProfiles, setSelectedProfiles] = useState(['baseload', 'green'])
   const [selectedTypes, setSelectedTypes] = useState(['ENERGY'])
   const [availableRegions, setAvailableRegions] = useState([])
   const [availableProfiles, setAvailableProfiles] = useState([])
@@ -66,7 +65,7 @@ export default function PriceCurves2Page() {
   const [dateRange, setDateRange] = useState({ start: null, end: null })
   const [selectedPeriod, setSelectedPeriod] = useState('yearly')
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  // searchTerm state removed - regions search box removed
   const [modelSettings, setModelSettings] = useState(null)
   const [merchantEscalationRate, setMerchantEscalationRate] = useState(0.025)
   const [merchantRefDate, setMerchantRefDate] = useState('2025-01-01')
@@ -210,20 +209,19 @@ export default function PriceCurves2Page() {
       const regionMatch = selectedRegions.includes(item._id.REGION)
       if (!regionMatch) return
 
-      if (selectedProfile === 'storage') {
+      if (selectedProfiles.includes('storage')) {
         if (item._id.TYPE && item._id.TYPE.startsWith('SPREAD_') && selectedTypes.includes(item._id.TYPE)) {
           const seriesKey = selectedRegions.length > 1 ?
             `${item._id.REGION}_${item._id.TYPE}` :
             item._id.TYPE
           timeGroups[timeKey][seriesKey] = item.PRICE
         }
-      } else {
-        if (item._id.PROFILE === selectedProfile && selectedTypes.includes(item._id.TYPE)) {
-          const seriesKey = selectedRegions.length > 1 ?
-            `${item._id.REGION}_${item._id.TYPE}` :
-            item._id.TYPE
-          timeGroups[timeKey][seriesKey] = item.PRICE
-        }
+      }
+      if (selectedProfiles.includes(item._id.PROFILE) && selectedTypes.includes(item._id.TYPE)) {
+        const seriesKey = selectedRegions.length > 1 ?
+          `${item._id.REGION}_${item._id.PROFILE}_${item._id.TYPE}` :
+          `${item._id.PROFILE}_${item._id.TYPE}`
+        timeGroups[timeKey][seriesKey] = item.PRICE
       }
     })
 
@@ -233,7 +231,7 @@ export default function PriceCurves2Page() {
         ...item,
         TIME: item.TIME ? formatPeriodLabel(item.TIME, selectedPeriod) : item.TIME
       }))
-  }, [priceCurves, selectedRegions, selectedProfile, selectedTypes, selectedPeriod, formatPeriodLabel])
+  }, [priceCurves, selectedRegions, selectedProfiles, selectedTypes, selectedPeriod, formatPeriodLabel])
 
   // Get series keys from chart data
   const seriesKeys = useMemo(() => {
@@ -250,21 +248,13 @@ export default function PriceCurves2Page() {
     )
   }, [chartData])
 
-  // Get relevant types for current profile
+  // Get relevant types for current profiles
   const relevantTypes = useMemo(() => {
-    if (selectedProfile === 'storage') {
+    if (selectedProfiles.includes('storage')) {
       return availableTypes.filter(type => type.startsWith('SPREAD_'))
     }
     return availableTypes.filter(type => !type.startsWith('SPREAD_'))
-  }, [selectedProfile, availableTypes])
-
-  // Filter regions by search term
-  const filteredRegions = useMemo(() => {
-    if (!searchTerm) return availableRegions
-    return availableRegions.filter(region =>
-      region.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  }, [availableRegions, searchTerm])
+  }, [selectedProfiles, availableTypes])
 
   // fetchModelSettings is now handled in the main initialization effect to ensure correct order
   // Keeping this as a stub or removing it.
@@ -407,18 +397,14 @@ export default function PriceCurves2Page() {
   }, [])
 
   const handleProfileChange = useCallback((profile) => {
-    setSelectedProfile(profile)
-    if (profile === 'storage') {
-      const spreadTypes = availableTypes.filter(type => type.startsWith('SPREAD_'))
-      setSelectedTypes(spreadTypes.length > 0 ? [spreadTypes[0]] : [])
-    } else {
-      const defaultTypes = ['ENERGY']
-      if (availableTypes.includes('GREEN')) {
-        defaultTypes.push('GREEN')
+    setSelectedProfiles(prev => {
+      if (prev.includes(profile)) {
+        return prev.filter(p => p !== profile)
+      } else {
+        return [...prev, profile]
       }
-      setSelectedTypes(defaultTypes)
-    }
-  }, [availableTypes])
+    })
+  }, [])
 
   const handleTypeChange = useCallback((type) => {
     setSelectedTypes(prev =>
@@ -696,9 +682,8 @@ export default function PriceCurves2Page() {
           <button
             onClick={() => {
               setSelectedRegions(['NSW', 'QLD', 'SA', 'VIC'])
-              setSelectedProfile('baseload')
+              setSelectedProfiles(['baseload', 'green'])
               setSelectedTypes(['ENERGY'])
-              setSearchTerm('')
             }}
             className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
           >
@@ -713,21 +698,11 @@ export default function PriceCurves2Page() {
               <MapPin className="w-4 h-4 inline mr-1" />
               Regions ({selectedRegions.length})
             </label>
-            <div className="relative mb-2">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search regions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
             <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
-              {filteredRegions.length === 0 ? (
+              {availableRegions.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-2">No regions found</p>
               ) : (
-                filteredRegions.map(region => (
+                availableRegions.map(region => (
                   <label key={region} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
                     <input
                       type="checkbox"
@@ -746,18 +721,16 @@ export default function PriceCurves2Page() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <Zap className="w-4 h-4 inline mr-1" />
-              Profile
+              Profiles ({selectedProfiles.length})
             </label>
             <div className="space-y-2 border border-gray-200 rounded-md p-2 max-h-48 overflow-y-auto">
               {availableProfiles.map(profile => (
                 <label key={profile} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
                   <input
-                    type="radio"
-                    name="profile"
-                    value={profile}
-                    checked={selectedProfile === profile}
+                    type="checkbox"
+                    checked={selectedProfiles.includes(profile)}
                     onChange={() => handleProfileChange(profile)}
-                    className="w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500"
+                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                   />
                   <span className="text-sm text-gray-700 capitalize flex-1">{profile}</span>
                 </label>
@@ -769,13 +742,13 @@ export default function PriceCurves2Page() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <TrendingUp className="w-4 h-4 inline mr-1" />
-              {selectedProfile === 'storage' ? 'Spread Types' : 'Price Types'} ({selectedTypes.length})
+              {selectedProfiles.includes('storage') ? 'Spread Types' : 'Price Types'} ({selectedTypes.length})
             </label>
             <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
               {relevantTypes.length === 0 ? (
                 <div className="text-xs text-gray-500 text-center py-2">
                   <Info className="w-4 h-4 inline mr-1" />
-                  No {selectedProfile === 'storage' ? 'spread' : 'price'} types available
+                  No {selectedProfiles.includes('storage') ? 'spread' : 'price'} types available
                 </div>
               ) : (
                 relevantTypes.map(type => (
@@ -824,8 +797,8 @@ export default function PriceCurves2Page() {
         <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
-              {selectedProfile.charAt(0).toUpperCase() + selectedProfile.slice(1)}
-              {selectedProfile === 'storage' ? ' Spread' : ' Price'} Trends
+              {selectedProfiles.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+              {selectedProfiles.includes('storage') ? ' Spread' : ' Price'} Trends
               {selectedRegions.includes('ALL') ? ' - All Regions' : ` - ${selectedRegions.join(', ')}`}
             </h3>
             <p className="text-sm text-gray-500 mt-1">
