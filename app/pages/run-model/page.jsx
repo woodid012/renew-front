@@ -2,8 +2,10 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Square, AlertCircle, CheckCircle, Loader2, Settings, FileText } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Play, Square, AlertCircle, CheckCircle, Loader2, Settings, FileText, ExternalLink } from 'lucide-react';
 import { useRunModel } from '../../context/RunModelContext';
+import { usePortfolio } from '../../context/PortfolioContext';
 
 const RunModelPage = () => {
   const {
@@ -28,6 +30,9 @@ const RunModelPage = () => {
     scenarioId
   } = useRunModel();
 
+  const { selectedPortfolio } = usePortfolio();
+  const router = useRouter();
+
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
@@ -35,43 +40,83 @@ const RunModelPage = () => {
   const [priceCurves, setPriceCurves] = useState([]);
   const [selectedPriceCurve, setSelectedPriceCurve] = useState('');
   const [isLoadingCurves, setIsLoadingCurves] = useState(false);
+  const lastLoadedPortfolioRef = useRef(null);
 
+  // Fetch curve names once on mount or when backendUrl changes
   useEffect(() => {
-    const fetchCurvesAndSettings = async () => {
-      setIsLoadingCurves(true);
+    const fetchCurveNames = async () => {
       try {
-        // Fetch curve names
         const metaResponse = await fetch('/api/price-curves/meta');
         const metaData = await metaResponse.json();
 
-        let curves = [];
         if (metaData.curveNames && Array.isArray(metaData.curveNames)) {
-          curves = metaData.curveNames;
-          setPriceCurves(curves);
+          setPriceCurves(metaData.curveNames);
         }
+      } catch (error) {
+        console.error("Failed to fetch price curves:", error);
+        addLog("Failed to fetch price curves", "warning");
+      }
+    };
 
-        // Fetch saved settings for default
-        const settingsResponse = await fetch('/api/model-settings');
+    fetchCurveNames();
+  }, [backendUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch and set price curve preference for current portfolio (only when portfolio changes)
+  useEffect(() => {
+    if (priceCurves.length === 0) {
+      // Wait for curves to load first
+      return;
+    }
+
+    // Only fetch if portfolio actually changed
+    if (lastLoadedPortfolioRef.current === selectedPortfolio) {
+      return;
+    }
+
+    const fetchPortfolioPriceCurve = async () => {
+      setIsLoadingCurves(true);
+      try {
+        // Fetch saved settings for current unique_id (portfolio) or global default
+        const settingsUrl = selectedPortfolio
+          ? `/api/model-settings?unique_id=${encodeURIComponent(selectedPortfolio)}`
+          : '/api/model-settings';
+        
+        const settingsResponse = await fetch(settingsUrl);
         const settingsData = await settingsResponse.json();
         const savedDefault = settingsData.settings?.defaultPriceCurve;
 
-        // Determine selection
-        if (savedDefault && curves.includes(savedDefault)) {
+        // Only update if we have a saved preference and it's valid
+        if (savedDefault && priceCurves.includes(savedDefault)) {
           setSelectedPriceCurve(savedDefault);
-        } else if (curves.length > 0) {
-          // Fallback to last one if no default saved or saved default not found
-          setSelectedPriceCurve(curves[curves.length - 1]);
+        } else if (!selectedPriceCurve || !priceCurves.includes(selectedPriceCurve)) {
+          // Set fallback if no curve is selected or current selection is invalid
+          setSelectedPriceCurve(priceCurves[priceCurves.length - 1]);
         }
+        
+        // Mark this portfolio as loaded
+        lastLoadedPortfolioRef.current = selectedPortfolio;
       } catch (error) {
-        console.error("Failed to fetch price curves or settings:", error);
-        addLog("Failed to fetch price curves or settings", "warning");
+        console.error("Failed to fetch price curve settings:", error);
+        // Don't show warning for every portfolio change, just log it
+        // Set fallback if fetch fails
+        if (!selectedPriceCurve || !priceCurves.includes(selectedPriceCurve)) {
+          setSelectedPriceCurve(priceCurves[priceCurves.length - 1]);
+        }
+        lastLoadedPortfolioRef.current = selectedPortfolio;
       } finally {
         setIsLoadingCurves(false);
       }
     };
 
-    fetchCurvesAndSettings();
-  }, [backendUrl]);
+    fetchPortfolioPriceCurve();
+  }, [selectedPortfolio, priceCurves]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Navigate to price-curves page when user clicks to change price curve
+  const handlePriceCurveClick = () => {
+    if (!isRunning && !isLoadingCurves) {
+      router.push('/pages/price-curves');
+    }
+  };
 
   const getStatusIcon = () => {
     switch (status) {
@@ -160,29 +205,31 @@ const RunModelPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Price Curve
                 </label>
-                <select
-                  value={selectedPriceCurve}
-                  onChange={(e) => setSelectedPriceCurve(e.target.value)}
-                  disabled={isRunning || isLoadingCurves}
-                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                <div
+                  onClick={handlePriceCurveClick}
+                  className={`w-full rounded-md border border-gray-300 shadow-sm text-sm px-3 py-2 bg-white ${
+                    isRunning || isLoadingCurves
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors'
+                  } flex items-center justify-between`}
                 >
-                  {isLoadingCurves ? (
-                    <option>Loading curves...</option>
-                  ) : priceCurves.length === 0 ? (
-                    <option value="">No curves found</option>
-                  ) : (
-                    priceCurves.map((curve) => (
-                      <option key={curve} value={curve}>
-                        {curve}
-                      </option>
-                    ))
+                  <span className={isLoadingCurves ? 'text-gray-400' : 'text-gray-900'}>
+                    {isLoadingCurves
+                      ? 'Loading curves...'
+                      : priceCurves.length === 0
+                      ? 'No curves found'
+                      : selectedPriceCurve || 'No curve selected'}
+                  </span>
+                  {!isRunning && !isLoadingCurves && (
+                    <ExternalLink className="w-4 h-4 text-gray-400 hover:text-green-600" />
                   )}
-                </select>
+                </div>
                 <div className="mt-1 flex justify-between">
                   <p className="text-xs text-gray-500">
-                    Select the market price scenario.
+                    {isRunning || isLoadingCurves
+                      ? 'Price curve is read-only during model execution.'
+                      : 'Click to change price curve settings.'}
                   </p>
-
                 </div>
               </div>
 

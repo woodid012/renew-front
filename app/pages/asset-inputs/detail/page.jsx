@@ -337,21 +337,32 @@ const AssetsDetailPage = () => {
       // Update local state
       setAssets(updatedAssets);
 
-      // Update constants if needed
+      // Update constants with cost assumptions from formData
       if (!constants.assetCosts) {
         setConstants(prev => ({ ...prev, assetCosts: {} }));
       }
 
-      if (!constants.assetCosts || !constants.assetCosts[formData.name]) {
-        const defaultCosts = getDefaultAssetCosts(formData.type, formData.capacity);
-        setConstants(prev => ({
-          ...prev,
-          assetCosts: {
-            ...prev.assetCosts,
-            [formData.name]: defaultCosts
-          }
-        }));
-      }
+      // Extract cost assumptions from formData
+      const costAssumptions = {
+        capex: formData.capex !== undefined && formData.capex !== null ? formData.capex : (getDefaultAssetCosts(formData.type, formData.capacity).capex),
+        operatingCosts: formData.operatingCosts !== undefined && formData.operatingCosts !== null ? formData.operatingCosts : (getDefaultAssetCosts(formData.type, formData.capacity).operatingCosts),
+        operatingCostEscalation: formData.operatingCostEscalation !== undefined && formData.operatingCostEscalation !== null ? formData.operatingCostEscalation : (getDefaultAssetCosts(formData.type, formData.capacity).operatingCostEscalation),
+        terminalValue: formData.terminalValue !== undefined && formData.terminalValue !== null ? formData.terminalValue : (getDefaultAssetCosts(formData.type, formData.capacity).terminalValue),
+        maxGearing: formData.maxGearing !== undefined && formData.maxGearing !== null ? formData.maxGearing : (getDefaultAssetCosts(formData.type, formData.capacity).maxGearing),
+        targetDSCRContract: formData.targetDSCRContract !== undefined && formData.targetDSCRContract !== null ? formData.targetDSCRContract : (getDefaultAssetCosts(formData.type, formData.capacity).targetDSCRContract),
+        targetDSCRMerchant: formData.targetDSCRMerchant !== undefined && formData.targetDSCRMerchant !== null ? formData.targetDSCRMerchant : (getDefaultAssetCosts(formData.type, formData.capacity).targetDSCRMerchant),
+        interestRate: formData.interestRate !== undefined && formData.interestRate !== null ? formData.interestRate : (getDefaultAssetCosts(formData.type, formData.capacity).interestRate),
+        tenorYears: formData.tenorYears !== undefined && formData.tenorYears !== null ? formData.tenorYears : (getDefaultAssetCosts(formData.type, formData.capacity).tenorYears),
+        debtStructure: formData.debtStructure || (getDefaultAssetCosts(formData.type, formData.capacity).debtStructure)
+      };
+
+      setConstants(prev => ({
+        ...prev,
+        assetCosts: {
+          ...prev.assetCosts,
+          [formData.name]: costAssumptions
+        }
+      }));
 
       resetForm();
     } catch (error) {
@@ -406,7 +417,18 @@ const AssetsDetailPage = () => {
       volumeLossAdjustment: 95, annualDegradation: 0.5, constructionStartDate: '',
       constructionDuration: 18, OperatingStartDate: '', qtrCapacityFactor_q1: '',
       qtrCapacityFactor_q2: '', qtrCapacityFactor_q3: '', qtrCapacityFactor_q4: '',
-      volume: '', durationHours: '', contracts: []
+      volume: '', durationHours: '', contracts: [],
+      // Initialize cost fields as undefined so they use defaults
+      capex: undefined,
+      operatingCosts: undefined,
+      operatingCostEscalation: undefined,
+      terminalValue: undefined,
+      maxGearing: undefined,
+      targetDSCRContract: undefined,
+      targetDSCRMerchant: undefined,
+      interestRate: undefined,
+      tenorYears: undefined,
+      debtStructure: undefined
     };
 
     // Fetch model start date and set as construction start date
@@ -457,6 +479,10 @@ const AssetsDetailPage = () => {
   };
 
   const handleEdit = (asset) => {
+    // Load cost assumptions from constants if available
+    const assetCosts = constants.assetCosts?.[asset.name];
+    const defaultCosts = getDefaultAssetCosts(asset.type || 'solar', parseFloat(asset.capacity) || 0);
+
     // Ensure all values are strings and handle null/undefined
     const cleanedAsset = {
       name: safeValue(asset.name),
@@ -491,7 +517,18 @@ const AssetsDetailPage = () => {
         floorValue: safeValue(contract.floorValue),
         EnergyPrice: safeValue(contract.EnergyPrice),
         greenPrice: safeValue(contract.greenPrice)
-      })) : []
+      })) : [],
+      // Load cost assumptions
+      capex: assetCosts?.capex !== undefined ? assetCosts.capex : defaultCosts.capex,
+      operatingCosts: assetCosts?.operatingCosts !== undefined ? assetCosts.operatingCosts : defaultCosts.operatingCosts,
+      operatingCostEscalation: assetCosts?.operatingCostEscalation !== undefined ? assetCosts.operatingCostEscalation : defaultCosts.operatingCostEscalation,
+      terminalValue: assetCosts?.terminalValue !== undefined ? assetCosts.terminalValue : defaultCosts.terminalValue,
+      maxGearing: assetCosts?.maxGearing !== undefined ? assetCosts.maxGearing : defaultCosts.maxGearing,
+      targetDSCRContract: assetCosts?.targetDSCRContract !== undefined ? assetCosts.targetDSCRContract : defaultCosts.targetDSCRContract,
+      targetDSCRMerchant: assetCosts?.targetDSCRMerchant !== undefined ? assetCosts.targetDSCRMerchant : defaultCosts.targetDSCRMerchant,
+      interestRate: assetCosts?.interestRate !== undefined ? assetCosts.interestRate : defaultCosts.interestRate,
+      tenorYears: assetCosts?.tenorYears !== undefined ? assetCosts.tenorYears : defaultCosts.tenorYears,
+      debtStructure: assetCosts?.debtStructure || defaultCosts.debtStructure
     };
 
     // Prepopulate missing capacity factors from defaults if available
@@ -707,6 +744,7 @@ const AssetsDetailPage = () => {
         onCancel={resetForm}
         getDefaultAssetCosts={getDefaultAssetCosts}
         assetDefaults={assetDefaults}
+        constants={constants}
       />
 
       {/* Status Information */}
@@ -745,6 +783,7 @@ const AssetsDetailPage = () => {
 };
 
 export default AssetsDetailPage;
+
 
 
 

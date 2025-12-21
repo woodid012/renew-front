@@ -13,13 +13,20 @@ export async function GET(request) {
     let pipeline = [];
 
     // Stage to ensure TIME is a Date object. If it's a string, convert it.
+    // Handle null/missing TIME values properly
     pipeline.push({
       $addFields: {
         TIME: {
           $cond: {
-            if: { $type: "$TIME" },
+            if: { $eq: [{ $type: "$TIME" }, "date"] },
             then: "$TIME",
-            else: { $toDate: "$TIME" } // Attempt to convert if it's a string
+            else: {
+              $cond: {
+                if: { $eq: [{ $type: "$TIME" }, "string"] },
+                then: { $toDate: "$TIME" },
+                else: "$TIME" // Keep as is if null or other type
+              }
+            }
           }
         }
       }
@@ -46,18 +53,161 @@ export async function GET(request) {
     let sortStage = {};
 
     if (period === 'monthly') {
+      // For GREEN_YEARLY records, expand to monthly by creating 12 entries (one per month) with same price
+      // For other records, use TIME field as normal
+      pipeline.push({
+        $facet: {
+          greenYearly: [
+            { $match: { TYPE: 'GREEN_YEARLY' } },
+            {
+              $project: {
+                REGION: 1,
+                PROFILE: 1,
+                TYPE: 1,
+                PRICE: 1,
+                YEAR: 1,
+                months: { $range: [1, 13] } // Array [1, 2, ..., 12]
+              }
+            },
+            { $unwind: '$months' },
+            {
+              $project: {
+                REGION: 1,
+                PROFILE: 1,
+                TYPE: 1,
+                PRICE: 1,
+                TIME: {
+                  $dateFromParts: {
+                    year: '$YEAR',
+                    month: '$months',
+                    day: 1
+                  }
+                }
+              }
+            }
+          ],
+          regular: [
+            { $match: { TYPE: { $ne: 'GREEN_YEARLY' } } }
+          ]
+        }
+      });
+      pipeline.push({
+        $project: {
+          combined: { $concatArrays: ['$greenYearly', '$regular'] }
+        }
+      });
+      pipeline.push({ $unwind: '$combined' });
+      pipeline.push({
+        $replaceRoot: { newRoot: '$combined' }
+      });
+      // Re-add TIME conversion after expansion
+      pipeline.push({
+        $addFields: {
+          TIME: {
+            $cond: {
+              if: { $eq: [{ $type: "$TIME" }, "date"] },
+              then: "$TIME",
+              else: {
+                $cond: {
+                  if: { $eq: [{ $type: "$TIME" }, "string"] },
+                  then: { $toDate: "$TIME" },
+                  else: "$TIME"
+                }
+              }
+            }
+          }
+        }
+      });
       groupStage._id.year = { $year: '$TIME' };
       groupStage._id.month = { $month: '$TIME' };
       sortStage = { '_id.year': 1, '_id.month': 1 };
     } else if (period === 'quarterly') {
+      // For GREEN_YEARLY records, expand to quarterly by creating 4 entries (one per quarter) with same price
+      // For other records, use TIME field as normal
+      pipeline.push({
+        $facet: {
+          greenYearly: [
+            { $match: { TYPE: 'GREEN_YEARLY' } },
+            {
+              $project: {
+                REGION: 1,
+                PROFILE: 1,
+                TYPE: 1,
+                PRICE: 1,
+                YEAR: 1,
+                quarters: [1, 2, 3, 4] // Array [1, 2, 3, 4]
+              }
+            },
+            { $unwind: '$quarters' },
+            {
+              $project: {
+                REGION: 1,
+                PROFILE: 1,
+                TYPE: 1,
+                PRICE: 1,
+                TIME: {
+                  $dateAdd: {
+                    startDate: {
+                      $dateFromParts: {
+                        year: '$YEAR',
+                        month: 1,
+                        day: 1
+                      }
+                    },
+                    unit: 'month',
+                    amount: { $multiply: [{ $subtract: ['$quarters', 1] }, 3] }
+                  }
+                }
+              }
+            }
+          ],
+          regular: [
+            { $match: { TYPE: { $ne: 'GREEN_YEARLY' } } }
+          ]
+        }
+      });
+      pipeline.push({
+        $project: {
+          combined: { $concatArrays: ['$greenYearly', '$regular'] }
+        }
+      });
+      pipeline.push({ $unwind: '$combined' });
+      pipeline.push({
+        $replaceRoot: { newRoot: '$combined' }
+      });
+      // Re-add TIME conversion after expansion
+      pipeline.push({
+        $addFields: {
+          TIME: {
+            $cond: {
+              if: { $eq: [{ $type: "$TIME" }, "date"] },
+              then: "$TIME",
+              else: {
+                $cond: {
+                  if: { $eq: [{ $type: "$TIME" }, "string"] },
+                  then: { $toDate: "$TIME" },
+                  else: "$TIME"
+                }
+              }
+            }
+          }
+        }
+      });
       groupStage._id.year = { $year: '$TIME' };
       groupStage._id.quarter = { $ceil: { $divide: [{ $month: '$TIME' }, 3] } };
       sortStage = { '_id.year': 1, '_id.quarter': 1 };
     } else if (period === 'yearly') {
-      groupStage._id.year = { $year: '$TIME' };
+      // For GREEN_YEARLY records, use YEAR field directly; for others, extract from TIME
+      groupStage._id.year = {
+        $cond: {
+          if: { $eq: ['$TYPE', 'GREEN_YEARLY'] },
+          then: '$YEAR',
+          else: { $year: '$TIME' }
+        }
+      };
       sortStage = { '_id.year': 1 };
     } else if (period === 'fiscal_yearly') {
-      // Project fiscal year first
+      // For GREEN_YEARLY records, use YEAR field directly; for others, calculate fiscal year from TIME
       pipeline.push({
         $project: {
           _id: 0,
@@ -66,11 +216,18 @@ export async function GET(request) {
           REGION: '$REGION',
           PROFILE: '$PROFILE',
           TYPE: '$TYPE',
+          YEAR: '$YEAR', // Keep YEAR field for GREEN_YEARLY records
           fiscalYear: {
             $cond: {
-              if: { $lt: [{ $month: '$TIME' }, fiscalYearStartMonth] },
-              then: { $subtract: [{ $year: '$TIME' }, 1] },
-              else: { $year: '$TIME' },
+              if: { $eq: ['$TYPE', 'GREEN_YEARLY'] },
+              then: '$YEAR', // For GREEN_YEARLY, YEAR is already the fiscal year ending year
+              else: {
+                $cond: {
+                  if: { $lt: [{ $month: '$TIME' }, fiscalYearStartMonth] },
+                  then: { $subtract: [{ $year: '$TIME' }, 1] },
+                  else: { $year: '$TIME' },
+                }
+              }
             },
           },
         },

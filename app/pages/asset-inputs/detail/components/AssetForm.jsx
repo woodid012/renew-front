@@ -10,7 +10,8 @@ import {
   TrendingUp,
   Calendar,
   DollarSign,
-  Settings
+  Settings,
+  RotateCcw
 } from 'lucide-react';
 import { useDisplaySettings } from '@/app/context/DisplaySettingsContext';
 import { formatCurrencyFromMillions } from '@/app/utils/currencyFormatter';
@@ -23,7 +24,8 @@ const AssetForm = ({
   onSubmit,
   onCancel,
   getDefaultAssetCosts,
-  assetDefaults
+  assetDefaults,
+  constants
 }) => {
   const { currencyUnit } = useDisplaySettings();
   const [activeTab, setActiveTab] = useState('basic');
@@ -34,6 +36,26 @@ const AssetForm = ({
   const safeValue = (value) => {
     if (value === null || value === undefined) return '';
     return String(value);
+  };
+
+  // Calculate months between two dates
+  const calculateMonthsBetweenDates = (startDate, endDate) => {
+    if (!startDate || !endDate) return null;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+    
+    const yearsDiff = end.getFullYear() - start.getFullYear();
+    const monthsDiff = end.getMonth() - start.getMonth();
+    const daysDiff = end.getDate() - start.getDate();
+    
+    // Calculate total months, accounting for partial months
+    let totalMonths = yearsDiff * 12 + monthsDiff;
+    if (daysDiff < 0) {
+      totalMonths -= 1;
+    }
+    
+    return totalMonths;
   };
 
   // Recalculate contract end dates when Operations Start date or construction dates change
@@ -1149,7 +1171,38 @@ const AssetForm = ({
                               onChange={(e) => handleContractChange(index, 'contractDuration', e.target.value)}
                               className="w-full p-2 border border-gray-300 rounded-md"
                               min="0"
-                              placeholder="Enter duration"
+                              placeholder={(() => {
+                                // Get the actual start date (same logic as start date input)
+                                let actualStartDate = '';
+                                if (contract.useOpsStartDate) {
+                                  let opsStartDate = formData.OperatingStartDate || '';
+                                  if (!isOperating && formData.constructionStartDate && !opsStartDate) {
+                                    const start = new Date(formData.constructionStartDate);
+                                    start.setDate(1);
+                                    const duration = parseInt(formData.constructionDuration) || 0;
+                                    if (duration > 0) {
+                                      const constructionEnd = new Date(start);
+                                      constructionEnd.setMonth(constructionEnd.getMonth() + duration - 1);
+                                      constructionEnd.setMonth(constructionEnd.getMonth() + 1, 0);
+                                      const opsStart = new Date(constructionEnd);
+                                      opsStart.setDate(opsStart.getDate() + 1);
+                                      opsStartDate = opsStart.toISOString().split('T')[0];
+                                    }
+                                  }
+                                  actualStartDate = opsStartDate;
+                                } else {
+                                  actualStartDate = contract.startDate || '';
+                                }
+                                
+                                // Calculate duration from start and end date
+                                if (actualStartDate && contract.endDate) {
+                                  const months = calculateMonthsBetweenDates(actualStartDate, contract.endDate);
+                                  if (months !== null && months >= 0) {
+                                    return `${months + 1} months`;
+                                  }
+                                }
+                                return 'Enter duration';
+                              })()}
                             />
                             <p className="text-xs text-gray-500 mt-1">
                               {contract.contractDuration 
@@ -1304,63 +1357,178 @@ const AssetForm = ({
             {activeTab === 'costs' && (
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">Cost Configuration</h4>
-                  <p className="text-sm text-blue-700">
-                    Asset costs are automatically calculated based on capacity and technology type.
-                    You can adjust these in the Bulk Edit tab after saving the asset.
-                  </p>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-medium text-blue-900 mb-2">Cost Configuration</h4>
+                      <p className="text-sm text-blue-700">
+                        Asset costs are automatically calculated based on capacity and technology type.
+                        You can adjust these values below.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (formData.capacity && formData.type) {
+                          const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
+                          setFormData(prev => ({
+                            ...prev,
+                            capex: defaultCosts.capex,
+                            operatingCosts: defaultCosts.operatingCosts,
+                            operatingCostEscalation: defaultCosts.operatingCostEscalation,
+                            terminalValue: defaultCosts.terminalValue,
+                            maxGearing: defaultCosts.maxGearing,
+                            targetDSCRContract: defaultCosts.targetDSCRContract,
+                            targetDSCRMerchant: defaultCosts.targetDSCRMerchant,
+                            interestRate: defaultCosts.interestRate,
+                            tenorYears: defaultCosts.tenorYears,
+                            debtStructure: defaultCosts.debtStructure
+                          }));
+                        }
+                      }}
+                      className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-white text-gray-700 rounded-md hover:bg-gray-100 transition-colors border border-blue-300"
+                      title="Reset all cost assumptions to default values"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Set to Defaults</span>
+                    </button>
+                  </div>
                 </div>
 
                 {formData.capacity && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <h4 className="font-medium text-gray-900">Estimated Costs</h4>
-                      {(() => {
-                        const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
-                        return (
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">CAPEX:</span>
-                              <span className="font-medium">{formatCurrencyFromMillions(defaultCosts.capex, currencyUnit)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Annual OPEX:</span>
-                              <span className="font-medium">{formatCurrencyFromMillions(defaultCosts.operatingCosts, currencyUnit)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Terminal Value:</span>
-                              <span className="font-medium">{formatCurrencyFromMillions(defaultCosts.terminalValue, currencyUnit)}</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">CAPEX ({currencyUnit})</label>
+                          <input
+                            type="number"
+                            value={formData.capex !== undefined && formData.capex !== null ? formData.capex : ''}
+                            onChange={(e) => handleInputChange('capex', parseFloat(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.1"
+                            placeholder={(() => {
+                              const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
+                              return formatCurrencyFromMillions(defaultCosts.capex, currencyUnit);
+                            })()}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Annual OPEX ({currencyUnit})</label>
+                          <input
+                            type="number"
+                            value={formData.operatingCosts !== undefined && formData.operatingCosts !== null ? formData.operatingCosts : ''}
+                            onChange={(e) => handleInputChange('operatingCosts', parseFloat(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.01"
+                            placeholder={(() => {
+                              const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
+                              return formatCurrencyFromMillions(defaultCosts.operatingCosts, currencyUnit);
+                            })()}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">OPEX Escalation (%/year)</label>
+                          <input
+                            type="number"
+                            value={formData.operatingCostEscalation !== undefined && formData.operatingCostEscalation !== null ? formData.operatingCostEscalation : ''}
+                            onChange={(e) => handleInputChange('operatingCostEscalation', parseFloat(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.1"
+                            placeholder="2.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Terminal Value ({currencyUnit})</label>
+                          <input
+                            type="number"
+                            value={formData.terminalValue !== undefined && formData.terminalValue !== null ? formData.terminalValue : ''}
+                            onChange={(e) => handleInputChange('terminalValue', parseFloat(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.1"
+                            placeholder={(() => {
+                              const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
+                              return formatCurrencyFromMillions(defaultCosts.terminalValue, currencyUnit);
+                            })()}
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="space-y-4">
                       <h4 className="font-medium text-gray-900">Finance Assumptions</h4>
-                      {(() => {
-                        const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
-                        return (
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Max Gearing:</span>
-                              <span className="font-medium">{(defaultCosts.maxGearing * 100).toFixed(0)}%</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Target DSCR:</span>
-                              <span className="font-medium">{defaultCosts.targetDSCRContract}x</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Interest Rate:</span>
-                              <span className="font-medium">{(defaultCosts.interestRate * 100).toFixed(1)}%</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Loan Tenor:</span>
-                              <span className="font-medium">{defaultCosts.tenorYears} years</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Max Gearing (%)</label>
+                          <input
+                            type="number"
+                            value={formData.maxGearing !== undefined && formData.maxGearing !== null ? (formData.maxGearing * 100).toFixed(0) : ''}
+                            onChange={(e) => handleInputChange('maxGearing', (parseFloat(e.target.value) || 0) / 100)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="1"
+                            placeholder={(() => {
+                              const defaultCosts = getDefaultAssetCosts(formData.type, parseFloat(formData.capacity) || 0);
+                              return (defaultCosts.maxGearing * 100).toFixed(0);
+                            })()}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Target DSCR - Contracted (x)</label>
+                          <input
+                            type="number"
+                            value={formData.targetDSCRContract !== undefined && formData.targetDSCRContract !== null ? formData.targetDSCRContract : ''}
+                            onChange={(e) => handleInputChange('targetDSCRContract', parseFloat(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.1"
+                            placeholder="1.4"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Target DSCR - Merchant (x)</label>
+                          <input
+                            type="number"
+                            value={formData.targetDSCRMerchant !== undefined && formData.targetDSCRMerchant !== null ? formData.targetDSCRMerchant : ''}
+                            onChange={(e) => handleInputChange('targetDSCRMerchant', parseFloat(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.1"
+                            placeholder="1.8"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (%)</label>
+                          <input
+                            type="number"
+                            value={formData.interestRate !== undefined && formData.interestRate !== null ? (formData.interestRate * 100).toFixed(1) : ''}
+                            onChange={(e) => handleInputChange('interestRate', (parseFloat(e.target.value) || 0) / 100)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="0.1"
+                            placeholder="6.0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Loan Tenor (years)</label>
+                          <input
+                            type="number"
+                            value={formData.tenorYears !== undefined && formData.tenorYears !== null ? formData.tenorYears : ''}
+                            onChange={(e) => handleInputChange('tenorYears', parseInt(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            step="1"
+                            placeholder="20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Debt Structure</label>
+                          <select
+                            value={formData.debtStructure || 'sculpting'}
+                            onChange={(e) => handleInputChange('debtStructure', e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                          >
+                            <option value="sculpting">Sculpting</option>
+                            <option value="bullet">Bullet</option>
+                            <option value="amortizing">Amortizing</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1392,6 +1560,7 @@ const AssetForm = ({
 };
 
 export default AssetForm;
+
 
 
 

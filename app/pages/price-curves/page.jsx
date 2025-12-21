@@ -375,8 +375,10 @@ export default function PriceCurves2Page() {
 
       // Default to showing Energy and Green if they exist
       const defaultTypes = ['ENERGY']
-      if (types.includes('GREEN')) {
-        defaultTypes.push('GREEN')
+      // Include all types that start with "GREEN" (e.g., "GREEN", "GREEN_YEARLY")
+      const greenTypes = types.filter(type => type.startsWith('GREEN'))
+      if (greenTypes.length > 0) {
+        defaultTypes.push(...greenTypes)
       }
       setSelectedTypes(defaultTypes)
 

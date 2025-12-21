@@ -146,6 +146,24 @@ const navigationItems = [
     icon: FileText,
     section: 'wip'
   },
+  {
+    name: 'Price Curve Analysis',
+    href: '/pages/wip/price-curve-analysis',
+    icon: BarChart3,
+    section: 'wip'
+  },
+  {
+    name: 'Historical Prices',
+    href: '/pages/wip/historical-prices',
+    icon: TrendingUp,
+    section: 'wip'
+  },
+  {
+    name: 'Generator Actuals',
+    href: '/pages/wip/generator-actuals',
+    icon: TrendingUp,
+    section: 'wip'
+  },
 ]
 
 function LayoutContent({ children }) {

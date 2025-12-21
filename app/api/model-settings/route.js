@@ -26,7 +26,7 @@ if (process.env.NODE_ENV === 'development') {
   clientPromise = client.connect();
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
     if (!MONGODB_URI) {
       return NextResponse.json(
@@ -35,11 +35,34 @@ export async function GET() {
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const uniqueId = searchParams.get('unique_id');
+
     const client = await clientPromise;
     const db = client.db(DB_NAME);
     const collection = db.collection('CONFIG_modelSettings');
 
-    const settings = await collection.findOne({});
+    // Build query: if unique_id provided, query by it; otherwise get global default (no unique_id or unique_id: 'default')
+    let query = {};
+    if (uniqueId) {
+      query = { unique_id: uniqueId };
+    } else {
+      // For backward compatibility: get settings without unique_id or with unique_id: 'default'
+      query = { $or: [{ unique_id: { $exists: false } }, { unique_id: null }, { unique_id: 'default' }] };
+    }
+
+    const settings = await collection.findOne(query);
+
+    // If no portfolio-specific settings found and unique_id was provided, fallback to global default
+    if (!settings && uniqueId) {
+      const globalSettings = await collection.findOne({
+        $or: [{ unique_id: { $exists: false } }, { unique_id: null }, { unique_id: 'default' }]
+      });
+      if (globalSettings) {
+        const { _id, ...settingsData } = globalSettings;
+        return NextResponse.json({ settings: settingsData });
+      }
+    }
 
     if (!settings) {
       return NextResponse.json({ settings: null });
@@ -83,16 +106,28 @@ export async function POST(request) {
     }
 
     const body = await request.json();
+    const uniqueId = body.unique_id;
+    
     const client = await clientPromise;
     const db = client.db(DB_NAME);
     const collection = db.collection('CONFIG_modelSettings');
 
-    // Upsert: replace existing document or create new one
+    // Determine unique_id: use provided one, or 'default' for global settings
+    const finalUniqueId = uniqueId || 'default';
+    
+    // Build update query based on unique_id
+    const updateQuery = { unique_id: finalUniqueId };
+    
+    // Prepare update data (exclude unique_id from $set since it's in the query)
+    const { unique_id, ...updateData } = body;
+    
+    // Upsert: replace existing document or create new one, keyed by unique_id
     const result = await collection.updateOne(
-      {},
+      updateQuery,
       {
         $set: {
-          ...body,
+          ...updateData,
+          unique_id: finalUniqueId,
           updated_at: new Date()
         }
       },
@@ -103,7 +138,8 @@ export async function POST(request) {
       success: true,
       message: 'Model settings saved successfully',
       updated: result.modifiedCount > 0,
-      created: result.upsertedCount > 0
+      created: result.upsertedCount > 0,
+      unique_id: finalUniqueId
     });
   } catch (error) {
     console.error('Error saving model settings:', error);
