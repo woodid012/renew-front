@@ -257,7 +257,7 @@ export default function GlassboxAuditTemplersPage() {
     return {
       construction_start_year: -constructionYears + 1,
       cod_year: 1,
-      operating_years: operatingYears,
+      operations_end_year: operatingYears,
       terminal_year: operatingYears,
       constructionPct: (constructionYears / (constructionYears + operatingYears)) * 100,
       operationsPct: (operatingYears / (constructionYears + operatingYears)) * 100

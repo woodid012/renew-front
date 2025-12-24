@@ -130,6 +130,12 @@ const navigationItems = [
     isSection: true
   },
   {
+    name: 'Glassbox Audit',
+    href: '/pages/wip/glassbox-audit',
+    icon: Search,
+    section: 'wip'
+  },
+  {
     name: 'Costs',
     href: '/pages/costs',
     icon: DollarSign,
@@ -163,12 +169,6 @@ const navigationItems = [
     name: 'Generator Actuals',
     href: '/pages/wip/generator-actuals',
     icon: TrendingUp,
-    section: 'wip'
-  },
-  {
-    name: 'Glassbox Audit',
-    href: '/pages/wip/glassbox-audit',
-    icon: Search,
     section: 'wip'
   },
 ]

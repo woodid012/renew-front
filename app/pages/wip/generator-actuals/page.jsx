@@ -38,9 +38,8 @@ export default function GeneratorActualsPage() {
     const [monthsRange, setMonthsRange] = useState(12) // Default: 12 months duration
     const [interval, setInterval] = useState('1M') // Default: monthly interval ('5m', '1h', '1d', '7d', '1M', '3M', 'season', '1y', 'fy')
     const [facilities, setFacilities] = useState([])
-    const [selectedFacilities, setSelectedFacilities] = useState([])
+    const [selectedFacility, setSelectedFacility] = useState('WAUBRAWF') // Single facility selection, default to WAUBRAWF
     const [facilitiesLoading, setFacilitiesLoading] = useState(false)
-    const HARDCODED_FACILITY_FOR_CHARTS = 'WAUBRAWF'
 
     // Filters for secondary categories (from API documentation: https://docs.openelectricity.org.au/api-reference/data/get-network-data)
     const [filterFueltech, setFilterFueltech] = useState('')
@@ -48,8 +47,8 @@ export default function GeneratorActualsPage() {
     const [filterStatus, setFilterStatus] = useState('')
     const [filterRenewable, setFilterRenewable] = useState('')
 
-    // Fetch facilities list
-    const fetchFacilities = useCallback(async () => {
+    // Fetch facilities list with retry logic for cold start
+    const fetchFacilities = useCallback(async (retryCount = 0) => {
         setFacilitiesLoading(true)
         try {
             const response = await fetch('/api/facilities?network_id=NEM&status_id=operating')
@@ -64,40 +63,69 @@ export default function GeneratorActualsPage() {
             } else {
                 const errorData = await response.json()
                 console.error('Facilities API error:', errorData)
+                // Retry on 500 errors (likely cold start compilation)
+                if (response.status >= 500 && retryCount < 2) {
+                    console.log(`Retrying facilities fetch (attempt ${retryCount + 2})...`)
+                    setTimeout(() => fetchFacilities(retryCount + 1), 1000)
+                    return
+                }
                 setFacilities([])
             }
         } catch (err) {
             console.error('Error fetching facilities:', err)
+            // Retry on network errors (likely cold start compilation)
+            if (retryCount < 2) {
+                console.log(`Retrying facilities fetch after error (attempt ${retryCount + 2})...`)
+                setTimeout(() => fetchFacilities(retryCount + 1), 1000)
+                return
+            }
             setFacilities([])
         } finally {
             setFacilitiesLoading(false)
         }
     }, [])
 
-    // Fetch data from our API proxy
-    const fetchData = useCallback(async () => {
+    // Fetch data from our API proxy with retry logic for cold start
+    const fetchData = useCallback(async (retryCount = 0) => {
+        if (!selectedFacility) return // Don't fetch if no facility selected
+        
         setLoading(true)
-        setError(null)
+        if (retryCount === 0) {
+            setError(null)
+        }
 
         try {
-            const url = `/api/historical-actuals?type=generator&months=${monthsRange}&interval=${interval}&facility_codes=${HARDCODED_FACILITY_FOR_CHARTS}`
+            const url = `/api/historical-actuals?type=generator&months=${monthsRange}&interval=${interval}&facility_codes=${selectedFacility}`
 
             const response = await fetch(url)
 
             if (!response.ok) {
-                const errorData = await response.json()
+                const errorData = await response.json().catch(() => ({}))
+                // Retry on 500 errors (likely cold start compilation)
+                if (response.status >= 500 && retryCount < 2) {
+                    console.log(`Retrying historical data fetch (attempt ${retryCount + 2})...`)
+                    setTimeout(() => fetchData(retryCount + 1), 1000)
+                    return
+                }
                 throw new Error(errorData.error || `HTTP error: ${response.status}`)
             }
 
             const result = await response.json()
             setData(result)
+            setError(null)
         } catch (err) {
             console.error('Error fetching historical data:', err)
+            // Retry on network errors (likely cold start compilation)
+            if (retryCount < 2) {
+                console.log(`Retrying historical data fetch after error (attempt ${retryCount + 2})...`)
+                setTimeout(() => fetchData(retryCount + 1), 1000)
+                return
+            }
             setError(err.message)
         } finally {
             setLoading(false)
         }
-    }, [monthsRange, interval])
+    }, [monthsRange, interval, selectedFacility])
 
     useEffect(() => {
         fetchFacilities()
@@ -192,18 +220,18 @@ export default function GeneratorActualsPage() {
 
     // Transform data for the chart
     const chartData = useMemo(() => {
-        if (!data?.regions) return []
+        if (!data?.regions || !selectedFacility) return []
 
         // Get all unique data points using date as unique key
         const dataMap = {}
         const currentInterval = data.interval || '1M' // Get interval from data
 
         // Handle generator data structure: { facilityCode: [...] }
-        // Always use WAUBRAWF for charts (hardcoded)
+        // Use selected facility for charts
         // Display energy, market_value, average power, and emissions
         Object.entries(data.regions).forEach(([facilityCode, facilityData]) => {
-            // Only process WAUBRAWF for charts
-            if (facilityCode !== HARDCODED_FACILITY_FOR_CHARTS) return
+            // Only process the selected facility for charts
+            if (facilityCode !== selectedFacility) return
 
             facilityData.forEach(item => {
                 // Use ISO date string as unique key to prevent collapsing multiple points
@@ -244,31 +272,22 @@ export default function GeneratorActualsPage() {
         })
 
         return Object.values(dataMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-    }, [data])
-
-    // Handle facility toggle
-    const handleFacilityToggle = useCallback((facilityCode) => {
-        setSelectedFacilities(prev =>
-            prev.includes(facilityCode)
-                ? prev.filter(f => f !== facilityCode)
-                : [...prev, facilityCode]
-        )
-    }, [])
+    }, [data, selectedFacility])
 
     // Export to CSV
     const exportToCsv = useCallback(() => {
-        if (!chartData.length) return
+        if (!chartData.length || !selectedFacility) return
 
         const formatNumber = (num) => num != null ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
         const headers = ['Month', 'Energy (MWh)', 'Market Value ($)', 'Ave. Power (MW)', 'Emissions', 'Average DWP ($/MWh)']
         const rows = chartData.map(row => {
             return [
                 row.month,
-                formatNumber(row[`${HARDCODED_FACILITY_FOR_CHARTS}_energy`]),
-                formatNumber(row[`${HARDCODED_FACILITY_FOR_CHARTS}_market_value`]),
-                formatNumber(row[`${HARDCODED_FACILITY_FOR_CHARTS}_power`]),
-                formatNumber(row[`${HARDCODED_FACILITY_FOR_CHARTS}_emissions`]),
-                formatNumber(row[`${HARDCODED_FACILITY_FOR_CHARTS}_dwp`])
+                formatNumber(row[`${selectedFacility}_energy`]),
+                formatNumber(row[`${selectedFacility}_market_value`]),
+                formatNumber(row[`${selectedFacility}_power`]),
+                formatNumber(row[`${selectedFacility}_emissions`]),
+                formatNumber(row[`${selectedFacility}_dwp`])
             ]
         })
 
@@ -280,11 +299,11 @@ export default function GeneratorActualsPage() {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
         const link = document.createElement('a')
         link.href = URL.createObjectURL(blob)
-        link.download = `generator_actuals_${HARDCODED_FACILITY_FOR_CHARTS}_${new Date().toISOString().split('T')[0]}.csv`
+        link.download = `generator_actuals_${selectedFacility}_${new Date().toISOString().split('T')[0]}.csv`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-    }, [chartData])
+    }, [chartData, selectedFacility])
 
     // Custom tooltip
     const CustomTooltip = ({ active, payload, label }) => {
@@ -348,7 +367,7 @@ export default function GeneratorActualsPage() {
                     <div className="flex-1 min-w-0">
                         <h1 className="text-3xl font-bold text-gray-900">Generator Actuals</h1>
                         <p className="text-gray-600 mt-1">
-                            Generator-specific time series data for WAUBRAWF
+                            Generator-specific time series data for {selectedFacility || 'selected facility'}
                         </p>
                         {data?.dateRange && (
                             <p className="text-sm text-gray-500 mt-1">
@@ -399,7 +418,7 @@ export default function GeneratorActualsPage() {
                     {/* Facility Selection */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-3">
-                            Facilities ({selectedFacilities.length} selected)
+                            Generator Facility
                         </label>
 
                         {/* Facility Dropdown */}
@@ -412,10 +431,10 @@ export default function GeneratorActualsPage() {
                         ) : (
                             <div>
                                 <select
-                                    value={selectedFacilities[0] || ''}
+                                    value={selectedFacility}
                                     onChange={(e) => {
                                         const value = e.target.value
-                                        if (value) setSelectedFacilities([value])
+                                        if (value) setSelectedFacility(value)
                                     }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm min-h-[120px]"
                                     size="5"
@@ -445,7 +464,7 @@ export default function GeneratorActualsPage() {
                                     })()}
                                 </select>
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Select a facility (Default: WAUBRAWF)
+                                    Select a facility to view its data (Default: WAUBRAWF)
                                 </p>
                             </div>
                         )}
@@ -602,7 +621,7 @@ export default function GeneratorActualsPage() {
             </div>
 
             {/* Selected Facility Details Table */}
-            {selectedFacilities.length > 0 && (
+            {selectedFacility && facilities.length > 0 && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <MapPin className="w-5 h-5 mr-2 text-gray-600" />
@@ -621,11 +640,11 @@ export default function GeneratorActualsPage() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {selectedFacilities.map(code => {
-                                    const facility = facilities.find(f => f.code === code)
+                                {(() => {
+                                    const facility = facilities.find(f => f.code === selectedFacility)
                                     if (!facility) return null
                                     return (
-                                        <tr key={code} className="hover:bg-gray-50">
+                                        <tr key={selectedFacility} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{facility.code}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{facility.name}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{facility.networkRegion || facility.region || '-'}</td>
@@ -641,7 +660,7 @@ export default function GeneratorActualsPage() {
                                             </td>
                                         </tr>
                                     )
-                                })}
+                                })()}
                             </tbody>
                         </table>
                     </div>
@@ -659,7 +678,7 @@ export default function GeneratorActualsPage() {
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                         <TrendingUp className="w-5 h-5 mr-2 text-green-600" />
-                        WAUBRAWF Generator Data
+                        {selectedFacility} Generator Data
                     </h3>
                     <div className="bg-gray-100 rounded-lg px-3 py-1 text-sm text-gray-600">
                         <BarChart3 className="w-4 h-4 inline mr-1" />
@@ -705,15 +724,15 @@ export default function GeneratorActualsPage() {
                                 }}
                             />
                             {(() => {
-                                // Always use WAUBRAWF for charts
+                                // Use selected facility for charts
                                 // Display 5 metrics: energy, market_value, average power, emissions, and average DWP
-                                const facilityCode = HARDCODED_FACILITY_FOR_CHARTS
+                                if (!selectedFacility) return null
                                 const metrics = [
-                                    { key: `${facilityCode}_energy`, label: 'Energy', color: '#3b82f6' },
-                                    { key: `${facilityCode}_market_value`, label: 'Market Value', color: '#10b981' },
-                                    { key: `${facilityCode}_power`, label: 'Ave. Power', color: '#f59e0b' },
-                                    { key: `${facilityCode}_emissions`, label: 'Emissions', color: '#ef4444' },
-                                    { key: `${facilityCode}_dwp`, label: 'Average DWP', color: '#8b5cf6' }
+                                    { key: `${selectedFacility}_energy`, label: 'Energy', color: '#3b82f6' },
+                                    { key: `${selectedFacility}_market_value`, label: 'Market Value', color: '#10b981' },
+                                    { key: `${selectedFacility}_power`, label: 'Ave. Power', color: '#f59e0b' },
+                                    { key: `${selectedFacility}_emissions`, label: 'Emissions', color: '#ef4444' },
+                                    { key: `${selectedFacility}_dwp`, label: 'Average DWP', color: '#8b5cf6' }
                                 ]
                                 return metrics.map(metric => (
                                     <Line
@@ -736,7 +755,7 @@ export default function GeneratorActualsPage() {
             {/* Data Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    WAUBRAWF Generator Data Table
+                    {selectedFacility} Generator Data Table
                 </h3>
 
                 {chartData.length === 0 ? (
@@ -770,14 +789,13 @@ export default function GeneratorActualsPage() {
                                     <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                                         <td className="py-3 px-4 font-medium text-gray-900">{row.month}</td>
                                         {(() => {
-                                            const facilityCode = HARDCODED_FACILITY_FOR_CHARTS
                                             const formatNumber = (num) => num != null ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
                                             const metrics = [
-                                                { key: `${facilityCode}_energy`, format: (v) => formatNumber(v) },
-                                                { key: `${facilityCode}_market_value`, format: (v) => v != null ? `$${formatNumber(v)}` : '-' },
-                                                { key: `${facilityCode}_power`, format: (v) => formatNumber(v) },
-                                                { key: `${facilityCode}_emissions`, format: (v) => formatNumber(v) },
-                                                { key: `${facilityCode}_dwp`, format: (v) => v != null ? `$${formatNumber(v)}` : '-' }
+                                                { key: `${selectedFacility}_energy`, format: (v) => formatNumber(v) },
+                                                { key: `${selectedFacility}_market_value`, format: (v) => v != null ? `$${formatNumber(v)}` : '-' },
+                                                { key: `${selectedFacility}_power`, format: (v) => formatNumber(v) },
+                                                { key: `${selectedFacility}_emissions`, format: (v) => formatNumber(v) },
+                                                { key: `${selectedFacility}_dwp`, format: (v) => v != null ? `$${formatNumber(v)}` : '-' }
                                             ]
                                             return metrics.map((metric, colIdx) => (
                                                 <td key={`cell-${metric.key}-${idx}`} className="py-3 px-4 text-right text-gray-700">
