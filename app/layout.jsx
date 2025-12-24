@@ -24,7 +24,8 @@ import {
   Play,
   Target,
   DollarSign,
-  FileText
+  FileText,
+  Search
 } from 'lucide-react'
 import { RunModelProvider } from './context/RunModelContext'
 import { PortfolioProvider, usePortfolio } from './context/PortfolioContext'
@@ -162,6 +163,12 @@ const navigationItems = [
     name: 'Generator Actuals',
     href: '/pages/wip/generator-actuals',
     icon: TrendingUp,
+    section: 'wip'
+  },
+  {
+    name: 'Glassbox Audit',
+    href: '/pages/wip/glassbox-audit',
+    icon: Search,
     section: 'wip'
   },
 ]
