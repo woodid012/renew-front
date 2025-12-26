@@ -5,6 +5,7 @@
 // - Data Limits: https://docs.openelectricity.org.au/api-reference/data-limits
 // - Generation Data: https://docs.openelectricity.org.au/api-reference/generation-data
 // - Facilities: https://docs.openelectricity.org.au/api-reference/facilities
+// - TypeScript Examples: https://github.com/opennem/openelectricity-typescript/tree/main/examples
 //
 // If the API/code is getting confused, refer to the above documentation to see what options are available.
 
@@ -88,7 +89,7 @@ export default function GeneratorActualsPage() {
     // Fetch data from our API proxy with retry logic for cold start
     const fetchData = useCallback(async (retryCount = 0) => {
         if (!selectedFacility) return // Don't fetch if no facility selected
-        
+
         setLoading(true)
         if (retryCount === 0) {
             setError(null)

@@ -19,7 +19,7 @@ export async function GET(request) {
     // Get data type parameter (default to 'market' for market prices)
     // 'market' = market prices, 'fueltech' = solar/wind average prices, 'generator' = facility-specific data
     const dataType = searchParams.get('type') || 'market'
-    
+
     // Get facility codes for generator data (comma-separated)
     const facilityCodesParam = searchParams.get('facility_codes')
     const facilityCodes = facilityCodesParam ? facilityCodesParam.split(',').map(code => code.trim()).filter(Boolean) : []
@@ -63,9 +63,9 @@ export async function GET(request) {
 
     // Calculate date range based on months parameter
     const now = new Date()
-    const endDate = new Date(now.getFullYear(), now.getMonth(), 1) // First day of current month
+    const endDate = new Date(now) // Use today's date as the end date
     let startDate = new Date(endDate)
-    
+
     // Special handling for 5m interval when months is 0 (means 8 days)
     if (interval === '5m' && months === 0) {
         startDate.setDate(startDate.getDate() - 8)
@@ -77,16 +77,16 @@ export async function GET(request) {
     const maxDays = maxDaysForInterval[interval]
     if (maxDays) {
         const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
-        
+
         if (daysDiff > maxDays) {
             // Adjust start date to fit within the limit
             startDate = new Date(endDate)
             startDate.setDate(startDate.getDate() - maxDays)
-            
+
             // Recalculate months based on actual date range
             const actualDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
             months = Math.floor(actualDays / 30)
-            
+
             console.warn(`Date range too large for ${interval} interval. Adjusted from ${daysDiff} days to ${actualDays} days (${months} months)`)
         }
     }
@@ -143,15 +143,15 @@ export async function GET(request) {
                 // According to SDK docs: facilityCodes can be string | string[]
                 // For single facility, pass as string; for multiple, pass as array
                 const facilityCodeParam = facilityCodes.length === 1 ? facilityCodes[0] : facilityCodes
-                
+
                 // Format dates as ISO strings (the SDK expects date-time strings)
                 // dateStartAware and dateEndAware are already timezone-aware strings from makeAware
                 const dateStartStr = typeof dateStartAware === 'string' ? dateStartAware : dateStartAware.toISOString()
                 const dateEndStr = typeof dateEndAware === 'string' ? dateEndAware : dateEndAware.toISOString()
-                
+
                 // Metrics to fetch: energy, market_value, power, emissions
                 const metrics = ['energy', 'market_value', 'power', 'emissions']
-                
+
                 console.log('Calling getFacilityData with:', {
                     network: 'NEM',
                     facilityCode: facilityCodeParam,
@@ -162,7 +162,7 @@ export async function GET(request) {
                         dateEnd: dateEndStr
                     }
                 })
-                
+
                 const { response: facilityResponse, datatable: facilityDatatable } = await client.getFacilityData(
                     'NEM',
                     facilityCodeParam,
@@ -173,7 +173,7 @@ export async function GET(request) {
                         dateEnd: dateEndStr
                     }
                 )
-                
+
                 // Log response structure
                 console.log('=== Facility Data API Response (WAUBRAWF) ===')
                 console.log('API Call Format:', {
@@ -194,7 +194,7 @@ export async function GET(request) {
                 if (facilityResponse?.data) {
                     console.log('Response.data sample (first item):', Array.isArray(facilityResponse.data) ? facilityResponse.data[0] : facilityResponse.data)
                 }
-                
+
                 // Log datatable structure
                 console.log('=== Facility DataTable Structure ===')
                 console.log('Datatable exists:', !!facilityDatatable)
@@ -203,19 +203,19 @@ export async function GET(request) {
                     console.log('Datatable constructor:', facilityDatatable.constructor?.name)
                     console.log('Datatable prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(facilityDatatable)))
                     console.log('Datatable own properties:', Object.keys(facilityDatatable))
-                    
+
                     // Try to get rows
                     if (typeof facilityDatatable.getRows === 'function') {
                         try {
                             const rows = facilityDatatable.getRows()
                             console.log('Number of rows:', rows?.length || 0)
-                            
+
                             if (rows && rows.length > 0) {
                                 console.log('=== Row Structure Analysis ===')
                                 const firstRow = rows[0]
                                 console.log('First row keys:', Object.keys(firstRow))
                                 console.log('First row full structure:', JSON.stringify(firstRow, null, 2))
-                                
+
                                 // Log first 5 rows for analysis
                                 console.log('First 5 rows:', rows.slice(0, 5).map(row => ({
                                     keys: Object.keys(row),
@@ -226,7 +226,7 @@ export async function GET(request) {
                                     unit: row.unit || row.unit_code,
                                     region: row.region || row.network_region
                                 })))
-                                
+
                                 // Analyze column types and values
                                 console.log('=== Column Analysis ===')
                                 const sampleRow = rows[0]
@@ -239,25 +239,25 @@ export async function GET(request) {
                                         sampleValueType: Array.isArray(value) ? 'array' : typeof value
                                     })
                                 })
-                                
+
                                 // Check for facility_code column
                                 const hasFacilityCode = rows.some(row => row.facility_code || row.code)
                                 console.log('Has facility_code column:', hasFacilityCode)
-                                
+
                                 // Check for unit column (facility data is grouped by unit)
                                 const hasUnit = rows.some(row => row.unit || row.unit_code)
                                 console.log('Has unit column:', hasUnit)
-                                
+
                                 // Log unique facility codes found
                                 const uniqueFacilities = [...new Set(rows.map(row => row.facility_code || row.code).filter(Boolean))]
                                 console.log('Unique facility codes in data:', uniqueFacilities)
-                                
+
                                 // Log unique units if present
                                 if (hasUnit) {
                                     const uniqueUnits = [...new Set(rows.map(row => row.unit || row.unit_code).filter(Boolean))]
                                     console.log('Unique units in data:', uniqueUnits)
                                 }
-                                
+
                                 // Analyze data grouping
                                 console.log('=== Data Grouping Analysis ===')
                                 const groupingAnalysis = {}
@@ -265,7 +265,7 @@ export async function GET(request) {
                                     const facilityCode = row.facility_code || row.code || 'UNKNOWN'
                                     const unit = row.unit || row.unit_code || 'NO_UNIT'
                                     const interval = row.interval
-                                    
+
                                     if (!groupingAnalysis[facilityCode]) {
                                         groupingAnalysis[facilityCode] = {}
                                     }
@@ -274,7 +274,7 @@ export async function GET(request) {
                                     }
                                     groupingAnalysis[facilityCode][unit].add(interval instanceof Date ? interval.toISOString() : String(interval))
                                 })
-                                
+
                                 Object.keys(groupingAnalysis).forEach(facilityCode => {
                                     const units = groupingAnalysis[facilityCode]
                                     console.log(`Facility ${facilityCode}:`)
@@ -282,7 +282,7 @@ export async function GET(request) {
                                         console.log(`  Unit ${unit}: ${units[unit].size} unique intervals`)
                                     })
                                 })
-                                
+
                                 // Check data types and ranges
                                 console.log('=== Data Value Analysis ===')
                                 const energyValues = rows.map(r => r.energy).filter(v => v != null)
@@ -328,7 +328,7 @@ export async function GET(request) {
                         }
                     }
                 }
-                
+
                 response = facilityResponse
                 datatable = facilityDatatable
             } catch (apiError) {
@@ -345,6 +345,62 @@ export async function GET(request) {
                 if (apiError.details) {
                     console.error('Error details:', apiError.details)
                 }
+                throw apiError
+            }
+        } else if (dataType === 'demand_supply') {
+            // Fetch demand data and supply breakdown by fueltech_group
+            // Demand comes from getMarket, supply breakdown from getNetworkData
+            try {
+                // Fetch demand data
+                const { response: demandResponse, datatable: demandDatatable } = await client.getMarket(
+                    'NEM',
+                    ['demand', 'demand_energy'],
+                    {
+                        interval: interval,
+                        dateStart: dateStartAware,
+                        dateEnd: dateEndAware,
+                        primaryGrouping: 'network_region'
+                    }
+                )
+
+                // Fetch supply breakdown by fueltech_group
+                const { response: supplyResponse, datatable: supplyDatatable } = await client.getNetworkData(
+                    'NEM',
+                    ['energy'],
+                    {
+                        interval: interval,
+                        dateStart: dateStartAware,
+                        dateEnd: dateEndAware,
+                        primaryGrouping: 'network_region',
+                        secondaryGrouping: ['fueltech_group']
+                    }
+                )
+
+                // Store both datatables for processing
+                response = demandResponse
+                datatable = { demand: demandDatatable, supply: supplyDatatable }
+            } catch (apiError) {
+                console.error('Error fetching demand/supply data:', apiError)
+                throw apiError
+            }
+        } else if (dataType === 'curtailment') {
+            // Fetch curtailment data by region
+            // Using curtailment energy metrics (MWh) grouped by network_region
+            try {
+                const { response: curtailmentResponse, datatable: curtailmentDatatable } = await client.getMarket(
+                    'NEM',
+                    ['curtailment_solar_utility_energy', 'curtailment_wind_energy', 'curtailment_energy'],
+                    {
+                        interval: interval,
+                        dateStart: dateStartAware,
+                        dateEnd: dateEndAware,
+                        primaryGrouping: 'network_region'
+                    }
+                )
+                response = curtailmentResponse
+                datatable = curtailmentDatatable
+            } catch (apiError) {
+                console.error('Error fetching curtailment data:', apiError)
                 throw apiError
             }
         } else if (dataType === 'fueltech') {
@@ -434,25 +490,215 @@ export async function GET(request) {
             regions: {}
         }
 
-        if (dataType === 'fueltech') {
+        if (dataType === 'demand_supply') {
+            // Process demand and supply data
+            const demandRows = datatable.demand.getRows()
+            const supplyRows = datatable.supply.getRows()
+
+            // Aggregate demand by region and time
+            const demandAggregated = {}
+            demandRows.forEach(row => {
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
+                const rowInterval = row.interval
+                if (!rowInterval) return
+
+                const timestamp = rowInterval instanceof Date ? rowInterval : new Date(rowInterval)
+                const timeKey = timestamp.toISOString()
+
+                if (!demandAggregated[region]) {
+                    demandAggregated[region] = {}
+                }
+                if (!demandAggregated[region][timeKey]) {
+                    demandAggregated[region][timeKey] = {
+                        timestamp: timestamp,
+                        demand: 0,
+                        demandEnergy: 0
+                    }
+                }
+                if (row.demand != null) demandAggregated[region][timeKey].demand += Number(row.demand)
+                if (row.demand_energy != null) demandAggregated[region][timeKey].demandEnergy += Number(row.demand_energy)
+            })
+
+            // Aggregate supply by region, fueltech_group, and time
+            const supplyAggregated = {}
+            const fueltechGroups = new Set()
+
+            supplyRows.forEach(row => {
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
+                const fueltechGroup = row.fueltech_group || row.fueltech || 'other'
+                const rowInterval = row.interval
+                const energy = row.energy
+
+                if (!rowInterval || energy == null) return
+
+                fueltechGroups.add(fueltechGroup)
+
+                const timestamp = rowInterval instanceof Date ? rowInterval : new Date(rowInterval)
+                const timeKey = timestamp.toISOString()
+
+                if (!supplyAggregated[region]) {
+                    supplyAggregated[region] = {}
+                }
+                if (!supplyAggregated[region][timeKey]) {
+                    supplyAggregated[region][timeKey] = {
+                        timestamp: timestamp,
+                        fueltechs: {}
+                    }
+                }
+                if (!supplyAggregated[region][timeKey].fueltechs[fueltechGroup]) {
+                    supplyAggregated[region][timeKey].fueltechs[fueltechGroup] = 0
+                }
+                supplyAggregated[region][timeKey].fueltechs[fueltechGroup] += Number(energy)
+            })
+
+            // Merge demand and supply data into output format
+            Object.keys(demandAggregated).forEach(region => {
+                transformedData.regions[region] = []
+
+                Object.entries(demandAggregated[region]).forEach(([timeKey, demandData]) => {
+                    const timestamp = demandData.timestamp
+                    const supplyData = supplyAggregated[region]?.[timeKey]
+
+                    // Format date label
+                    let dateLabel
+                    if (interval === '1M' || interval === '3M' || interval === 'season' || interval === '1y' || interval === 'fy') {
+                        dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short' })
+                    } else if (interval === '7d' || interval === '1d') {
+                        dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
+                    } else {
+                        dateLabel = timestamp.toLocaleDateString('en-AU', {
+                            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })
+                    }
+
+                    transformedData.regions[region].push({
+                        date: timestamp.toISOString(),
+                        label: dateLabel,
+                        month: timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short' }),
+                        year: timestamp.getFullYear(),
+                        monthNum: timestamp.getMonth() + 1,
+                        day: timestamp.getDate(),
+                        demand: demandData.demand,
+                        demandEnergy: demandData.demandEnergy,
+                        supply: supplyData?.fueltechs || {}
+                    })
+                })
+            })
+
+            // Add available fueltech groups to response
+            transformedData.fueltechGroups = Array.from(fueltechGroups).sort()
+
+        } else if (dataType === 'curtailment') {
+            // Process curtailment data: group by region and time interval
+            const rows = datatable.getRows()
+
+            if (!rows || rows.length === 0) {
+                console.warn('No curtailment data rows returned from API')
+                return NextResponse.json(transformedData)
+            }
+
+            // Aggregate by region and time interval
+            // Structure: { region: { timeKey: { ... } } }
+            const aggregated = {}
+
+            rows.forEach(row => {
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
+                const rowInterval = row.interval
+                const curtailmentSolar = row.curtailment_solar_utility_energy
+                const curtailmentWind = row.curtailment_wind_energy
+                const curtailmentTotal = row.curtailment_energy
+
+                // Filter out invalid data
+                if (!rowInterval) {
+                    return
+                }
+
+                const timestamp = rowInterval instanceof Date ? rowInterval : new Date(rowInterval)
+                const timeKey = timestamp.toISOString()
+
+                if (!aggregated[region]) {
+                    aggregated[region] = {}
+                }
+
+                if (!aggregated[region][timeKey]) {
+                    aggregated[region][timeKey] = {
+                        timestamp: timestamp,
+                        curtailmentSolar: 0,
+                        curtailmentWind: 0,
+                        curtailmentTotal: 0
+                    }
+                }
+
+                // Sum up values (handle null/undefined)
+                if (curtailmentSolar != null) {
+                    aggregated[region][timeKey].curtailmentSolar += Number(curtailmentSolar)
+                }
+                if (curtailmentWind != null) {
+                    aggregated[region][timeKey].curtailmentWind += Number(curtailmentWind)
+                }
+                if (curtailmentTotal != null) {
+                    aggregated[region][timeKey].curtailmentTotal += Number(curtailmentTotal)
+                }
+            })
+
+            // Format data for output
+            Object.keys(aggregated).forEach(region => {
+                transformedData.regions[region] = []
+
+                Object.values(aggregated[region]).forEach(agg => {
+                    const timestamp = agg.timestamp
+
+                    // Format the date label based on the interval
+                    let dateLabel
+                    if (interval === '1M' || interval === '3M' || interval === 'season' || interval === '1y' || interval === 'fy') {
+                        dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short' })
+                    } else if (interval === '7d' || interval === '1d') {
+                        dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
+                    } else {
+                        dateLabel = timestamp.toLocaleDateString('en-AU', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })
+                    }
+
+                    transformedData.regions[region].push({
+                        date: timestamp.toISOString(),
+                        label: dateLabel,
+                        month: timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short' }),
+                        year: timestamp.getFullYear(),
+                        monthNum: timestamp.getMonth() + 1,
+                        day: timestamp.getDate(),
+                        curtailmentSolar: agg.curtailmentSolar,
+                        curtailmentWind: agg.curtailmentWind,
+                        curtailmentTotal: agg.curtailmentTotal
+                    })
+                })
+            })
+        } else if (dataType === 'fueltech') {
             // Process fueltech data: calculate average prices (market_value / energy) for solar_utility and wind by region
             // Keep solar_utility and wind separate (don't aggregate)
             // Use energy (MWh) not power (MW) to calculate $/MWh correctly
             const rows = datatable.getRows()
-            
+
             if (!rows || rows.length === 0) {
                 console.warn('No fueltech data rows returned from API')
                 return NextResponse.json(transformedData)
             }
-            
+
             // Aggregate by region, fueltech, and time interval
             // Structure: { region: { fueltech: { timeKey: { ... } } } }
             const aggregated = {}
-            
+
             // Debug: Log VIC solar_utility data
             const vicSolarRows = rows.filter(row => {
-                const region = row.region ? String(row.region).toUpperCase() : 
-                              (row.network_region ? String(row.network_region).toUpperCase() : '')
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : '')
                 const fueltech = row.fueltech ? String(row.fueltech) : ''
                 return region === 'VIC1' && fueltech === 'solar_utility'
             })
@@ -469,27 +715,27 @@ export async function GET(request) {
             } else {
                 console.log('No VIC solar_utility rows found in data')
             }
-            
+
             rows.forEach(row => {
-                const region = row.region ? String(row.region).toUpperCase() : 
-                              (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
                 const fueltech = row.fueltech ? String(row.fueltech) : null
                 const rowInterval = row.interval
                 const energy = row.energy // Energy in MWh
                 const marketValue = row.market_value // Market value in $
 
                 // Filter out invalid data
-                if (!rowInterval || !fueltech || energy === undefined || marketValue === undefined || 
+                if (!rowInterval || !fueltech || energy === undefined || marketValue === undefined ||
                     energy === null || marketValue === null) {
                     return
                 }
-                
+
                 // Only filter out if both energy and marketValue are zero or negative
                 // This allows periods with low but valid generation (e.g., winter solar)
                 if (energy <= 0 && marketValue <= 0) {
                     return
                 }
-                
+
                 // If we have market value but no energy, or vice versa, skip (data inconsistency)
                 if ((energy <= 0 && marketValue > 0) || (energy > 0 && marketValue <= 0)) {
                     console.warn(`Data inconsistency for ${region} ${fueltech} at ${rowInterval}: energy=${energy}, marketValue=${marketValue}`)
@@ -529,8 +775,8 @@ export async function GET(request) {
             if (baseloadPrices) {
                 const baseloadRows = baseloadPrices.getRows()
                 baseloadRows.forEach(row => {
-                    const region = row.region ? String(row.region).toUpperCase() : 
-                                  (row.network_region ? String(row.network_region).toUpperCase() : null)
+                    const region = row.region ? String(row.region).toUpperCase() :
+                        (row.network_region ? String(row.network_region).toUpperCase() : null)
                     const rowInterval = row.interval
                     const price = row.price
 
@@ -551,10 +797,10 @@ export async function GET(request) {
             // Structure: { region: { fueltech: [{ ... }] } }
             Object.keys(aggregated).forEach(region => {
                 transformedData.regions[region] = {}
-                
+
                 Object.keys(aggregated[region]).forEach(fueltech => {
                     transformedData.regions[region][fueltech] = []
-                    
+
                     Object.values(aggregated[region][fueltech]).forEach(agg => {
                         const avgPrice = agg.totalEnergy > 0 ? agg.totalMarketValue / agg.totalEnergy : 0
                         const timestamp = agg.timestamp
@@ -562,8 +808,8 @@ export async function GET(request) {
 
                         // Get baseload price for this region and time period
                         const baseloadPrice = baseloadPriceLookup[region]?.[timeKey]
-                        const percentageOfBaseload = baseloadPrice && baseloadPrice > 0 
-                            ? (avgPrice / baseloadPrice) * 100 
+                        const percentageOfBaseload = baseloadPrice && baseloadPrice > 0
+                            ? (avgPrice / baseloadPrice) * 100
                             : null
 
                         // Format the date label based on the interval
@@ -573,9 +819,9 @@ export async function GET(request) {
                         } else if (interval === '7d' || interval === '1d') {
                             dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
                         } else {
-                            dateLabel = timestamp.toLocaleDateString('en-AU', { 
-                                year: 'numeric', 
-                                month: 'short', 
+                            dateLabel = timestamp.toLocaleDateString('en-AU', {
+                                year: 'numeric',
+                                month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit'
@@ -601,10 +847,10 @@ export async function GET(request) {
         } else if (dataType === 'generator') {
             // Process generator/facility data: aggregate energy, market_value, power, and emissions for each facility
             // Note: Facility data is grouped by unit, so we need to aggregate across units for the same facility
-            
+
             console.log('=== Processing Generator Data ===')
             console.log('Datatable exists:', !!datatable)
-            
+
             if (!datatable) {
                 console.warn('No datatable returned from API')
                 return NextResponse.json({
@@ -612,7 +858,7 @@ export async function GET(request) {
                     error: 'No datatable returned from API'
                 })
             }
-            
+
             let rows = []
             try {
                 if (typeof datatable.getRows === 'function') {
@@ -631,7 +877,7 @@ export async function GET(request) {
                     error: `Error accessing datatable rows: ${rowsError.message}`
                 })
             }
-            
+
             if (!rows || rows.length === 0) {
                 console.warn('No generator data rows returned from API')
                 return NextResponse.json({
@@ -639,9 +885,9 @@ export async function GET(request) {
                     warning: 'No data rows found for the specified facilities and date range'
                 })
             }
-            
+
             console.log(`=== Processing Generator Data: ${rows.length} rows ===`)
-            
+
             // Log sample row to understand structure
             if (rows.length > 0) {
                 console.log('Sample row structure:', {
@@ -649,11 +895,11 @@ export async function GET(request) {
                     sample: rows[0]
                 })
                 console.log('First 3 rows for analysis:', rows.slice(0, 3))
-                
+
                 // Log facility codes found in the data
                 const facilityCodesInData = [...new Set(rows.map(row => row.facility_code || row.code || row.facility || 'UNKNOWN'))]
                 console.log('Facility codes found in raw data:', facilityCodesInData)
-                
+
                 // Log what metrics are present
                 const firstRow = rows[0]
                 console.log('Metrics present in first row:', {
@@ -669,7 +915,7 @@ export async function GET(request) {
             } else {
                 console.warn('WARNING: No rows returned from API datatable!')
             }
-            
+
             // Aggregate by facility code and time interval
             // Structure: { facilityCode: { timeKey: { ... } } }
             // Note: Data may be grouped by unit, so we aggregate across units for the same facility
@@ -684,32 +930,32 @@ export async function GET(request) {
                 dataInconsistency: 0,
                 processed: 0
             }
-            
+
             rows.forEach((row, index) => {
                 // Try multiple possible column names for facility code
                 // Note: The API returns unit_code, not facility_code directly
                 // Extract facility code from unit_code (e.g., "BANGOWF1" -> "BANGOWF")
                 const unitCode = row.unit_code || row.unit || null
                 let facilityCode = row.facility_code || row.code || row.facility
-                
+
                 // If no facility_code but we have unit_code, extract facility from unit_code
                 // Unit codes are typically like "FACILITY1", "FACILITY2", etc.
                 if (!facilityCode && unitCode) {
                     // Remove trailing numbers to get facility code
                     facilityCode = unitCode.replace(/\d+$/, '')
                 }
-                
+
                 if (!facilityCode) {
                     facilityCode = 'UNKNOWN'
                 }
-                
+
                 const rowInterval = row.interval
                 const energy = row.energy // Energy in MWh
                 const marketValue = row.market_value // Market value in $
                 const power = row.power // Power in MW
                 const emissions = row.emissions // Emissions (units depend on API)
-                const region = row.region ? String(row.region).toUpperCase() : 
-                              (row.network_region ? String(row.network_region).toUpperCase() : null)
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : null)
                 const unit = row.unit || row.unit_code || null // Unit information (for logging)
 
                 // Filter out invalid data with detailed tracking
@@ -721,7 +967,7 @@ export async function GET(request) {
                     }
                     return
                 }
-                
+
                 if (!facilityCode || facilityCode === 'UNKNOWN') {
                     skippedRows++
                     filteringStats.missingFacilityCode++
@@ -730,14 +976,14 @@ export async function GET(request) {
                     }
                     return
                 }
-                
+
                 // Don't require all metrics - some may be null/undefined
                 // Convert to numbers, handling null/undefined/NaN properly
                 const energyNum = energy != null && !isNaN(Number(energy)) ? Number(energy) : null
                 const marketValueNum = marketValue != null && !isNaN(Number(marketValue)) ? Number(marketValue) : null
                 const powerNum = power != null && !isNaN(Number(power)) ? Number(power) : null
                 const emissionsNum = emissions != null && !isNaN(Number(emissions)) ? Number(emissions) : null
-                
+
                 // Skip rows where all metrics are null/undefined (no data at all)
                 if (energyNum === null && marketValueNum === null && powerNum === null && emissionsNum === null) {
                     filteringStats.zeroOrNegative++
@@ -746,7 +992,7 @@ export async function GET(request) {
                     }
                     return
                 }
-                
+
                 // Row passed all filters - at least one metric has a value
                 filteringStats.processed++
 
@@ -794,16 +1040,16 @@ export async function GET(request) {
                     aggregated[facilityCode][timeKey].unitCount++
                 }
             })
-            
+
             console.log(`=== Data Filtering Summary ===`)
             console.log(`Total rows processed: ${rows.length}`)
             console.log(`Rows passed filters: ${filteringStats.processed}`)
             console.log(`Rows skipped: ${skippedRows}`)
             console.log(`Filtering breakdown:`, filteringStats)
-            
+
             console.log(`=== Aggregation Summary ===`)
             console.log(`Aggregated data for ${Object.keys(aggregated).length} facilities`)
-            
+
             // Log detailed aggregation summary
             Object.keys(aggregated).forEach(facilityCode => {
                 const timeKeys = Object.keys(aggregated[facilityCode])
@@ -820,7 +1066,7 @@ export async function GET(request) {
             // Structure: { facilityCode: [{ ... }] }
             Object.keys(aggregated).forEach(facilityCode => {
                 transformedData.regions[facilityCode] = []
-                
+
                 Object.values(aggregated[facilityCode]).forEach(agg => {
                     const timestamp = agg.timestamp
 
@@ -831,9 +1077,9 @@ export async function GET(request) {
                     } else if (interval === '7d' || interval === '1d') {
                         dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
                     } else {
-                        dateLabel = timestamp.toLocaleDateString('en-AU', { 
-                            year: 'numeric', 
-                            month: 'short', 
+                        dateLabel = timestamp.toLocaleDateString('en-AU', {
+                            year: 'numeric',
+                            month: 'short',
                             day: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit'
@@ -862,9 +1108,9 @@ export async function GET(request) {
 
             rows.forEach(row => {
                 // Get region from the row - the column is called 'region'
-                const region = row.region ? String(row.region).toUpperCase() : 
-                              (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
-                
+                const region = row.region ? String(row.region).toUpperCase() :
+                    (row.network_region ? String(row.network_region).toUpperCase() : 'UNKNOWN')
+
                 const rowInterval = row.interval // This is a Date object
                 const price = row.price
 
@@ -874,7 +1120,7 @@ export async function GET(request) {
                 }
 
                 const timestamp = rowInterval instanceof Date ? rowInterval : new Date(rowInterval)
-                
+
                 if (!transformedData.regions[region]) {
                     transformedData.regions[region] = []
                 }
@@ -892,9 +1138,9 @@ export async function GET(request) {
                     dateLabel = timestamp.toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
                 } else {
                     // For hourly/5-minute intervals, use full datetime format
-                    dateLabel = timestamp.toLocaleDateString('en-AU', { 
-                        year: 'numeric', 
-                        month: 'short', 
+                    dateLabel = timestamp.toLocaleDateString('en-AU', {
+                        year: 'numeric',
+                        month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
                         minute: '2-digit'
@@ -919,23 +1165,23 @@ export async function GET(request) {
                 // For fueltech data, sort each fueltech's data
                 Object.keys(transformedData.regions[region]).forEach(fueltech => {
                     transformedData.regions[region][fueltech].sort((a, b) => {
-                        return a.year !== b.year 
-                            ? a.year - b.year 
+                        return a.year !== b.year
+                            ? a.year - b.year
                             : a.monthNum - b.monthNum
                     })
                 })
             } else if (dataType === 'generator') {
                 // For generator data, sort the array directly (facility code is the key)
                 transformedData.regions[region].sort((a, b) => {
-                    return a.year !== b.year 
-                        ? a.year - b.year 
+                    return a.year !== b.year
+                        ? a.year - b.year
                         : a.monthNum - b.monthNum
                 })
             } else {
                 // For market data, sort the array directly
                 transformedData.regions[region].sort((a, b) => {
-                    return a.year !== b.year 
-                        ? a.year - b.year 
+                    return a.year !== b.year
+                        ? a.year - b.year
                         : a.monthNum - b.monthNum
                 })
             }
@@ -953,7 +1199,7 @@ export async function GET(request) {
             response: error.response,
             details: error.details
         })
-        
+
         // Handle specific error types from the library
         if (error instanceof NoDataFound) {
             return NextResponse.json(
@@ -961,11 +1207,11 @@ export async function GET(request) {
                 { status: 404 }
             )
         }
-        
+
         if (error instanceof OpenElectricityError) {
             return NextResponse.json(
-                { 
-                    error: error.message, 
+                {
+                    error: error.message,
                     details: error.details,
                     statusCode: error.statusCode,
                     response: error.response
@@ -973,11 +1219,11 @@ export async function GET(request) {
                 { status: error.statusCode || 500 }
             )
         }
-        
+
         // Handle generic errors
         return NextResponse.json(
-            { 
-                error: 'Failed to fetch data from Open Electricity API', 
+            {
+                error: 'Failed to fetch data from Open Electricity API',
                 details: error.message,
                 type: error.constructor.name
             },
