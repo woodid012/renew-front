@@ -171,6 +171,12 @@ const navigationItems = [
     icon: TrendingUp,
     section: 'wip'
   },
+  {
+    name: 'Asset Analyse',
+    href: '/pages/wip/asset-analyse',
+    icon: TrendingUp,
+    section: 'wip'
+  },
 ]
 
 function LayoutContent({ children }) {
