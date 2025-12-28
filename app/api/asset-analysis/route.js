@@ -165,9 +165,10 @@ export async function GET(request) {
                 if (region !== facilityRegion.toUpperCase()) return
 
                 const timestamp = row.interval instanceof Date ? row.interval.toISOString() : new Date(row.interval).toISOString()
+                // Convert demand_energy from GWh to MWh (API returns GWh, but we standardize to MWh to match supply)
                 demandData[timestamp] = {
                     demand: Number(row.demand) || 0,
-                    demand_energy: Number(row.demand_energy) || 0
+                    demand_energy: (Number(row.demand_energy) || 0) * 1000
                 }
             })
         }

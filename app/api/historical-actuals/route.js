@@ -385,7 +385,8 @@ export async function GET(request) {
             }
         } else if (dataType === 'curtailment') {
             // Fetch curtailment data by region
-            // Using curtailment energy metrics (MWh) grouped by network_region
+            // Note: curtailment energy metrics appear to be in GWh (despite some docs saying MWh)
+            // We convert to MWh to match supply units
             try {
                 const { response: curtailmentResponse, datatable: curtailmentDatatable } = await client.getMarket(
                     'NEM',
@@ -517,7 +518,8 @@ export async function GET(request) {
                     }
                 }
                 if (row.demand != null) demandAggregated[region][timeKey].demand += Number(row.demand)
-                if (row.demand_energy != null) demandAggregated[region][timeKey].demandEnergy += Number(row.demand_energy)
+                // Convert demand_energy from GWh to MWh (API returns GWh, but we standardize to MWh to match supply)
+                if (row.demand_energy != null) demandAggregated[region][timeKey].demandEnergy += Number(row.demand_energy) * 1000
             })
 
             // Aggregate supply by region, fueltech_group, and time
@@ -633,14 +635,15 @@ export async function GET(request) {
                 }
 
                 // Sum up values (handle null/undefined)
+                // Convert from GWh to MWh to match supply units
                 if (curtailmentSolar != null) {
-                    aggregated[region][timeKey].curtailmentSolar += Number(curtailmentSolar)
+                    aggregated[region][timeKey].curtailmentSolar += Number(curtailmentSolar) * 1000
                 }
                 if (curtailmentWind != null) {
-                    aggregated[region][timeKey].curtailmentWind += Number(curtailmentWind)
+                    aggregated[region][timeKey].curtailmentWind += Number(curtailmentWind) * 1000
                 }
                 if (curtailmentTotal != null) {
-                    aggregated[region][timeKey].curtailmentTotal += Number(curtailmentTotal)
+                    aggregated[region][timeKey].curtailmentTotal += Number(curtailmentTotal) * 1000
                 }
             })
 

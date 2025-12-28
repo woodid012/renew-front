@@ -1015,8 +1015,8 @@ export default function HistoricalPricesPage() {
                                                     curtailed: 0
                                                 }
                                             }
-                                            // Scale demand by 1000 (API returns GWh, supply is MWh)
-                                            dataMap[key].demand += (item.demandEnergy || 0) * 1000
+                                            // demandEnergy is now in MWh (converted from GWh in API route)
+                                            dataMap[key].demand += (item.demandEnergy || 0)
                                             // Sum supply fueltechs (exclude consumption like battery_charging, pumps)
                                             if (item.supply) {
                                                 const consumptionFueltechs = ['battery_charging', 'pumps']
@@ -1036,8 +1036,8 @@ export default function HistoricalPricesPage() {
                                             regionData.forEach(item => {
                                                 const key = item.date
                                                 if (dataMap[key]) {
-                                                    // Scale curtailed by 1000 (API returns GWh, supply is MWh)
-                                                    dataMap[key].curtailed += (item.curtailmentTotal || 0) * 1000
+                                                    // curtailmentTotal is now in MWh (converted from GWh in API route)
+                                                    dataMap[key].curtailed += (item.curtailmentTotal || 0)
                                                 }
                                             })
                                         })
