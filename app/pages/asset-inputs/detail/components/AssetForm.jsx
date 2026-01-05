@@ -331,9 +331,12 @@ const AssetForm = ({
             updated.volumeLossAdjustment = typeDefaults.volumeLossAdjustment;
             updated.annualDegradation = typeDefaults.annualDegradation;
             updated.constructionDuration = typeDefaults.constructionDuration;
-            // For hybrid assets, set BESS degradation default (1.0% for storage)
+            // For hybrid assets, set BESS degradation from storage defaults
             if (currentType === 'hybrid_solar_bess') {
-              updated.bessDegradation = updated.bessDegradation || 1.0;
+              const storageDefaults = assetDefaults.assetDefaults['storage'];
+              if (storageDefaults && !updated.bessDegradation) {
+                updated.bessDegradation = storageDefaults.annualDegradation || 1.0;
+              }
             }
 
             // Recalculate dates with new default duration if start date exists (only if not in operating mode)
@@ -919,14 +922,13 @@ const AssetForm = ({
                         <label className="block text-sm font-medium text-gray-700 mb-1">BESS Annual Degradation (%)</label>
                         <input
                           type="number"
-                          value={safeValue(formData.bessDegradation)}
+                          value={safeValue(formData.bessDegradation || (assetDefaults?.assetDefaults?.storage?.annualDegradation || 1.0))}
                           onChange={(e) => handleInputChange('bessDegradation', e.target.value)}
                           className="w-full p-2 border border-gray-300 rounded-md"
                           step="0.1"
-                          placeholder="1.0"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          BESS-specific degradation rate (typically higher than solar, default: 1.0%)
+                          BESS-specific degradation rate (pre-filled from storage defaults)
                         </p>
                       </div>
                     )}

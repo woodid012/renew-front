@@ -430,7 +430,7 @@ const AssetsDetailPage = () => {
       qtrCapacityFactor_q2: '', qtrCapacityFactor_q3: '', qtrCapacityFactor_q4: '',
       volume: '', durationHours: '', contracts: [],
       // Hybrid asset fields
-      solarCapacity: '', bessCapacity: '', bessDuration: '', bessDegradation: 1.0,
+      solarCapacity: '', bessCapacity: '', bessDuration: '', bessDegradation: '',
       // Initialize cost fields as undefined so they use defaults
       capex: undefined,
       operatingCosts: undefined,
@@ -476,6 +476,13 @@ const AssetsDetailPage = () => {
           initialData.qtrCapacityFactor_q2 = factors.q2;
           initialData.qtrCapacityFactor_q3 = factors.q3;
           initialData.qtrCapacityFactor_q4 = factors.q4;
+        }
+      }
+      // For hybrid assets, pre-fill BESS degradation from storage defaults
+      if (initialData.type === 'hybrid_solar_bess') {
+        const storageDefaults = assetDefaults.assetDefaults['storage'];
+        if (storageDefaults && !initialData.bessDegradation) {
+          initialData.bessDegradation = storageDefaults.annualDegradation || 1.0;
         }
       }
     }
@@ -524,6 +531,7 @@ const AssetsDetailPage = () => {
       solarCapacity: safeValue(asset.solarCapacity),
       bessCapacity: safeValue(asset.bessCapacity),
       bessDuration: safeValue(asset.bessDuration),
+      bessDegradation: safeValue(asset.bessDegradation), // Optional - will use storage default if empty
       contracts: asset.contracts ? asset.contracts.map(contract => ({
         id: safeValue(contract.id) || Date.now().toString(),
         counterparty: safeValue(contract.counterparty),
