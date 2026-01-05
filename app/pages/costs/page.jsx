@@ -270,6 +270,10 @@ export default function CostsPage() {
   const [originalDoc, setOriginalDoc] = useState(null);
   const [doc, setDoc] = useState(null);
 
+  // State for asset defaults and full asset data
+  const [assetDefaults, setAssetDefaults] = useState(null);
+  const [selectedAssetFullData, setSelectedAssetFullData] = useState(null); // Full asset data with type and capacity
+
   const uniqueId = useMemo(() => {
     if (!selectedPortfolio) return 'ZEBRE';
     const uid = getPortfolioUniqueId(selectedPortfolio) || selectedPortfolio;
@@ -406,6 +410,24 @@ export default function CostsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uniqueId]);
 
+  // Fetch asset defaults on mount
+  useEffect(() => {
+    const fetchAssetDefaults = async () => {
+      try {
+        const response = await fetch('/api/asset-defaults');
+        if (response.ok) {
+          const data = await response.json();
+          setAssetDefaults(data);
+        } else {
+          console.warn('Failed to fetch asset defaults:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching asset defaults:', error);
+      }
+    };
+    fetchAssetDefaults();
+  }, []);
+
   // Ensure selected asset has a costs object
   useEffect(() => {
     if (!doc || !selectedAssetId) return;
@@ -450,6 +472,51 @@ export default function CostsPage() {
     if (!selectedAssetId) return null;
     return assets.find((a) => String(a.asset_id) === String(selectedAssetId)) || null;
   }, [assets, selectedAssetId]);
+
+  // Fetch full asset data (type, capacity) when asset is selected
+  useEffect(() => {
+    if (!selectedAssetId || !uniqueId) {
+      setSelectedAssetFullData(null);
+      return;
+    }
+
+    const fetchFullAssetData = async () => {
+      try {
+        const response = await fetch(`/api/get-asset-data?unique_id=${encodeURIComponent(uniqueId)}`);
+        if (response.ok) {
+          const config = await response.json();
+          const assetInputs = Array.isArray(config.asset_inputs) ? config.asset_inputs : [];
+          const fullAsset = assetInputs.find((a) => {
+            const assetId = a.id ? String(a.id) : String(a._id || '');
+            return assetId === String(selectedAssetId);
+          });
+          
+          if (fullAsset) {
+            setSelectedAssetFullData({
+              type: fullAsset.type || null,
+              capacity: parseFloat(fullAsset.capacity) || 0,
+            });
+          } else {
+            // Fallback: try to get from assets array if available
+            const assetFromList = assets.find((a) => String(a.asset_id) === String(selectedAssetId));
+            if (assetFromList && assetFromList.type && assetFromList.capacity) {
+              setSelectedAssetFullData({
+                type: assetFromList.type,
+                capacity: parseFloat(assetFromList.capacity) || 0,
+              });
+            } else {
+              setSelectedAssetFullData(null);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching full asset data:', error);
+        setSelectedAssetFullData(null);
+      }
+    };
+
+    fetchFullAssetData();
+  }, [selectedAssetId, uniqueId, assets]);
 
   const defaultOpexRange = useMemo(() => {
     const start = toDateInputValue(selectedAsset?.OperatingStartDate);
@@ -710,6 +777,78 @@ export default function CostsPage() {
     await loadCostsDoc();
   };
 
+  // Apply defaults to current asset based on type and capacity
+  const applyDefaultsToCurrentAsset = () => {
+    if (!selectedAssetFullData || !assetDefaults || !currentAssetCosts) {
+      setStatus({ type: 'error', message: 'Cannot apply defaults: Asset type/capacity or defaults not available.' });
+      return;
+    }
+
+    const { type, capacity } = selectedAssetFullData;
+    if (!type || !assetDefaults.assetDefaults?.[type]) {
+      setStatus({ type: 'error', message: `Cannot apply defaults: Asset type "${type}" not found in defaults.` });
+      return;
+    }
+
+    const defaults = assetDefaults.assetDefaults[type];
+    const costAssumptions = defaults.costAssumptions || {};
+    
+    const capexPerMW = parseFloat(costAssumptions.capexPerMW) || 0;
+    const opexPerMWPerYear = parseFloat(costAssumptions.opexPerMWPerYear) || 0;
+    
+    const capexTotal = capexPerMW * capacity;
+    const opexTotal = opexPerMWPerYear * capacity;
+
+    updateAssetCosts((assetCosts) => {
+      // Apply CAPEX to first item in first group (Equipment) - immutable update
+      const capexGroups = (assetCosts.capex?.groups || []).map((group, groupIndex) => {
+        if (groupIndex === 0 && group.items && group.items.length > 0) {
+          return {
+            ...group,
+            items: group.items.map((item, itemIndex) => {
+              if (itemIndex === 0) {
+                return { ...item, value: capexTotal };
+              }
+              return item;
+            }),
+          };
+        }
+        return group;
+      });
+
+      // Apply OPEX to first item in first group (Fixed O&M) - immutable update
+      const opexGroups = (assetCosts.opex?.groups || []).map((group, groupIndex) => {
+        if (groupIndex === 0 && group.items && group.items.length > 0) {
+          return {
+            ...group,
+            items: group.items.map((item, itemIndex) => {
+              if (itemIndex === 0) {
+                return { ...item, value: opexTotal };
+              }
+              return item;
+            }),
+          };
+        }
+        return group;
+      });
+
+      return {
+        ...assetCosts,
+        capex: {
+          ...assetCosts.capex,
+          groups: capexGroups,
+        },
+        opex: {
+          ...assetCosts.opex,
+          groups: opexGroups,
+        },
+      };
+    });
+
+    setStatus({ type: 'success', message: `Applied defaults: CAPEX = ${formatCurrencyFromMillions(capexTotal, currencyUnit)}, OPEX = ${formatCurrencyFromMillions(opexTotal, currencyUnit)}/year` });
+    setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+  };
+
   if (assetsLoading || loadingCosts || !doc) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -775,23 +914,38 @@ export default function CostsPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
             <div className="lg:col-span-2">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Asset</label>
-              <select
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-                value={selectedAssetId}
-                onChange={(e) => setSelectedAssetId(e.target.value)}
-                disabled={assets.length === 0}
-              >
-                {assets.length === 0 ? (
-                  <option value="">No assets found</option>
-                ) : (
-                  assets.map((a) => (
-                    <option key={a.asset_id} value={String(a.asset_id)}>
-                      {a.asset_name || a.name || `Asset ${a.asset_id}`}
-                    </option>
-                  ))
-                )}
-              </select>
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Asset</label>
+                  <select
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                    value={selectedAssetId}
+                    onChange={(e) => setSelectedAssetId(e.target.value)}
+                    disabled={assets.length === 0}
+                  >
+                    {assets.length === 0 ? (
+                      <option value="">No assets found</option>
+                    ) : (
+                      assets.map((a) => (
+                        <option key={a.asset_id} value={String(a.asset_id)}>
+                          {a.asset_name || a.name || `Asset ${a.asset_id}`}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <button
+                  onClick={applyDefaultsToCurrentAsset}
+                  disabled={!selectedAssetFullData || !assetDefaults || !currentAssetCosts || !selectedAssetFullData.type}
+                  className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  title={!selectedAssetFullData || !selectedAssetFullData.type 
+                    ? 'Select an asset with type and capacity to apply defaults'
+                    : 'Apply default CAPEX and OPEX values based on asset type and capacity'}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Apply Defaults
+                </button>
+              </div>
             </div>
 
             {/* Summary (moved up next to asset selector) */}

@@ -1,7 +1,7 @@
 // app/pages/run-model/page.jsx
 "use client"
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Play, Square, AlertCircle, CheckCircle, Loader2, Settings, FileText, ExternalLink } from 'lucide-react';
 import { useRunModel } from '../../context/RunModelContext';
@@ -61,55 +61,79 @@ const RunModelPage = () => {
     fetchCurveNames();
   }, [backendUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch and set price curve preference for current portfolio (only when portfolio changes)
-  useEffect(() => {
+  // Function to fetch price curve for current portfolio
+  const fetchPortfolioPriceCurve = useCallback(async (forceRefresh = false) => {
     if (priceCurves.length === 0) {
       // Wait for curves to load first
       return;
     }
 
-    // Only fetch if portfolio actually changed
-    if (lastLoadedPortfolioRef.current === selectedPortfolio) {
+    // Only fetch if portfolio actually changed or if forcing refresh
+    if (!forceRefresh && lastLoadedPortfolioRef.current === selectedPortfolio) {
       return;
     }
 
-    const fetchPortfolioPriceCurve = async () => {
-      setIsLoadingCurves(true);
-      try {
-        // Fetch saved settings for current unique_id (portfolio) or global default
-        const settingsUrl = selectedPortfolio
-          ? `/api/model-settings?unique_id=${encodeURIComponent(selectedPortfolio)}`
-          : '/api/model-settings';
-        
-        const settingsResponse = await fetch(settingsUrl);
-        const settingsData = await settingsResponse.json();
-        const savedDefault = settingsData.settings?.defaultPriceCurve;
+    setIsLoadingCurves(true);
+    try {
+      // Fetch saved settings for current unique_id (portfolio) or global default
+      const settingsUrl = selectedPortfolio
+        ? `/api/model-settings?unique_id=${encodeURIComponent(selectedPortfolio)}`
+        : '/api/model-settings';
+      
+      const settingsResponse = await fetch(settingsUrl);
+      const settingsData = await settingsResponse.json();
+      const savedDefault = settingsData.settings?.defaultPriceCurve;
 
-        // Only update if we have a saved preference and it's valid
-        if (savedDefault && priceCurves.includes(savedDefault)) {
-          setSelectedPriceCurve(savedDefault);
-        } else if (!selectedPriceCurve || !priceCurves.includes(selectedPriceCurve)) {
-          // Set fallback if no curve is selected or current selection is invalid
-          setSelectedPriceCurve(priceCurves[priceCurves.length - 1]);
-        }
-        
-        // Mark this portfolio as loaded
-        lastLoadedPortfolioRef.current = selectedPortfolio;
-      } catch (error) {
-        console.error("Failed to fetch price curve settings:", error);
-        // Don't show warning for every portfolio change, just log it
-        // Set fallback if fetch fails
-        if (!selectedPriceCurve || !priceCurves.includes(selectedPriceCurve)) {
-          setSelectedPriceCurve(priceCurves[priceCurves.length - 1]);
-        }
-        lastLoadedPortfolioRef.current = selectedPortfolio;
-      } finally {
-        setIsLoadingCurves(false);
+      // Only update if we have a saved preference and it's valid
+      if (savedDefault && priceCurves.includes(savedDefault)) {
+        setSelectedPriceCurve(savedDefault);
+      } else if (!selectedPriceCurve || !priceCurves.includes(selectedPriceCurve)) {
+        // Set fallback if no curve is selected or current selection is invalid
+        setSelectedPriceCurve(priceCurves[priceCurves.length - 1]);
+      }
+      
+      // Mark this portfolio as loaded
+      lastLoadedPortfolioRef.current = selectedPortfolio;
+    } catch (error) {
+      console.error("Failed to fetch price curve settings:", error);
+      // Don't show warning for every portfolio change, just log it
+      // Set fallback if fetch fails
+      if (!selectedPriceCurve || !priceCurves.includes(selectedPriceCurve)) {
+        setSelectedPriceCurve(priceCurves[priceCurves.length - 1]);
+      }
+      lastLoadedPortfolioRef.current = selectedPortfolio;
+    } finally {
+      setIsLoadingCurves(false);
+    }
+  }, [selectedPortfolio, priceCurves, selectedPriceCurve]);
+
+  // Fetch and set price curve preference for current portfolio (only when portfolio changes)
+  useEffect(() => {
+    fetchPortfolioPriceCurve();
+  }, [selectedPortfolio, priceCurves, fetchPortfolioPriceCurve]);
+
+  // Refresh price curve when page becomes visible (e.g., returning from price curves page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Refresh price curve when page becomes visible
+        fetchPortfolioPriceCurve(true);
       }
     };
 
-    fetchPortfolioPriceCurve();
-  }, [selectedPortfolio, priceCurves]); // eslint-disable-line react-hooks/exhaustive-deps
+    const handleFocus = () => {
+      // Also refresh on window focus (when user switches back to tab)
+      fetchPortfolioPriceCurve(true);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchPortfolioPriceCurve]);
 
   // Navigate to price-curves page when user clicks to change price curve
   const handlePriceCurveClick = () => {

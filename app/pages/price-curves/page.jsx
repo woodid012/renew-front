@@ -32,6 +32,7 @@ import {
   Database
 } from 'lucide-react'
 import { useDisplaySettings } from '../../context/DisplaySettingsContext'
+import { usePortfolio } from '../../context/PortfolioContext'
 import { formatCurrency } from '../../utils/currencyFormatter'
 
 // Constants
@@ -50,6 +51,7 @@ const PERIOD_OPTIONS = [
 export default function PriceCurves2Page() {
   const searchParams = useSearchParams()
   const { currencyUnit } = useDisplaySettings()
+  const { selectedPortfolio } = usePortfolio()
   const [priceCurves, setPriceCurves] = useState([])
   const [curveNames, setCurveNames] = useState(['AC Nov 2024'])
   const [selectedCurve, setSelectedCurve] = useState('AC Nov 2024')
@@ -105,10 +107,13 @@ export default function PriceCurves2Page() {
   useEffect(() => {
     const initializePage = async () => {
       try {
-        // 1. Fetch Model Settings (to get saved default)
+        // 1. Fetch Model Settings (to get saved default) - use portfolio unique_id if available
         let savedDefaultCurve = null;
         try {
-          const settingsResponse = await fetch('/api/model-settings');
+          const settingsUrl = selectedPortfolio
+            ? `/api/model-settings?unique_id=${encodeURIComponent(selectedPortfolio)}`
+            : '/api/model-settings';
+          const settingsResponse = await fetch(settingsUrl);
           if (settingsResponse.ok) {
             const settingsData = await settingsResponse.json();
             if (settingsData.settings) {
@@ -162,7 +167,7 @@ export default function PriceCurves2Page() {
     };
 
     initializePage();
-  }, [searchParams]); // Re-run if URL params change, though usually this is just on mount/nav
+  }, [searchParams, selectedPortfolio]); // Re-run if URL params or portfolio changes
 
   // fetchModelSettings is now part of initialization, but we might keep it if needed for re-fetching independently?
   // The 'saveMerchantSettings' refetches it internally before saving, so we don't strictly need it exposed as a standalone function for that purpose.
@@ -266,8 +271,11 @@ export default function PriceCurves2Page() {
     setSaveStatus({ type: null, message: '' })
 
     try {
-      // Fetch current settings first to preserve other fields
-      const currentResponse = await fetch('/api/model-settings')
+      // Fetch current settings first to preserve other fields - use portfolio unique_id if available
+      const currentSettingsUrl = selectedPortfolio
+        ? `/api/model-settings?unique_id=${encodeURIComponent(selectedPortfolio)}`
+        : '/api/model-settings';
+      const currentResponse = await fetch(currentSettingsUrl)
       let currentSettings = {}
       if (currentResponse.ok) {
         const currentData = await currentResponse.json()
@@ -277,11 +285,13 @@ export default function PriceCurves2Page() {
       }
 
       // Update only the merchant escalation fields AND the default price curve
+      // Include unique_id if a portfolio is selected so settings are saved per-portfolio
       const updatedSettings = {
         ...currentSettings,
         merchantPriceEscalationRate: merchantEscalationRate,
         merchantPriceEscalationReferenceDate: merchantRefDate,
-        defaultPriceCurve: selectedCurve // Save the currently selected curve as default
+        defaultPriceCurve: selectedCurve, // Save the currently selected curve as default
+        ...(selectedPortfolio && { unique_id: selectedPortfolio }) // Include unique_id for portfolio-specific settings
       }
 
       const response = await fetch('/api/model-settings', {
@@ -302,7 +312,8 @@ export default function PriceCurves2Page() {
         ...updatedSettings
       }))
 
-      setSaveStatus({ type: 'success', message: 'Settings saved successfully! Default curve updated.' })
+      const portfolioMsg = selectedPortfolio ? ` for portfolio ${selectedPortfolio}` : '';
+      setSaveStatus({ type: 'success', message: `Settings saved successfully! Default curve updated${portfolioMsg}.` })
 
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -314,7 +325,7 @@ export default function PriceCurves2Page() {
     } finally {
       setSavingSettings(false)
     }
-  }, [merchantEscalationRate, merchantRefDate, selectedCurve])
+  }, [merchantEscalationRate, merchantRefDate, selectedCurve, selectedPortfolio])
 
   const fetchPriceCurves = useCallback(async () => {
     try {
