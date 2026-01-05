@@ -183,6 +183,77 @@ export default function PriceCurves2Page() {
   // Let's remove `fetchCurveNames` as a standalone function to avoid confusion/conflicts, or define it inside the effect?
   // To keep code clean, I will remove the standalone definitions and just have the effect do the work.
 
+  const fetchPriceCurves = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const url = `/api/price-curves?period=${selectedPeriod}&curve_name=${encodeURIComponent(selectedCurve)}`
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setPriceCurves(data)
+
+      // Extract unique values for filters
+      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
+      const filteredRegions = regions.filter(r => r !== 'TAS')
+      const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
+      const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
+
+      setAvailableRegions(filteredRegions)
+
+      const hasSpreadTypes = types.some(type => type.startsWith('SPREAD_'))
+      if (hasSpreadTypes && !profiles.includes('storage')) {
+        setAvailableProfiles([...profiles, 'storage'])
+      } else {
+        setAvailableProfiles(profiles)
+      }
+      setAvailableTypes(types)
+
+      // Set date range
+      if (data.length > 0) {
+        const dates = data.map(item => {
+          if (selectedPeriod === 'monthly') {
+            return new Date(item._id.year, item._id.month - 1, 1)
+          } else if (selectedPeriod === 'quarterly') {
+            return new Date(item._id.year, (item._id.quarter - 1) * 3, 1)
+          } else if (selectedPeriod === 'yearly') {
+            return new Date(item._id.year, 0, 1)
+          } else if (selectedPeriod === 'fiscal_yearly') {
+            return new Date(item._id.fiscalYear, 6, 1)
+          } else {
+            return new Date(item.TIME)
+          }
+        }).filter(d => !isNaN(d))
+
+        if (dates.length > 0) {
+          setDateRange({
+            start: new Date(Math.min(...dates)),
+            end: new Date(Math.max(...dates))
+          })
+        }
+      }
+
+      // Default to showing Energy and Green if they exist
+      const defaultTypes = ['ENERGY']
+      // Include all types that start with "GREEN" (e.g., "GREEN", "GREEN_YEARLY")
+      const greenTypes = types.filter(type => type.startsWith('GREEN'))
+      if (greenTypes.length > 0) {
+        defaultTypes.push(...greenTypes)
+      }
+      setSelectedTypes(defaultTypes)
+
+    } catch (err) {
+      console.error('Error fetching price curves:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedPeriod, selectedCurve, searchParams])
+
   // Fetch price curves when period or curve changes, but only after initialization is complete
   useEffect(() => {
     if (isInitialized && selectedCurve) {
@@ -335,77 +406,6 @@ export default function PriceCurves2Page() {
       setSavingSettings(false)
     }
   }, [merchantEscalationRate, merchantRefDate, selectedCurve, selectedPortfolio])
-
-  const fetchPriceCurves = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const url = `/api/price-curves?period=${selectedPeriod}&curve_name=${encodeURIComponent(selectedCurve)}`
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      setPriceCurves(data)
-
-      // Extract unique values for filters
-      const regions = [...new Set(data.map(item => item._id.REGION).filter(Boolean))].sort()
-      const filteredRegions = regions.filter(r => r !== 'TAS')
-      const profiles = [...new Set(data.map(item => item._id.PROFILE).filter(Boolean))].sort()
-      const types = [...new Set(data.map(item => item._id.TYPE).filter(Boolean))].sort()
-
-      setAvailableRegions(filteredRegions)
-
-      const hasSpreadTypes = types.some(type => type.startsWith('SPREAD_'))
-      if (hasSpreadTypes && !profiles.includes('storage')) {
-        setAvailableProfiles([...profiles, 'storage'])
-      } else {
-        setAvailableProfiles(profiles)
-      }
-      setAvailableTypes(types)
-
-      // Set date range
-      if (data.length > 0) {
-        const dates = data.map(item => {
-          if (selectedPeriod === 'monthly') {
-            return new Date(item._id.year, item._id.month - 1, 1)
-          } else if (selectedPeriod === 'quarterly') {
-            return new Date(item._id.year, (item._id.quarter - 1) * 3, 1)
-          } else if (selectedPeriod === 'yearly') {
-            return new Date(item._id.year, 0, 1)
-          } else if (selectedPeriod === 'fiscal_yearly') {
-            return new Date(item._id.fiscalYear, 6, 1)
-          } else {
-            return new Date(item.TIME)
-          }
-        }).filter(d => !isNaN(d))
-
-        if (dates.length > 0) {
-          setDateRange({
-            start: new Date(Math.min(...dates)),
-            end: new Date(Math.max(...dates))
-          })
-        }
-      }
-
-      // Default to showing Energy and Green if they exist
-      const defaultTypes = ['ENERGY']
-      // Include all types that start with "GREEN" (e.g., "GREEN", "GREEN_YEARLY")
-      const greenTypes = types.filter(type => type.startsWith('GREEN'))
-      if (greenTypes.length > 0) {
-        defaultTypes.push(...greenTypes)
-      }
-      setSelectedTypes(defaultTypes)
-
-    } catch (err) {
-      console.error('Error fetching price curves:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [selectedPeriod, selectedCurve, searchParams]) // Added searchParams to dependencies
 
   const handleRegionChange = useCallback((region) => {
     setSelectedRegions(prev => {
