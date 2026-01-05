@@ -35,6 +35,12 @@ const AssetCards = ({
       case 'solar': return <Sun className="w-5 h-5 text-yellow-500" />;
       case 'wind': return <Wind className="w-5 h-5 text-blue-500" />;
       case 'storage': return <BatteryFull className="w-5 h-5 text-green-500" />;
+      case 'hybrid_solar_bess': return (
+        <div className="flex items-center gap-1">
+          <Sun className="w-4 h-4 text-yellow-500" />
+          <BatteryFull className="w-4 h-4 text-green-500" />
+        </div>
+      );
       default: return <Zap className="w-5 h-5 text-gray-500" />;
     }
   };
@@ -222,15 +228,38 @@ const AssetCards = ({
               </div>
               
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Capacity:</span>
-                  <span className="font-medium">{asset.capacity} MW</span>
-                </div>
-                {asset.type === 'storage' && asset.volume && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Storage:</span>
-                    <span className="font-medium">{asset.volume} MWh</span>
-                  </div>
+                {asset.type === 'hybrid_solar_bess' ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Capacity (Solar):</span>
+                      <span className="font-medium">{parseFloat(asset.solarCapacity) || 0} MW</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Capacity (BESS):</span>
+                      <span className="font-medium">{parseFloat(asset.bessCapacity) || 0} MW</span>
+                    </div>
+                    {asset.bessCapacity && asset.bessDuration && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Storage:</span>
+                        <span className="font-medium">
+                          {(parseFloat(asset.bessCapacity) || 0) * (parseFloat(asset.bessDuration) || 0)} MWh
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Capacity:</span>
+                      <span className="font-medium">{asset.capacity} MW</span>
+                    </div>
+                    {asset.type === 'storage' && asset.volume && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Storage:</span>
+                        <span className="font-medium">{asset.volume} MWh</span>
+                      </div>
+                    )}
+                  </>
                 )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">Operations:</span>

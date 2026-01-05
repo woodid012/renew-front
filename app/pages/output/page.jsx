@@ -33,6 +33,8 @@ const FIELDS_TO_PLOT = [
     { key: 'contractedEnergyRevenue', label: 'Contracted Energy Revenue', category: 'Revenue', color: '#06b6d4' },
     { key: 'merchantGreenRevenue', label: 'Merchant Green Revenue', category: 'Revenue', color: '#84cc16' },
     { key: 'merchantEnergyRevenue', label: 'Merchant Energy Revenue', category: 'Revenue', color: '#06b6d4' },
+    { key: 'solarRevenue', label: 'Solar Revenue (Green + Energy)', category: 'Revenue', color: '#f59e0b' },
+    { key: 'bessRevenue', label: 'BESS Revenue (Energy)', category: 'Revenue', color: '#8b5cf6' },
     { key: 'monthlyGeneration', label: 'Monthly Generation', category: 'Generation', color: '#f59e0b' },
     { key: 'avgGreenPrice', label: 'Avg Green Price', category: 'Pricing', color: '#22c55e' },
     { key: 'avgEnergyPrice', label: 'Avg Energy Price', category: 'Pricing', color: '#06b6d4' },

@@ -167,9 +167,22 @@ export const RunModelProvider = ({ children }) => {
             portfolio: uniqueId,
             price_curve: priceCurve
           }),
-        }).then(response => {
+        }).then(async response => {
           if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            // Try to parse error message from JSON response
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+              const errorData = await response.json();
+              if (errorData.message) {
+                errorMessage = errorData.message;
+              } else if (errorData.error) {
+                errorMessage = errorData.error;
+              }
+            } catch (e) {
+              // If JSON parsing fails, use the default error message
+              console.error('Failed to parse error response:', e);
+            }
+            throw new Error(errorMessage);
           }
 
           // Read the stream
@@ -272,9 +285,22 @@ export const RunModelProvider = ({ children }) => {
             prefix: 'sensitivity_results',
             portfolio: uniqueId
           }),
-        }).then(response => {
+        }).then(async response => {
           if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            // Try to parse error message from JSON response
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+              const errorData = await response.json();
+              if (errorData.message) {
+                errorMessage = errorData.message;
+              } else if (errorData.error) {
+                errorMessage = errorData.error;
+              }
+            } catch (e) {
+              // If JSON parsing fails, use the default error message
+              console.error('Failed to parse error response:', e);
+            }
+            throw new Error(errorMessage);
           }
 
           // Read the stream

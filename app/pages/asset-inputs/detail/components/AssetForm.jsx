@@ -212,7 +212,10 @@ const AssetForm = ({
 
   // Calculate volume metrics for performance tab
   const calculateVolumeMetrics = () => {
-    const capacity = parseFloat(formData.capacity) || 0;
+    // For hybrid assets, use solar capacity for volume calculations
+    const capacity = formData.type === 'hybrid_solar_bess' 
+      ? (parseFloat(formData.solarCapacity) || 0)
+      : (parseFloat(formData.capacity) || 0);
     const hoursPerQuarter = {
       q1: 2160, // 90 days (Jan 31 + Feb 28 + Mar 31)
       q2: 2184, // 91 days (Apr 30 + May 31 + Jun 30)
@@ -265,6 +268,13 @@ const AssetForm = ({
           // Clear duration if volume or capacity is cleared
           updated.durationHours = '';
         }
+      }
+
+      // For hybrid assets, calculate total capacity when solarCapacity or bessCapacity changes
+      if (prev.type === 'hybrid_solar_bess' && (field === 'solarCapacity' || field === 'bessCapacity')) {
+        const solarCapacity = field === 'solarCapacity' ? parseFloat(value) || 0 : parseFloat(prev.solarCapacity) || 0;
+        const bessCapacity = field === 'bessCapacity' ? parseFloat(value) || 0 : parseFloat(prev.bessCapacity) || 0;
+        updated.capacity = solarCapacity + bessCapacity; // Total capacity for costs/finance
       }
 
       // Handle OperatingStartDate change when in operating mode
@@ -321,6 +331,10 @@ const AssetForm = ({
             updated.volumeLossAdjustment = typeDefaults.volumeLossAdjustment;
             updated.annualDegradation = typeDefaults.annualDegradation;
             updated.constructionDuration = typeDefaults.constructionDuration;
+            // For hybrid assets, set BESS degradation default (1.0% for storage)
+            if (currentType === 'hybrid_solar_bess') {
+              updated.bessDegradation = updated.bessDegradation || 1.0;
+            }
 
             // Recalculate dates with new default duration if start date exists (only if not in operating mode)
             if (!isOperating && updated.constructionStartDate && typeDefaults.constructionDuration !== undefined) {
@@ -344,7 +358,15 @@ const AssetForm = ({
               updated.constructionDuration = 0;
             }
             // Prepopulate cost defaults for new type
-            const defaults = getDefaultAssetCosts(currentType, parseFloat(updated.capacity) || 0);
+            // For hybrid assets, use total capacity (solar + BESS)
+            let capacityForCosts = parseFloat(updated.capacity) || 0;
+            if (currentType === 'hybrid_solar_bess') {
+              const solarCapacity = parseFloat(updated.solarCapacity) || 0;
+              const bessCapacity = parseFloat(updated.bessCapacity) || 0;
+              capacityForCosts = solarCapacity + bessCapacity;
+              updated.capacity = capacityForCosts; // Set total capacity for backward compatibility
+            }
+            const defaults = getDefaultAssetCosts(currentType, capacityForCosts);
             updated.capex = defaults.capex;
             updated.operatingCosts = defaults.operatingCosts;
             updated.operatingCostEscalation = defaults.operatingCostEscalation;
@@ -358,9 +380,11 @@ const AssetForm = ({
           }
         }
 
-        // If type or region changed, update capacity factors (only for solar/wind)
+        // If type or region changed, update capacity factors (only for solar/wind/hybrid)
         if ((field === 'type' || field === 'region') && currentType !== 'storage') {
-          const typeDefaults = assetDefaults.assetDefaults[currentType];
+          // For hybrid assets, use solar capacity factors
+          const typeForCapacityFactors = currentType === 'hybrid_solar_bess' ? 'solar' : currentType;
+          const typeDefaults = assetDefaults.assetDefaults[typeForCapacityFactors];
           if (typeDefaults && typeDefaults.capacityFactors) {
             const regionFactors = typeDefaults.capacityFactors[currentRegion];
             if (regionFactors) {
@@ -385,6 +409,26 @@ const AssetForm = ({
           if (!prev.interestRate) updated.interestRate = defaults.interestRate;
           if (!prev.tenorYears) updated.tenorYears = defaults.tenorYears;
           if (!prev.debtStructure) updated.debtStructure = defaults.debtStructure;
+        }
+        // For hybrid assets, update cost defaults when solarCapacity or bessCapacity changes
+        if (currentType === 'hybrid_solar_bess' && (field === 'solarCapacity' || field === 'bessCapacity')) {
+          const solarCapacity = field === 'solarCapacity' ? parseFloat(value) || 0 : parseFloat(prev.solarCapacity) || 0;
+          const bessCapacity = field === 'bessCapacity' ? parseFloat(value) || 0 : parseFloat(prev.bessCapacity) || 0;
+          const totalCapacity = solarCapacity + bessCapacity;
+          if (totalCapacity > 0) {
+            const defaults = getDefaultAssetCosts(currentType, totalCapacity);
+            // Only set if the cost fields are currently empty (i.e., not manually edited)
+            if (!prev.capex) updated.capex = defaults.capex;
+            if (!prev.operatingCosts) updated.operatingCosts = defaults.operatingCosts;
+            if (!prev.operatingCostEscalation) updated.operatingCostEscalation = defaults.operatingCostEscalation;
+            if (!prev.terminalValue) updated.terminalValue = defaults.terminalValue;
+            if (!prev.maxGearing) updated.maxGearing = defaults.maxGearing;
+            if (!prev.targetDSCRContract) updated.targetDSCRContract = defaults.targetDSCRContract;
+            if (!prev.targetDSCRMerchant) updated.targetDSCRMerchant = defaults.targetDSCRMerchant;
+            if (!prev.interestRate) updated.interestRate = defaults.interestRate;
+            if (!prev.tenorYears) updated.tenorYears = defaults.tenorYears;
+            if (!prev.debtStructure) updated.debtStructure = defaults.debtStructure;
+          }
         }
       }
 
@@ -584,19 +628,62 @@ const AssetForm = ({
                       <option value="solar">Solar</option>
                       <option value="wind">Wind</option>
                       <option value="storage">Battery Storage</option>
+                      <option value="hybrid_solar_bess">Hybrid (Solar + BESS)</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (MW)</label>
-                    <input
-                      type="number"
-                      value={safeValue(formData.capacity)}
-                      onChange={(e) => handleInputChange('capacity', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded-md"
-                      step="0.1"
-                      required
-                    />
-                  </div>
+                  {formData.type === 'hybrid_solar_bess' ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Solar Capacity (MW)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.solarCapacity)}
+                          onChange={(e) => handleInputChange('solarCapacity', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">BESS Capacity (MW)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.bessCapacity)}
+                          onChange={(e) => handleInputChange('bessCapacity', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">BESS Duration (hours)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.bessDuration)}
+                          onChange={(e) => handleInputChange('bessDuration', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                          min="0.1"
+                          required
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Used for merchant price curve lookup and revenue calculations.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (MW)</label>
+                      <input
+                        type="number"
+                        value={safeValue(formData.capacity)}
+                        onChange={(e) => handleInputChange('capacity', e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                        step="0.1"
+                        required
+                      />
+                    </div>
+                  )}
                   {formData.type === 'storage' && (
                     <>
                       <div>
@@ -827,6 +914,22 @@ const AssetForm = ({
                         />
                       </div>
                     </div>
+                    {formData.type === 'hybrid_solar_bess' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">BESS Annual Degradation (%)</label>
+                        <input
+                          type="number"
+                          value={safeValue(formData.bessDegradation)}
+                          onChange={(e) => handleInputChange('bessDegradation', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          step="0.1"
+                          placeholder="1.0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          BESS-specific degradation rate (typically higher than solar, default: 1.0%)
+                        </p>
+                      </div>
+                    )}
 
                     {/* Post-Adjustment Volume Summary */}
                     {(() => {

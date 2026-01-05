@@ -23,10 +23,27 @@ export async function POST(request) {
     });
 
     if (!response.ok) {
+      // Try to extract error message from backend response
+      let errorMessage = `Backend returned ${response.status}: ${response.statusText}`;
+      try {
+        const errorText = await response.text();
+        if (errorText) {
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch {
+            // If not JSON, use the text as error message
+            errorMessage = errorText.substring(0, 500); // Limit length
+          }
+        }
+      } catch (e) {
+        console.error('Failed to read error response:', e);
+      }
+      
       return NextResponse.json(
         { 
           status: 'error', 
-          message: `Backend returned ${response.status}` 
+          message: errorMessage 
         },
         { status: response.status }
       );
@@ -42,10 +59,17 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('Error proxying stream to backend:', error);
+    const errorMessage = error.message || 'Failed to connect to backend. Make sure the Python backend is running on port 10000.';
+    const backendUrl = process.env.NODE_ENV === 'development'
+      ? process.env.LOCAL_BACKEND_URL || 'http://localhost:10000'
+      : process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-renew.onrender.com';
+    
     return NextResponse.json(
       { 
         status: 'error', 
-        message: error.message || 'Failed to connect to backend. Make sure the Python backend is running on port 10000.' 
+        message: `${errorMessage} (Backend URL: ${backendUrl})`,
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
       { status: 500 }
     );

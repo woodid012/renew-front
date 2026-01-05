@@ -73,6 +73,7 @@ export default function PriceCurves2Page() {
   const [merchantRefDate, setMerchantRefDate] = useState('2025-01-01')
   const [savingSettings, setSavingSettings] = useState(false)
   const [saveStatus, setSaveStatus] = useState({ type: null, message: '' })
+  const [isInitialized, setIsInitialized] = useState(false) // Track initialization completion
 
   // Format period label helper function
   const formatPeriodLabel = useCallback((timeKey, period) => {
@@ -105,6 +106,9 @@ export default function PriceCurves2Page() {
 
   // Initialize page data
   useEffect(() => {
+    // Reset initialization flag when portfolio or search params change
+    setIsInitialized(false);
+    
     const initializePage = async () => {
       try {
         // 1. Fetch Model Settings (to get saved default) - use portfolio unique_id if available
@@ -163,6 +167,9 @@ export default function PriceCurves2Page() {
         }
       } catch (err) {
         console.error('Error initializing page:', err);
+      } finally {
+        // Mark initialization as complete
+        setIsInitialized(true);
       }
     };
 
@@ -176,10 +183,12 @@ export default function PriceCurves2Page() {
   // Let's remove `fetchCurveNames` as a standalone function to avoid confusion/conflicts, or define it inside the effect?
   // To keep code clean, I will remove the standalone definitions and just have the effect do the work.
 
-  // Fetch price curves when period or curve changes
+  // Fetch price curves when period or curve changes, but only after initialization is complete
   useEffect(() => {
-    fetchPriceCurves()
-  }, [selectedPeriod, selectedCurve])
+    if (isInitialized && selectedCurve) {
+      fetchPriceCurves()
+    }
+  }, [selectedPeriod, selectedCurve, isInitialized, fetchPriceCurves])
 
   // Process chart data when filters change
   const chartData = useMemo(() => {
@@ -329,9 +338,6 @@ export default function PriceCurves2Page() {
 
   const fetchPriceCurves = useCallback(async () => {
     try {
-      setLoading(true)
-      setError(null)
-
       setLoading(true)
       setError(null)
 

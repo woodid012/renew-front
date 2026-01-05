@@ -308,6 +308,13 @@ const AssetsDetailPage = () => {
           processedFormData.durationHours = (volume / capacity).toFixed(2);
         }
       }
+      
+      // For hybrid assets, calculate total capacity from solar + BESS
+      if (formData.type === 'hybrid_solar_bess') {
+        const solarCapacity = parseFloat(formData.solarCapacity) || 0;
+        const bessCapacity = parseFloat(formData.bessCapacity) || 0;
+        processedFormData.capacity = solarCapacity + bessCapacity; // Total for costs/finance
+      }
 
       if (editingAsset) {
         assetId = editingAsset.id;
@@ -343,17 +350,21 @@ const AssetsDetailPage = () => {
       }
 
       // Extract cost assumptions from formData
+      // For hybrid assets, use total capacity (solar + BESS)
+      const capacityForCosts = formData.type === 'hybrid_solar_bess' 
+        ? (parseFloat(formData.solarCapacity) || 0) + (parseFloat(formData.bessCapacity) || 0)
+        : formData.capacity;
       const costAssumptions = {
-        capex: formData.capex !== undefined && formData.capex !== null ? formData.capex : (getDefaultAssetCosts(formData.type, formData.capacity).capex),
-        operatingCosts: formData.operatingCosts !== undefined && formData.operatingCosts !== null ? formData.operatingCosts : (getDefaultAssetCosts(formData.type, formData.capacity).operatingCosts),
-        operatingCostEscalation: formData.operatingCostEscalation !== undefined && formData.operatingCostEscalation !== null ? formData.operatingCostEscalation : (getDefaultAssetCosts(formData.type, formData.capacity).operatingCostEscalation),
-        terminalValue: formData.terminalValue !== undefined && formData.terminalValue !== null ? formData.terminalValue : (getDefaultAssetCosts(formData.type, formData.capacity).terminalValue),
-        maxGearing: formData.maxGearing !== undefined && formData.maxGearing !== null ? formData.maxGearing : (getDefaultAssetCosts(formData.type, formData.capacity).maxGearing),
-        targetDSCRContract: formData.targetDSCRContract !== undefined && formData.targetDSCRContract !== null ? formData.targetDSCRContract : (getDefaultAssetCosts(formData.type, formData.capacity).targetDSCRContract),
-        targetDSCRMerchant: formData.targetDSCRMerchant !== undefined && formData.targetDSCRMerchant !== null ? formData.targetDSCRMerchant : (getDefaultAssetCosts(formData.type, formData.capacity).targetDSCRMerchant),
-        interestRate: formData.interestRate !== undefined && formData.interestRate !== null ? formData.interestRate : (getDefaultAssetCosts(formData.type, formData.capacity).interestRate),
-        tenorYears: formData.tenorYears !== undefined && formData.tenorYears !== null ? formData.tenorYears : (getDefaultAssetCosts(formData.type, formData.capacity).tenorYears),
-        debtStructure: formData.debtStructure || (getDefaultAssetCosts(formData.type, formData.capacity).debtStructure)
+        capex: formData.capex !== undefined && formData.capex !== null ? formData.capex : (getDefaultAssetCosts(formData.type, capacityForCosts).capex),
+        operatingCosts: formData.operatingCosts !== undefined && formData.operatingCosts !== null ? formData.operatingCosts : (getDefaultAssetCosts(formData.type, capacityForCosts).operatingCosts),
+        operatingCostEscalation: formData.operatingCostEscalation !== undefined && formData.operatingCostEscalation !== null ? formData.operatingCostEscalation : (getDefaultAssetCosts(formData.type, capacityForCosts).operatingCostEscalation),
+        terminalValue: formData.terminalValue !== undefined && formData.terminalValue !== null ? formData.terminalValue : (getDefaultAssetCosts(formData.type, capacityForCosts).terminalValue),
+        maxGearing: formData.maxGearing !== undefined && formData.maxGearing !== null ? formData.maxGearing : (getDefaultAssetCosts(formData.type, capacityForCosts).maxGearing),
+        targetDSCRContract: formData.targetDSCRContract !== undefined && formData.targetDSCRContract !== null ? formData.targetDSCRContract : (getDefaultAssetCosts(formData.type, capacityForCosts).targetDSCRContract),
+        targetDSCRMerchant: formData.targetDSCRMerchant !== undefined && formData.targetDSCRMerchant !== null ? formData.targetDSCRMerchant : (getDefaultAssetCosts(formData.type, capacityForCosts).targetDSCRMerchant),
+        interestRate: formData.interestRate !== undefined && formData.interestRate !== null ? formData.interestRate : (getDefaultAssetCosts(formData.type, capacityForCosts).interestRate),
+        tenorYears: formData.tenorYears !== undefined && formData.tenorYears !== null ? formData.tenorYears : (getDefaultAssetCosts(formData.type, capacityForCosts).tenorYears),
+        debtStructure: formData.debtStructure || (getDefaultAssetCosts(formData.type, capacityForCosts).debtStructure)
       };
 
       setConstants(prev => ({
@@ -391,8 +402,8 @@ const AssetsDetailPage = () => {
       };
     }
 
-    const capexRates = { solar: 0.9, wind: 1.5, storage: 2.0 };
-    const opexRates = { solar: 0.01, wind: 0.02, storage: 0.03 };
+    const capexRates = { solar: 0.9, wind: 1.5, storage: 2.0, hybrid_solar_bess: 1.2 }; // Weighted average for hybrid
+    const opexRates = { solar: 0.01, wind: 0.02, storage: 0.03, hybrid_solar_bess: 0.015 }; // Weighted average for hybrid
 
     const capex = (capexRates[type] || 1.0) * (capacity || 100);
     const operatingCosts = (opexRates[type] || 0.02) * (capacity || 100);
@@ -402,7 +413,7 @@ const AssetsDetailPage = () => {
       operatingCosts: Math.round(operatingCosts * 100) / 100,
       operatingCostEscalation: 2.5,
       terminalValue: type === 'storage' ? Math.round(capacity * 0.5) : 0,
-      maxGearing: type === 'solar' ? 0.7 : 0.65,
+      maxGearing: type === 'solar' || type === 'hybrid_solar_bess' ? 0.7 : 0.65,
       targetDSCRContract: 1.4,
       targetDSCRMerchant: 1.8,
       interestRate: 0.06,
@@ -418,6 +429,8 @@ const AssetsDetailPage = () => {
       constructionDuration: 18, OperatingStartDate: '', qtrCapacityFactor_q1: '',
       qtrCapacityFactor_q2: '', qtrCapacityFactor_q3: '', qtrCapacityFactor_q4: '',
       volume: '', durationHours: '', contracts: [],
+      // Hybrid asset fields
+      solarCapacity: '', bessCapacity: '', bessDuration: '', bessDegradation: 1.0,
       // Initialize cost fields as undefined so they use defaults
       capex: undefined,
       operatingCosts: undefined,
@@ -481,7 +494,11 @@ const AssetsDetailPage = () => {
   const handleEdit = (asset) => {
     // Load cost assumptions from constants if available
     const assetCosts = constants.assetCosts?.[asset.name];
-    const defaultCosts = getDefaultAssetCosts(asset.type || 'solar', parseFloat(asset.capacity) || 0);
+    // For hybrid assets, use total capacity (solar + BESS)
+    const capacityForCosts = asset.type === 'hybrid_solar_bess'
+      ? (parseFloat(asset.solarCapacity) || 0) + (parseFloat(asset.bessCapacity) || 0)
+      : (parseFloat(asset.capacity) || 0);
+    const defaultCosts = getDefaultAssetCosts(asset.type || 'solar', capacityForCosts);
 
     // Ensure all values are strings and handle null/undefined
     const cleanedAsset = {
@@ -503,6 +520,10 @@ const AssetsDetailPage = () => {
       durationHours: safeValue(asset.durationHours) || (asset.type === 'storage' && asset.volume && asset.capacity && parseFloat(asset.volume) > 0 && parseFloat(asset.capacity) > 0
         ? (parseFloat(asset.volume) / parseFloat(asset.capacity)).toFixed(2)
         : ''),
+      // Hybrid asset fields
+      solarCapacity: safeValue(asset.solarCapacity),
+      bessCapacity: safeValue(asset.bessCapacity),
+      bessDuration: safeValue(asset.bessDuration),
       contracts: asset.contracts ? asset.contracts.map(contract => ({
         id: safeValue(contract.id) || Date.now().toString(),
         counterparty: safeValue(contract.counterparty),
@@ -532,8 +553,10 @@ const AssetsDetailPage = () => {
     };
 
     // Prepopulate missing capacity factors from defaults if available
+    // For hybrid assets, use solar capacity factors
     if (assetDefaults && assetDefaults.assetDefaults && cleanedAsset.type !== 'storage') {
-      const typeDefaults = assetDefaults.assetDefaults[cleanedAsset.type];
+      const typeForDefaults = cleanedAsset.type === 'hybrid_solar_bess' ? 'solar' : cleanedAsset.type;
+      const typeDefaults = assetDefaults.assetDefaults[typeForDefaults];
       if (typeDefaults && typeDefaults.capacityFactors) {
         const regionFactors = typeDefaults.capacityFactors[cleanedAsset.region];
         if (regionFactors) {
